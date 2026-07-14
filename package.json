@@ -1,0 +1,14 @@
+{
+  "name": "domino-online",
+  "version": "1.0.0",
+  "description": "Multiplayer Domino Online Game",
+  "scripts": {
+    "dev:server": "pnpm --filter domino-server dev",
+    "dev:client": "pnpm --filter domino-client dev",
+    "dev": "concurrently \"pnpm dev:server\" \"pnpm dev:client\"",
+    "test": "node server/testLogic.js"
+  },
+  "dependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

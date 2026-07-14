@@ -1,0 +1,755 @@
+const POWER_CATALOG = {
+  double_shot: { id: 'double_shot', name: 'Doble Tiro', desc: 'Juega 2 fichas en este turno si ambas son válidas.', type: 'buff' },
+  smuggle: { id: 'smuggle', name: 'Contrabando', desc: 'Regala una ficha de tu mano a un oponente.', type: 'attack' },
+  spy_eye: { id: 'spy_eye', name: 'El Ojo Soplón', desc: 'Revela la mano de un oponente por 10 segundos.', type: 'attack' },
+  skip: { id: 'skip', name: 'Salto de Turno', desc: 'Salta el turno del siguiente jugador inmediatamente.', type: 'attack' },
+  draw_penalty: { id: 'draw_penalty', name: 'Multa de Pozo', desc: 'Obliga a un oponente a robar 1 ficha del pozo.', type: 'attack' },
+  reverse: { id: 'reverse', name: 'Sentido Contrario', desc: 'Invierte el orden de flujo de turnos.', type: 'buff' },
+  trade: { id: 'trade', name: 'Trueque', desc: 'Cambia una ficha de tu mano por una aleatoria del pozo.', type: 'buff' },
+  shield: { id: 'shield', name: 'Escudo de Neón', desc: 'Inmune a ataques de oponentes hasta tu próximo turno.', type: 'defense' },
+  freeze: { id: 'freeze', name: 'Congelar Extremo', desc: 'Bloquea un extremo del tablero para los oponentes este turno.', type: 'attack' },
+  destiny_steal: { id: 'destiny_steal', name: 'Robo del Destino', desc: 'Roba una carta de poder al azar de un oponente.', type: 'attack' },
+  mind_swap: { id: 'mind_swap', name: 'Intercambio Mental', desc: 'Intercambia tu mano completa de fichas con la de un oponente.', type: 'attack' },
+  tile_demolition: { id: 'tile_demolition', name: 'Ficha Dinamita', desc: 'Elimina una ficha colocada en un extremo del tablero.', type: 'attack' },
+  wildcard: { id: 'wildcard', name: 'Ficha Comodín', desc: 'Habilita colocar cualquier ficha en el tablero en este turno.', type: 'buff' },
+  boneyard_reset: { id: 'boneyard_reset', name: 'Reinicio Estelar', desc: 'Devuelve tu mano al pozo, barájalo y roba la misma cantidad.', type: 'buff' },
+  magnetic_pull: { id: 'magnetic_pull', name: 'Atracción Magnética', desc: 'Obliga a un oponente a robar del pozo hasta tener jugada (max 3).', type: 'attack' },
+  russian_roulette: { id: 'russian_roulette', name: 'Ruleta Rusa', desc: 'Todos los jugadores pasan una ficha al azar al jugador de su derecha.', type: 'caos' }
+};
+
+class DominoGame {
+  constructor(roomId, maxScore = 100) {
+    this.roomId = roomId;
+    this.maxScore = maxScore;
+    this.players = []; // { id, name, socketId, hand: [], score: 0, ready: false, powers: [], shieldActive: false }
+    this.status = 'waiting'; // 'waiting' | 'playing' | 'round_ended' | 'game_ended'
+    this.board = []; // Array de [val1, val2] ordenados de izquierda a derecha
+    this.boneyard = []; // Fichas en el pozo
+    this.currentPlayerIndex = 0;
+    this.roundWinner = null;
+    this.gameWinner = null;
+    this.lastPlay = null; // Para historial o animaciones: { playerId, tile, side }
+    this.passedTurns = 0; // Contador de turnos seguidos pasados para detectar bloqueo
+    this.roundNumber = 0;
+    this.startingPlayerId = null; // Quien inicia la ronda
+    
+    // Estados activos para cartas de poderes
+    this.powerDeck = [];
+    this.activeEffects = {
+      frozenEnd: null, // 'left' | 'right' | null
+      frozenEndOwnerId: null,
+      doubleTurnActive: false,
+      reversed: false,
+      spyEyeTargetId: null,
+      spyEyeOwnerId: null,
+      spyEyeEndTime: 0,
+      skipNextTurn: false,
+      wildcardActive: false
+    };
+  }
+
+  addPlayer(id, name, socketId) {
+    if (this.players.length >= 4) return null;
+    if (this.status !== 'waiting') return null;
+
+    const player = {
+      id,
+      name,
+      socketId,
+      hand: [],
+      score: 0,
+      ready: false,
+      powers: [],
+      shieldActive: false
+    };
+    this.players.push(player);
+    return player;
+  }
+
+  removePlayer(socketId) {
+    const index = this.players.findIndex(p => p.socketId === socketId);
+    if (index === -1) return null;
+
+    const removedPlayer = this.players[index];
+    this.players.splice(index, 1);
+
+    // Si el juego ya había empezado, lo reiniciamos o finalizamos
+    if (this.status !== 'waiting') {
+      this.status = 'waiting';
+      this.resetGame();
+    }
+
+    return removedPlayer;
+  }
+
+  toggleReady(socketId) {
+    const player = this.players.find(p => p.socketId === socketId);
+    if (player) {
+      player.ready = !player.ready;
+    }
+    return player;
+  }
+
+  allReady() {
+    return this.players.length >= 2 && this.players.every(p => p.ready);
+  }
+
+  resetGame() {
+    this.board = [];
+    this.boneyard = [];
+    this.currentPlayerIndex = 0;
+    this.roundWinner = null;
+    this.gameWinner = null;
+    this.lastPlay = null;
+    this.passedTurns = 0;
+    this.roundNumber = 0;
+    this.players.forEach(p => {
+      p.hand = [];
+      p.score = 0;
+      p.ready = false;
+      p.powers = [];
+      p.shieldActive = false;
+    });
+    this.activeEffects = {
+      frozenEnd: null,
+      frozenEndOwnerId: null,
+      doubleTurnActive: false,
+      reversed: false,
+      spyEyeTargetId: null,
+      spyEyeOwnerId: null,
+      spyEyeEndTime: 0,
+      skipNextTurn: false,
+      wildcardActive: false
+    };
+    this.status = 'waiting';
+  }
+
+  startNewGame() {
+    this.players.forEach(p => p.score = 0);
+    this.roundNumber = 0;
+    this.startNewRound();
+  }
+
+  startNewRound() {
+    this.roundNumber++;
+    this.board = [];
+    this.lastPlay = null;
+    this.passedTurns = 0;
+    this.roundWinner = null;
+    this.status = 'playing';
+
+    // Inicializar efectos activos de poderes
+    this.activeEffects = {
+      frozenEnd: null,
+      frozenEndOwnerId: null,
+      doubleTurnActive: false,
+      reversed: false,
+      spyEyeTargetId: null,
+      spyEyeOwnerId: null,
+      spyEyeEndTime: 0,
+      skipNextTurn: false,
+      wildcardActive: false
+    };
+
+    // Generar mazo de cartas de poderes (2 de cada una)
+    const allPowers = [];
+    Object.keys(POWER_CATALOG).forEach(key => {
+      allPowers.push({ ...POWER_CATALOG[key] });
+      allPowers.push({ ...POWER_CATALOG[key] });
+    });
+    this.shuffle(allPowers);
+    this.powerDeck = allPowers;
+
+    // Generar las 28 fichas del dominó doble seis
+    const deck = [];
+    for (let i = 0; i <= 6; i++) {
+      for (let j = i; j <= 6; j++) {
+        deck.push([i, j]);
+      }
+    }
+
+    // Barajar
+    this.shuffle(deck);
+
+    // Repartir 7 fichas y 2 poderes a cada jugador
+    const numPlayers = this.players.length;
+    this.players.forEach(p => {
+      p.hand = [];
+      p.powers = [this.powerDeck.pop(), this.powerDeck.pop()];
+      p.shieldActive = false;
+    });
+
+    for (let i = 0; i < 7; i++) {
+      for (let p = 0; p < numPlayers; p++) {
+        this.players[p].hand.push(deck.pop());
+      }
+    }
+
+    // El resto va al pozo
+    this.boneyard = deck;
+
+    // Determinar quién empieza la ronda
+    if (this.roundNumber === 1) {
+      // Primera ronda: empieza quien tenga el doble 6 (o el doble más alto)
+      let starterIndex = 0;
+      let highestDouble = -1;
+      let highestTileSum = -1;
+
+      for (let p = 0; p < numPlayers; p++) {
+        const player = this.players[p];
+        player.hand.forEach(tile => {
+          if (tile[0] === tile[1]) {
+            if (tile[0] > highestDouble) {
+              highestDouble = tile[0];
+              starterIndex = p;
+            }
+          } else {
+            const sum = tile[0] + tile[1];
+            if (sum > highestTileSum) {
+              highestTileSum = sum;
+              if (highestDouble === -1) {
+                starterIndex = p;
+              }
+            }
+          }
+        });
+      }
+
+      this.currentPlayerIndex = starterIndex;
+      this.startingPlayerId = this.players[starterIndex].id;
+    } else {
+      // Rondas siguientes: empieza el ganador de la ronda anterior
+      const prevWinnerId = this.startingPlayerId; // O el ganador real de la ronda
+      const idx = this.players.findIndex(p => p.id === prevWinnerId);
+      this.currentPlayerIndex = idx !== -1 ? idx : 0;
+    }
+  }
+
+  shuffle(array) {
+    for (let i = array.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [array[i], array[j]] = [array[j], array[i]];
+    }
+  }
+
+  getLeftEnd() {
+    if (this.board.length === 0) return null;
+    return this.board[0][0];
+  }
+
+  getRightEnd() {
+    if (this.board.length === 0) return null;
+    return this.board[this.board.length - 1][1];
+  }
+
+  // Verifica si un jugador tiene movimientos válidos
+  hasValidMove(playerId) {
+    const player = this.players.find(p => p.id === playerId);
+    if (!player) return false;
+
+    if (this.activeEffects.wildcardActive) return player.hand.length > 0;
+
+    // Si el tablero está vacío, cualquier ficha es válida
+    if (this.board.length === 0) return true;
+
+    const left = this.getLeftEnd();
+    const right = this.getRightEnd();
+
+    const isLeftFrozenForMe = this.activeEffects.frozenEnd === 'left' && this.activeEffects.frozenEndOwnerId !== playerId;
+    const isRightFrozenForMe = this.activeEffects.frozenEnd === 'right' && this.activeEffects.frozenEndOwnerId !== playerId;
+
+    return player.hand.some(tile => {
+      const matchesLeft = tile[0] === left || tile[1] === left;
+      const matchesRight = tile[0] === right || tile[1] === right;
+      
+      const canPlayL = matchesLeft && !isLeftFrozenForMe;
+      const canPlayR = matchesRight && !isRightFrozenForMe;
+      
+      return canPlayL || canPlayR;
+    });
+  }
+
+  // Ejecuta una jugada: tileIndex de la mano del jugador en un lado ('left' o 'right')
+  playTile(playerId, tileIndex, side) {
+    const player = this.players[this.currentPlayerIndex];
+    if (!player || player.id !== playerId) return { success: false, error: 'No es tu turno' };
+    if (this.status !== 'playing') return { success: false, error: 'El juego no está activo' };
+
+    const tile = player.hand[tileIndex];
+    if (!tile) return { success: false, error: 'Ficha no encontrada en la mano' };
+
+    const isLeftFrozenForMe = this.activeEffects.frozenEnd === 'left' && this.activeEffects.frozenEndOwnerId !== playerId;
+    const isRightFrozenForMe = this.activeEffects.frozenEnd === 'right' && this.activeEffects.frozenEndOwnerId !== playerId;
+
+    if (side === 'left' && isLeftFrozenForMe) {
+      return { success: false, error: 'El extremo izquierdo está congelado por un poder enemigo' };
+    }
+    if (side === 'right' && isRightFrozenForMe) {
+      return { success: false, error: 'El extremo derecho está congelado por un poder enemigo' };
+    }
+
+    if (this.board.length === 0) {
+      // Primera ficha en el tablero
+      this.board.push(tile);
+      player.hand.splice(tileIndex, 1);
+      this.lastPlay = { playerId, tile, side: 'left' };
+      this.passedTurns = 0;
+      this.checkRoundEnd();
+      if (this.status === 'playing') {
+        if (this.activeEffects.doubleTurnActive) {
+          this.activeEffects.doubleTurnActive = false;
+        } else {
+          this.nextTurn();
+        }
+      }
+      return { success: true };
+    }
+
+    const left = this.getLeftEnd();
+    const right = this.getRightEnd();
+    let playedTile = [...tile];
+    let isValid = false;
+
+    if (this.activeEffects.wildcardActive) {
+      if (side === 'left') {
+        if (playedTile[0] === left) {
+          playedTile = [playedTile[1], playedTile[0]];
+        }
+        this.board.unshift(playedTile);
+      } else if (side === 'right') {
+        if (playedTile[1] === right) {
+          playedTile = [playedTile[1], playedTile[0]];
+        }
+        this.board.push(playedTile);
+      }
+      isValid = true;
+      this.activeEffects.wildcardActive = false;
+    } else {
+      if (side === 'left') {
+        if (playedTile[1] === left) {
+          // Conecta directo
+          this.board.unshift(playedTile);
+          isValid = true;
+        } else if (playedTile[0] === left) {
+          // Necesita rotación
+          playedTile = [playedTile[1], playedTile[0]];
+          this.board.unshift(playedTile);
+          isValid = true;
+        }
+      } else if (side === 'right') {
+        if (playedTile[0] === right) {
+          // Conecta directo
+          this.board.push(playedTile);
+          isValid = true;
+        } else if (playedTile[1] === right) {
+          // Necesita rotación
+          playedTile = [playedTile[1], playedTile[0]];
+          this.board.push(playedTile);
+          isValid = true;
+        }
+      }
+    }
+
+    if (!isValid) {
+      return { success: false, error: 'Movimiento inválido para ese lado' };
+    }
+
+    // Remover ficha de la mano del jugador
+    player.hand.splice(tileIndex, 1);
+    this.lastPlay = { playerId, tile: playedTile, side };
+    this.passedTurns = 0; // Reseteamos contador de pases
+
+    this.checkRoundEnd();
+    if (this.status === 'playing') {
+      if (this.activeEffects.doubleTurnActive) {
+        this.activeEffects.doubleTurnActive = false;
+      } else {
+        this.nextTurn();
+      }
+    }
+
+    return { success: true };
+  }
+
+  // Robar del pozo
+  drawTile(playerId) {
+    const player = this.players[this.currentPlayerIndex];
+    if (!player || player.id !== playerId) return { success: false, error: 'No es tu turno' };
+    if (this.boneyard.length === 0) return { success: false, error: 'El pozo está vacío' };
+    if (this.hasValidMove(playerId)) return { success: false, error: 'Tienes jugadas disponibles, no puedes robar' };
+
+    const drawnTile = this.boneyard.pop();
+    player.hand.push(drawnTile);
+    this.passedTurns = 0; // Un robo no cuenta como pase trancado
+
+    return { success: true, tile: drawnTile };
+  }
+
+  // Pasar turno
+  passTurn(playerId) {
+    const player = this.players[this.currentPlayerIndex];
+    if (!player || player.id !== playerId) return { success: false, error: 'No es tu turno' };
+    if (this.boneyard.length > 0) return { success: false, error: 'Quedan fichas en el pozo, debes robar' };
+    if (this.hasValidMove(playerId)) return { success: false, error: 'Tienes jugadas disponibles, no puedes pasar' };
+
+    this.passedTurns++;
+    this.lastPlay = { playerId, tile: null, side: 'pass' };
+
+    this.checkRoundEnd();
+    if (this.status === 'playing') {
+      this.nextTurn();
+    }
+    return { success: true };
+  }
+
+  nextTurn() {
+    let step = 1;
+    let skippedPlayerIndex = null;
+    if (this.activeEffects.skipNextTurn) {
+      this.activeEffects.skipNextTurn = false;
+      step = 2;
+      skippedPlayerIndex = this.activeEffects.reversed
+        ? (this.currentPlayerIndex - 1 + this.players.length) % this.players.length
+        : (this.currentPlayerIndex + 1) % this.players.length;
+    }
+
+    // Siguiente índice respetando orden inverso y saltos
+    if (this.activeEffects.reversed) {
+      this.currentPlayerIndex = (this.currentPlayerIndex - step + this.players.length) % this.players.length;
+    } else {
+      this.currentPlayerIndex = (this.currentPlayerIndex + step) % this.players.length;
+    }
+
+    // El escudo del jugador saltado se apaga
+    if (skippedPlayerIndex !== null) {
+      const skippedPlayer = this.players[skippedPlayerIndex];
+      if (skippedPlayer) {
+        skippedPlayer.shieldActive = false;
+      }
+    }
+
+    // Desactivar escudo del jugador que entra en turno, y congelamiento si vuelve a su creador
+    const activePlayer = this.players[this.currentPlayerIndex];
+    if (activePlayer) {
+      activePlayer.shieldActive = false;
+
+      if (this.activeEffects.frozenEndOwnerId === activePlayer.id) {
+        this.activeEffects.frozenEnd = null;
+        this.activeEffects.frozenEndOwnerId = null;
+      }
+
+      this.activeEffects.wildcardActive = false;
+    }
+  }
+
+  checkRoundEnd() {
+    // 1. Victoria por mano vacía (Dominó)
+    const dominoWinner = this.players.find(p => p.hand.length === 0);
+    if (dominoWinner) {
+      this.endRound(dominoWinner.id, false);
+      return;
+    }
+
+    // 2. Bloqueo (Trancado): Nadie tiene jugadas y el pozo está vacío
+    // Esto ocurre cuando todos los jugadores han pasado consecutivamente (igual al número de jugadores)
+    if (this.passedTurns >= this.players.length) {
+      this.endRound(null, true);
+    }
+  }
+
+  endRound(winnerId, isBlocked) {
+    this.status = 'round_ended';
+    let roundPoints = 0;
+
+    if (!isBlocked) {
+      // Sumar los puntos de todas las manos enemigas
+      const winner = this.players.find(p => p.id === winnerId);
+      this.players.forEach(p => {
+        if (p.id !== winnerId) {
+          roundPoints += this.getHandSum(p.hand);
+        }
+      });
+      winner.score += roundPoints;
+      this.roundWinner = winner.id;
+      this.startingPlayerId = winner.id; // Empieza la siguiente
+    } else {
+      // En caso de tranca, gana el jugador con menos puntos en su mano
+      let minScore = Infinity;
+      let roundWinner = null;
+      let isTie = false;
+
+      this.players.forEach(p => {
+        const handSum = this.getHandSum(p.hand);
+        if (handSum < minScore) {
+          minScore = handSum;
+          roundWinner = p;
+          isTie = false;
+        } else if (handSum === minScore) {
+          isTie = true; // Empate en puntos mínimos
+        }
+      });
+
+      if (isTie || !roundWinner) {
+        // En algunas reglas, si hay empate, nadie suma puntos.
+        // Haremos que no sume nadie en esta ronda y empiece el mismo que empezó
+        this.roundWinner = 'tie';
+      } else {
+        // El ganador suma los puntos de las manos de todos los DEMÁS
+        this.players.forEach(p => {
+          if (p.id !== roundWinner.id) {
+            roundPoints += this.getHandSum(p.hand);
+          }
+        });
+        roundWinner.score += roundPoints;
+        this.roundWinner = roundWinner.id;
+        this.startingPlayerId = roundWinner.id;
+      }
+    }
+
+    // Verificar si algún jugador alcanzó los 100 puntos
+    const gameWinnerPlayer = this.players.find(p => p.score >= this.maxScore);
+    if (gameWinnerPlayer) {
+      this.status = 'game_ended';
+      this.gameWinner = gameWinnerPlayer.id;
+    }
+  }
+
+  getHandSum(hand) {
+    return hand.reduce((sum, tile) => sum + tile[0] + tile[1], 0);
+  }
+
+  // Ejecuta el uso de una carta de poder
+  usePowerCard(playerId, cardId, targetId, tileIndex) {
+    const player = this.players.find(p => p.id === playerId);
+    if (!player) return { success: false, error: 'Jugador no encontrado' };
+
+    const activePlayer = this.players[this.currentPlayerIndex];
+    if (!activePlayer || activePlayer.id !== playerId) {
+      return { success: false, error: 'Solo puedes usar cartas de poder en tu turno' };
+    }
+    if (this.status !== 'playing') {
+      return { success: false, error: 'El juego no está en curso' };
+    }
+
+    // Encontrar la carta en la mano de poderes del jugador
+    const cardIdx = player.powers.findIndex(c => c.id === cardId);
+    if (cardIdx === -1) return { success: false, error: 'No posees esta carta de poder' };
+
+    // Si el objetivo es otro jugador, verificar escudo
+    let targetPlayer = null;
+    if (targetId && targetId !== 'left' && targetId !== 'right') {
+      targetPlayer = this.players.find(p => p.id === targetId);
+      if (targetPlayer && targetPlayer.id === playerId) {
+        return { success: false, error: 'No puedes seleccionarte a ti mismo como objetivo' };
+      }
+      if (targetPlayer && targetPlayer.shieldActive && cardId !== 'destiny_steal') {
+        // Consumimos el poder pero el escudo lo anula
+        player.powers.splice(cardIdx, 1);
+        return { success: true, shielded: true, targetName: targetPlayer.name };
+      }
+    }
+
+    // Resolver el efecto según la carta
+    switch (cardId) {
+      case 'double_shot':
+        this.activeEffects.doubleTurnActive = true;
+        break;
+
+      case 'smuggle':
+        if (tileIndex === undefined || tileIndex === null) {
+          return { success: false, error: 'Debes seleccionar una ficha para regalar' };
+        }
+        if (!targetPlayer) return { success: false, error: 'Debes seleccionar un oponente' };
+        const smuggleTile = player.hand[tileIndex];
+        if (!smuggleTile) return { success: false, error: 'Ficha no encontrada en tu mano' };
+
+        // Transferir ficha
+        player.hand.splice(tileIndex, 1);
+        targetPlayer.hand.push(smuggleTile);
+        break;
+
+      case 'spy_eye':
+        if (!targetPlayer) return { success: false, error: 'Debes seleccionar un oponente' };
+        this.activeEffects.spyEyeTargetId = targetPlayer.id;
+        this.activeEffects.spyEyeOwnerId = playerId;
+        this.activeEffects.spyEyeEndTime = Date.now() + 10000; // 10 segundos de revelación
+        break;
+
+      case 'skip':
+        this.activeEffects.skipNextTurn = true;
+        break;
+
+      case 'draw_penalty':
+        if (!targetPlayer) return { success: false, error: 'Debes seleccionar un oponente' };
+        if (this.boneyard.length === 0) {
+          return { success: false, error: 'El pozo de fichas está vacío' };
+        }
+        // El oponente roba 1 ficha
+        const penaltyTile = this.boneyard.pop();
+        targetPlayer.hand.push(penaltyTile);
+        break;
+
+      case 'reverse':
+        this.activeEffects.reversed = !this.activeEffects.reversed;
+        break;
+
+      case 'trade':
+        if (tileIndex === undefined || tileIndex === null) {
+          return { success: false, error: 'Debes seleccionar una ficha para cambiar' };
+        }
+        if (this.boneyard.length === 0) {
+          return { success: false, error: 'El pozo de fichas está vacío' };
+        }
+        const tradeTile = player.hand[tileIndex];
+        if (!tradeTile) return { success: false, error: 'Ficha no encontrada en tu mano' };
+
+        // Intercambiar
+        const boneyardTile = this.boneyard.pop();
+        player.hand[tileIndex] = boneyardTile;
+        this.boneyard.push(tradeTile);
+        this.shuffle(this.boneyard); // Barajar el pozo de nuevo
+        break;
+
+      case 'shield':
+        player.shieldActive = true;
+        break;
+
+      case 'freeze':
+        if (targetId !== 'left' && targetId !== 'right') {
+          return { success: false, error: 'Debes seleccionar qué extremo congelar' };
+        }
+        this.activeEffects.frozenEnd = targetId;
+        this.activeEffects.frozenEndOwnerId = playerId;
+        break;
+
+      case 'destiny_steal':
+        if (!targetPlayer) return { success: false, error: 'Debes seleccionar un oponente' };
+        if (!targetPlayer.powers || targetPlayer.powers.length === 0) {
+          return { success: false, error: 'El oponente no tiene cartas de poder' };
+        }
+        // Robar carta al azar
+        const stolenIdx = Math.floor(Math.random() * targetPlayer.powers.length);
+        const stolenPower = targetPlayer.powers[stolenIdx];
+        
+        targetPlayer.powers.splice(stolenIdx, 1);
+        player.powers.push(stolenPower);
+        break;
+
+      case 'mind_swap':
+        if (!targetPlayer) return { success: false, error: 'Debes seleccionar un oponente' };
+        const tempHand = player.hand;
+        player.hand = targetPlayer.hand;
+        targetPlayer.hand = tempHand;
+        break;
+
+      case 'tile_demolition':
+        if (targetId !== 'left' && targetId !== 'right') {
+          return { success: false, error: 'Debes seleccionar qué extremo demoler' };
+        }
+        if (this.board.length === 0) {
+          return { success: false, error: 'El tablero está vacío' };
+        }
+        if (targetId === 'left') {
+          this.board.shift();
+        } else {
+          this.board.pop();
+        }
+        this.passedTurns = 0;
+        break;
+
+      case 'wildcard':
+        this.activeEffects.wildcardActive = true;
+        break;
+
+      case 'boneyard_reset':
+        const handCount = player.hand.length;
+        if (handCount === 0) return { success: false, error: 'No tienes fichas en tu mano' };
+        this.boneyard.push(...player.hand);
+        player.hand = [];
+        this.shuffle(this.boneyard);
+        const drawCount = Math.min(handCount, this.boneyard.length);
+        for (let i = 0; i < drawCount; i++) {
+          player.hand.push(this.boneyard.pop());
+        }
+        break;
+
+      case 'magnetic_pull':
+        if (!targetPlayer) return { success: false, error: 'Debes seleccionar un oponente' };
+        let pulls = 0;
+        while (pulls < 3 && this.boneyard.length > 0 && !this.hasValidMove(targetPlayer.id)) {
+          targetPlayer.hand.push(this.boneyard.pop());
+          pulls++;
+        }
+        break;
+
+      case 'russian_roulette':
+        const numPlayers = this.players.length;
+        if (numPlayers < 2) return { success: false, error: 'Se necesitan al menos 2 jugadores' };
+        const passedTiles = this.players.map(p => {
+          if (p.hand.length === 0) return null;
+          const idx = Math.floor(Math.random() * p.hand.length);
+          const tile = p.hand[idx];
+          p.hand.splice(idx, 1);
+          return tile;
+        });
+        const step = this.activeEffects.reversed ? -1 : 1;
+        for (let i = 0; i < numPlayers; i++) {
+          const tile = passedTiles[i];
+          if (!tile) continue;
+          const receiverIdx = (i + step + numPlayers) % numPlayers;
+          this.players[receiverIdx].hand.push(tile);
+        }
+        break;
+
+      default:
+        return { success: false, error: 'Poder no reconocido' };
+    }
+
+    // Quitar la carta usada de la mano del jugador
+    player.powers.splice(cardIdx, 1);
+    return { success: true };
+  }
+
+  // Retorna una versión del estado del juego lista para enviar al cliente.
+  // Protege la privacidad de las fichas de los otros jugadores
+  getGameStateForPlayer(playerId) {
+    const isSpyActive = this.activeEffects.spyEyeTargetId && this.activeEffects.spyEyeEndTime > Date.now();
+
+    return {
+      roomId: this.roomId,
+      status: this.status,
+      maxScore: this.maxScore,
+      board: this.board,
+      boneyardCount: this.boneyard.length,
+      currentPlayerId: this.players[this.currentPlayerIndex] ? this.players[this.currentPlayerIndex].id : null,
+      roundWinner: this.roundWinner,
+      gameWinner: this.gameWinner,
+      lastPlay: this.lastPlay,
+      roundNumber: this.roundNumber,
+      activeEffects: {
+        ...this.activeEffects,
+        spyEyeActive: isSpyActive,
+        spyEyeTimeRemaining: isSpyActive ? Math.max(0, Math.round((this.activeEffects.spyEyeEndTime - Date.now()) / 1000)) : 0
+      },
+      players: this.players.map(p => {
+        const isRevealedBySpy = isSpyActive && p.id === this.activeEffects.spyEyeTargetId && this.activeEffects.spyEyeOwnerId === playerId;
+        
+        return {
+          id: p.id,
+          name: p.name,
+          ready: p.ready,
+          score: p.score,
+          handCount: p.hand.length,
+          shieldActive: p.shieldActive,
+          powersCount: p.powers ? p.powers.length : 0,
+          // Solo enviamos las cartas si el jugador es el destinatario
+          powers: p.id === playerId ? p.powers : [],
+          // Solo enviamos la mano completa si es el destinatario, el juego terminó o fue revelado por un espía
+          hand: (p.id === playerId || this.status === 'round_ended' || this.status === 'game_ended' || isRevealedBySpy) ? p.hand : []
+        };
+      })
+    };
+  }
+}
+
+module.exports = DominoGame;

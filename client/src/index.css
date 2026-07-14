@@ -826,6 +826,47 @@ body {
   transition: transform 0.05s ease-out;
   width: 100%;
   height: 100%;
+  will-change: transform;
+}
+
+/* Fichas en el tablero: tamaño FIJO independientemente del breakpoint.
+   El tablero es un lienzo con zoom/auto-encaje, así que la adaptación a
+   pantallas pequeñas la hace la escala, no el tamaño de la ficha. Esto evita
+   que la media query móvil descuadre el cálculo geométrico de la serpiente. */
+.board-tile-wrap {
+  will-change: left, top;
+}
+.board-tile-anim {
+  width: 100%;
+  height: 100%;
+}
+.board-tile-wrap .domino-tile {
+  width: 52px;
+  height: 96px;
+  padding: 8px;
+  cursor: default;
+}
+.board-tile-wrap .domino-tile.horizontal {
+  width: 96px;
+  height: 52px;
+  padding: 8px;
+}
+.board-tile-wrap .pip-grid {
+  height: 35px;
+}
+.board-tile-wrap .domino-tile.horizontal .pip-grid {
+  height: 100%;
+  width: 35px;
+}
+.board-tile-wrap .pip {
+  width: 6px;
+  height: 6px;
+}
+.board-tile-wrap .divider {
+  margin: 4px 0;
+}
+.board-tile-wrap .domino-tile.horizontal .divider {
+  margin: 0 4px;
 }
 
 .board-chain {

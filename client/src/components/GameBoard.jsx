@@ -1,147 +1,153 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react';
 import { ZoomIn, ZoomOut, Maximize2, Move } from 'lucide-react';
 import DominoTile from './DominoTile';
 
-// Algoritmo de serpiente simplificado y determinista basado en índice de ficha
-function computeSnakeLayout(board) {
-  if (!board || board.length === 0) return { layout: [], leftPos: null, rightPos: null };
+// Dimensiones reales de una ficha en el tablero (coinciden con el CSS fijado en .board-tile-wrap).
+const TILE_LONG = 96;   // largo de la ficha (dimensión mayor)
+const TILE_SHORT = 52;  // ancho de la ficha (dimensión menor)
+const GAP = 8;          // separación entre fichas contiguas de una fila
+const PL = 32;          // radio de los círculos de extremo (placeholders)
+const HALF_L = TILE_LONG / 2;
+const HALF_S = TILE_SHORT / 2;
 
-  const layout = [];
-  const TILE_W = 96;
-  const TILE_H = 52;
-  const GAP = 6;
-  const PL_RADIUS = 32;
+/**
+ * Calcula un layout de serpiente (boustrophedon) determinista y ordenado.
+ *
+ * El tablero llega como una cadena ya orientada: board[i] = [a, b] donde
+ * b === board[i+1][0]. Es decir, el valor derecho de cada ficha coincide con
+ * el izquierdo de la siguiente. Aprovechamos eso para que los puntos siempre
+ * "conecten" visualmente, volteando los valores en las filas que van de
+ * derecha a izquierda.
+ *
+ * - Fichas normales: acostadas (horizontal).
+ * - Dobles: parados (vertical), como en un dominó real.
+ * - Al llenar una fila, la siguiente ficha se coloca PARADA (vertical) haciendo
+ *   la esquina en "L": su borde superior conecta con la fila de arriba y el
+ *   inferior con la fila siguiente, que continúa en sentido inverso.
+ */
+function computeSnakeLayout(board, maxWidth) {
+  if (!board || board.length === 0) {
+    return { layout: [], leftPos: null, rightPos: null, width: 0, height: 0 };
+  }
+
+  const budget = Number.isFinite(maxWidth) && maxWidth > 0 ? maxWidth : 1000;
+  // Cuántas fichas horizontales caben por fila dejando margen para los extremos.
+  const perRow = Math.max(4, Math.floor((budget - TILE_LONG) / (TILE_LONG + GAP)));
+
+  const items = [];
+  let dir = 1;        // 1 => la fila avanza a la derecha, -1 => a la izquierda
+  let colCount = 0;   // fichas acostadas/dobles ya colocadas en la fila actual
+  let rowCy = 0;      // centro vertical de la fila actual
+  let prev = null;
 
   for (let i = 0; i < board.length; i++) {
-    const tile = board[i];
-    const isDouble = tile[0] === tile[1];
-    
-    // 1. Determinar si es un elemento de curva (bend) cada 4 fichas
-    const isBend = (i % 4 === 3);
-    const currentDir = isBend ? 'vertical' : 'horizontal';
-    const flowDir = (Math.floor(i / 4) % 2 === 0) ? 1 : -1;
+    const [a, b] = board[i];
+    const isDouble = a === b;
 
-    // 2. Determinar dimensiones de la ficha en el espacio 2D
-    let w = TILE_W;
-    let h = TILE_H;
+    let cx;
+    let cy;
+    let w;
+    let h;
+    let horizontal;
+    let display;
+    let isCorner = false;
 
-    if (currentDir === 'horizontal') {
-      if (isDouble) {
-        w = TILE_H;
-        h = TILE_W;
-      } else {
-        w = TILE_W;
-        h = TILE_H;
-      }
+    if (prev === null) {
+      // Primera ficha: acostada, centrada; la fila arranca hacia la derecha.
+      w = TILE_LONG; h = TILE_SHORT; horizontal = true;
+      display = [a, b];
+      cx = 0; cy = 0; rowCy = 0; colCount = 1;
+    } else if (colCount >= perRow) {
+      // GIRO: ficha PARADA (vertical) que baja a la fila siguiente formando una "L".
+      // top = a conecta con la fila de arriba, bottom = b con la de abajo.
+      // cy despeja el borde inferior REAL de la ficha previa (26 acostada, 48 doble).
+      w = TILE_SHORT; h = TILE_LONG; horizontal = false;
+      display = [a, b];
+      isCorner = true;
+      cx = prev.cx + dir * (prev.w / 2 - HALF_S);
+      cy = rowCy + prev.h / 2 + HALF_L;
+      dir = -dir;
+      rowCy = cy + (HALF_L - HALF_S);
+      colCount = 0;
+    } else if (isDouble) {
+      // Doble parado en línea (no gira).
+      w = TILE_SHORT; h = TILE_LONG; horizontal = false;
+      display = [a, b];
+      cx = prev.cx + dir * (prev.w / 2 + GAP + HALF_S);
+      cy = rowCy;
+      colCount += 1;
     } else {
-      if (isDouble) {
-        w = TILE_W;
-        h = TILE_H;
-      } else {
-        w = TILE_H;
-        h = TILE_W;
-      }
+      // Ficha acostada normal (también la primera de una fila tras una esquina).
+      // En filas hacia la izquierda se voltean los valores para que el punto de
+      // conexión quede del lado correcto.
+      w = TILE_LONG; h = TILE_SHORT; horizontal = true;
+      display = dir === 1 ? [a, b] : [b, a];
+      cx = prev.cx + dir * (prev.w / 2 + GAP + HALF_L);
+      cy = rowCy;
+      colCount += 1;
     }
 
-    // 3. Posicionar de manera secuencial y fluida respecto al anterior
-    let x = 0;
-    let y = 0;
-
-    if (i > 0) {
-      const prev = layout[i - 1];
-      const prevIsBend = ((i - 1) % 4 === 3);
-      
-      if (!prevIsBend && !isBend) {
-        // Horizontal a Horizontal (mismo renglón)
-        x = prev.x + (prev.w / 2 + GAP + w / 2) * flowDir;
-        y = prev.y;
-      } else if (!prevIsBend && isBend) {
-        // Horizontal a Curva (bajar)
-        x = prev.x;
-        y = prev.y + prev.h / 2 + GAP + h / 2;
-      } else {
-        // Curva a Horizontal (nuevo renglón)
-        y = prev.y + prev.h / 2 + GAP + h / 2;
-        x = prev.x + (prev.w / 2 + GAP + w / 2) * flowDir;
-      }
-    }
-
-    layout.push({
-      tile,
-      x,
-      y,
-      w,
-      h,
-      isDouble,
-      isBend,
-      flowDir
-    });
+    const item = { tile: board[i], display, cx, cy, w, h, horizontal, dir, isCorner };
+    items.push(item);
+    prev = item;
   }
 
-  // 4. Calcular posiciones de los placeholders extremos
-  const first = layout[0];
-  const last = layout[layout.length - 1];
-
-  let leftPos = {
-    x: first.x - first.w / 2 - PL_RADIUS - GAP,
-    y: first.y
+  // Extremo izquierdo: siempre el lado "a" de la primera ficha (a su izquierda).
+  const first = items[0];
+  const leftPos = {
+    x: first.cx - first.w / 2 - GAP - PL,
+    y: first.cy
   };
 
-  const lastIsBend = ((layout.length - 1) % 4 === 3);
-  const lastFlowDir = (Math.floor((layout.length - 1) / 4) % 2 === 0) ? 1 : -1;
+  // Extremo derecho: el borde de crecimiento tras la última ficha, en su sentido.
+  // Si la última ficha es una esquina, el crecimiento sale por debajo de ella.
+  const last = items[items.length - 1];
+  const rightPos = last.isCorner
+    ? { x: last.cx + last.dir * (last.w / 2 + GAP + PL), y: last.cy + (HALF_L - HALF_S) }
+    : { x: last.cx + last.dir * (last.w / 2 + GAP + PL), y: last.cy };
 
-  let rightPos = { x: 0, y: 0 };
-  if (lastIsBend) {
-    rightPos = {
-      x: last.x,
-      y: last.y + last.h / 2 + PL_RADIUS + GAP
-    };
-  } else {
-    rightPos = {
-      x: last.x + (last.w / 2 + PL_RADIUS + GAP) * lastFlowDir,
-      y: last.y
-    };
-  }
+  // Límites del contenido para poder centrar y auto-encajar.
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  const account = (x, y, halfW, halfH) => {
+    if (x - halfW < minX) minX = x - halfW;
+    if (x + halfW > maxX) maxX = x + halfW;
+    if (y - halfH < minY) minY = y - halfH;
+    if (y + halfH > maxY) maxY = y + halfH;
+  };
+  items.forEach((it) => account(it.cx, it.cy, it.w / 2, it.h / 2));
+  account(leftPos.x, leftPos.y, PL, PL);
+  account(rightPos.x, rightPos.y, PL, PL);
 
-  // 5. Centrar la serpiente entera respecto a (0,0)
-  let minX = Math.min(leftPos.x - PL_RADIUS, rightPos.x - PL_RADIUS);
-  let maxX = Math.max(leftPos.x + PL_RADIUS, rightPos.x + PL_RADIUS);
-  let minY = Math.min(leftPos.y - PL_RADIUS, rightPos.y - PL_RADIUS);
-  let maxY = Math.max(leftPos.y + PL_RADIUS, rightPos.y + PL_RADIUS);
-
-  layout.forEach(item => {
-    const left = item.x - item.w / 2;
-    const right = item.x + item.w / 2;
-    const top = item.y - item.h / 2;
-    const bottom = item.y + item.h / 2;
-
-    if (left < minX) minX = left;
-    if (right > maxX) maxX = right;
-    if (top < minY) minY = top;
-    if (bottom > maxY) maxY = bottom;
-  });
-
+  // Centrar todo respecto a (0,0).
   const centerX = (minX + maxX) / 2;
   const centerY = (minY + maxY) / 2;
-
-  layout.forEach(item => {
-    item.x -= centerX;
-    item.y -= centerY;
+  items.forEach((it) => {
+    it.cx -= centerX;
+    it.cy -= centerY;
   });
   leftPos.x -= centerX;
   leftPos.y -= centerY;
   rightPos.x -= centerX;
   rightPos.y -= centerY;
 
-  return { layout, leftPos, rightPos };
+  return {
+    layout: items,
+    leftPos,
+    rightPos,
+    width: maxX - minX,
+    height: maxY - minY
+  };
 }
 
-export default function GameBoard({ 
-  board, 
-  selectedTileIndex, 
-  onPlay, 
-  isMyTurn, 
-  players, 
+export default function GameBoard({
+  board,
+  selectedTileIndex,
+  onPlay,
+  isMyTurn,
+  players,
   currentPlayerId,
   canPlayLeft,
   canPlayRight,
@@ -149,66 +155,126 @@ export default function GameBoard({
   onSelectEndTarget,
   activeEffects
 }) {
-  const boardRef = useRef(null);
   const containerRef = useRef(null);
+  const boardRef = useRef(null);
+  const dragRef = useRef({ active: false, sx: 0, sy: 0 });
+
+  const [containerSize, setContainerSize] = useState({ w: 0, h: 0 });
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  // Mientras el usuario no interactúe, el tablero se auto-encaja al contenido.
+  const [manualView, setManualView] = useState(false);
 
+  // Firma estable del tablero: evita recalcular el layout en ticks de estado
+  // que no cambian las fichas (p. ej. cuentas regresivas de poderes).
+  const boardSignature = useMemo(
+    () => board.map((t) => `${t[0]}${t[1]}`).join('|'),
+    [board]
+  );
+
+  const { layout, leftPos, rightPos, width, height } = useMemo(
+    () => computeSnakeLayout(board, containerSize.w || 1000),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [boardSignature, containerSize.w]
+  );
+
+  // Escala ideal para que toda la serpiente entre en el contenedor.
+  const fitScale = useMemo(() => {
+    if (!width || !height || !containerSize.w || !containerSize.h) return 1;
+    const padding = 96;
+    const sx = (containerSize.w - padding) / width;
+    const sy = (containerSize.h - padding) / height;
+    return Math.max(0.35, Math.min(1.05, Math.min(sx, sy)));
+  }, [width, height, containerSize.w, containerSize.h]);
+
+  // Observar el tamaño del contenedor para el auto-encaje responsivo.
   useEffect(() => {
-    const isMobile = window.innerWidth <= 1024;
-    setScale(isMobile ? 0.75 : 0.9);
-    setPosition({ x: 0, y: 0 });
-  }, [board.length]);
+    const el = containerRef.current;
+    if (!el) return;
+    const update = () => setContainerSize({ w: el.clientWidth, h: el.clientHeight });
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
-  const resetView = () => {
-    const isMobile = window.innerWidth <= 1024;
-    setScale(isMobile ? 0.75 : 0.9);
-    setPosition({ x: 0, y: 0 });
-  };
+  // Aplicar auto-encaje salvo que el usuario haya tomado control manual.
+  useEffect(() => {
+    if (!manualView) {
+      setScale(fitScale);
+      setPosition({ x: 0, y: 0 });
+    }
+  }, [fitScale, manualView]);
 
-  const handleMouseDown = (e) => {
-    if (e.button !== 0) return;
-    setIsDragging(true);
-    setDragStart({ x: e.clientX - position.x, y: e.clientY - position.y });
-  };
+  const resetView = useCallback(() => setManualView(false), []);
+  const zoomIn = useCallback(() => {
+    setManualView(true);
+    setScale((s) => Math.min(2.2, s + 0.15));
+  }, []);
+  const zoomOut = useCallback(() => {
+    setManualView(true);
+    setScale((s) => Math.max(0.35, s - 0.15));
+  }, []);
 
-  const handleMouseMove = (e) => {
-    if (!isDragging) return;
-    setPosition({
-      x: e.clientX - dragStart.x,
-      y: e.clientY - dragStart.y
-    });
-  };
+  // Rueda del ratón: listener nativo no pasivo para poder usar preventDefault
+  // sin warnings y sin bloquear el scroll de la página.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const onWheel = (e) => {
+      e.preventDefault();
+      setManualView(true);
+      setScale((s) => {
+        const next = s + (e.deltaY < 0 ? 0.12 : -0.12);
+        return Math.max(0.35, Math.min(2.2, next));
+      });
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
 
-  const handleMouseUp = () => {
+  // Paneo con Pointer Events (soporta ratón y táctil).
+  const handlePointerDown = useCallback(
+    (e) => {
+      if (e.button !== undefined && e.button !== 0) return;
+      // No iniciar paneo si se pulsa un control (botones de zoom o de extremo):
+      // así su click funciona sin ser robado por la captura del puntero.
+      if (e.target.closest && e.target.closest('button')) return;
+      dragRef.current = { active: true, sx: e.clientX - position.x, sy: e.clientY - position.y };
+      setIsDragging(true);
+      if (e.currentTarget.setPointerCapture) {
+        try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) { /* noop */ }
+      }
+    },
+    [position.x, position.y]
+  );
+
+  const handlePointerMove = useCallback((e) => {
+    if (!dragRef.current.active) return;
+    setManualView(true);
+    setPosition({ x: e.clientX - dragRef.current.sx, y: e.clientY - dragRef.current.sy });
+  }, []);
+
+  const handlePointerUp = useCallback((e) => {
+    dragRef.current.active = false;
     setIsDragging(false);
-  };
+    if (e.currentTarget.releasePointerCapture && e.pointerId != null) {
+      try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (_) { /* noop */ }
+    }
+  }, []);
 
-  const handleWheel = (e) => {
-    e.preventDefault();
-    const zoomFactor = 0.1;
-    let newScale = scale + (e.deltaY < 0 ? zoomFactor : -zoomFactor);
-    newScale = Math.max(0.4, Math.min(2, newScale)); 
-    setScale(newScale);
-  };
-
-  const zoomIn = () => setScale(prev => Math.min(2, prev + 0.15));
-  const zoomOut = () => setScale(prev => Math.max(0.4, prev - 0.15));
-
-  const activePlayer = players.find(p => p.id === currentPlayerId);
-  const { layout, leftPos, rightPos } = computeSnakeLayout(board);
+  const activePlayer = players.find((p) => p.id === currentPlayerId);
 
   return (
-    <div 
+    <div
       ref={containerRef}
       className="game-board-container"
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp}
-      onWheel={handleWheel}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerLeave={handlePointerUp}
+      style={{ cursor: isDragging ? 'grabbing' : 'grab', touchAction: 'none' }}
     >
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(16,185,129,0.12),rgba(0,0,0,0))] pointer-events-none" />
 
@@ -236,7 +302,7 @@ export default function GameBoard({
       )}
 
       {/* Contenedor del Tablero (Afectado por Paneo y Zoom) */}
-      <div 
+      <div
         ref={boardRef}
         className="board-canvas"
         style={{
@@ -261,29 +327,38 @@ export default function GameBoard({
           )
         ) : (
           <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-            
-            {/* 1. Renderizar Fichas de Dominó en Serpiente */}
-            {layout.map((item, idx) => (
-              <div
-                key={`${idx}-${item.tile[0]}-${item.tile[1]}`}
-                className="shadow-2xl animate-tile-drop"
-                style={{
-                  position: 'absolute',
-                  left: `calc(50% + ${item.x}px)`,
-                  top: `calc(50% + ${item.y}px)`,
-                  transform: 'translate(-50%, -50%)',
-                  width: item.w,
-                  height: item.h,
-                  transition: 'left 0.4s ease-out, top 0.4s ease-out, transform 0.4s ease-out'
-                }}
-              >
-                <DominoTile
-                  tile={item.tile}
-                  horizontal={item.w === 96}
-                  disabled={false}
-                />
-              </div>
-            ))}
+
+            {/* 1. Fichas de Dominó en Serpiente */}
+            {layout.map((item) => {
+              // Clave estable por ficha física (independiente de la orientación):
+              // evita re-montar y re-animar todas las fichas al jugar a la izquierda.
+              const key = `${Math.min(item.tile[0], item.tile[1])}-${Math.max(item.tile[0], item.tile[1])}`;
+              return (
+                <div
+                  key={key}
+                  className="board-tile-wrap"
+                  style={{
+                    position: 'absolute',
+                    left: `calc(50% + ${item.cx}px)`,
+                    top: `calc(50% + ${item.cy}px)`,
+                    width: item.w,
+                    height: item.h,
+                    transform: 'translate(-50%, -50%)',
+                    transition: 'left 0.4s ease-out, top 0.4s ease-out'
+                  }}
+                >
+                  {/* Envoltorio interno: la animación de caída actúa aquí, sin
+                      pisar el translate(-50%,-50%) de centrado del contenedor. */}
+                  <div className="board-tile-anim animate-tile-drop">
+                    <DominoTile
+                      tile={item.display}
+                      horizontal={item.horizontal}
+                      disabled={false}
+                    />
+                  </div>
+                </div>
+              );
+            })}
 
             {/* 2. Controles del Extremo Izquierdo */}
             {leftPos && (

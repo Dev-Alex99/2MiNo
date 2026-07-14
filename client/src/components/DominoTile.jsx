@@ -15,21 +15,22 @@ const getPipsForValue = (val, isHorizontal) => {
     case 6:
       // Si la ficha está acostada (horizontal), los 6 puntos van en las filas superior e inferior.
       // Si está parada (vertical), van en las columnas izquierda y derecha.
-      return isHorizontal 
-        ? [0, 1, 2, 6, 7, 8] 
+      return isHorizontal
+        ? [0, 1, 2, 6, 7, 8]
         : [0, 2, 3, 5, 6, 8];
     default: return [];
   }
 };
 
-export default function DominoTile({ 
-  tile, 
-  onClick, 
-  selected, 
-  playable, 
-  disabled, 
-  horizontal = false, 
-  className = '' 
+function DominoTile({
+  tile,
+  onClick,
+  selected,
+  playable,
+  disabled,
+  horizontal = false,
+  className = '',
+  style
 }) {
   const [val1, val2] = tile;
 
@@ -41,8 +42,8 @@ export default function DominoTile({
         {Array.from({ length: 9 }).map((_, idx) => {
           const isActive = activePips.includes(idx);
           return (
-            <div 
-              key={idx} 
+            <div
+              key={idx}
               className={`pip ${isActive ? 'active' : ''}`}
               style={{
                 background: val === 6 ? '#10b981' : undefined // Puntos del 6 en esmeralda para estilo premium
@@ -57,6 +58,7 @@ export default function DominoTile({
   return (
     <div
       onClick={onClick}
+      style={style}
       className={`domino-tile ${horizontal ? 'horizontal' : ''} ${selected ? 'selected' : ''} ${playable ? 'playable' : ''} ${disabled ? 'disabled' : ''} ${className}`}
     >
       {/* Mitad superior / izquierda */}
@@ -70,3 +72,7 @@ export default function DominoTile({
     </div>
   );
 }
+
+// Memoizado: las fichas del tablero solo se re-renderizan si cambian sus props.
+// Evita recalcular las rejillas de puntos de decenas de fichas en cada tick de estado.
+export default React.memo(DominoTile);

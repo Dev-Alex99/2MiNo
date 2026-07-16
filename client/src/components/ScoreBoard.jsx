@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Volume2, VolumeX, Medal, Layers, WifiOff, Star, ShieldAlert, Mic } from 'lucide-react';
+import { Volume2, VolumeX, Medal, Layers, WifiOff, Star, ShieldAlert, Mic, LogOut } from 'lucide-react';
 import { toggleMute, getMuteState } from '../audio';
 import VoiceChat from './VoiceChat';
 
@@ -18,11 +18,13 @@ export default function ScoreBoard({
   teamsEnabled = false,
   teamScores = [0, 0],
   teamNames = ['Equipo A', 'Equipo B'],
-  drawEnabled = true
+  drawEnabled = true,
+  onLeave
 }) {
   // En parejas el marcador que importa es el del equipo, no el individual.
   const myTeam = players.find(p => p.id === playerId)?.team ?? 0;
   const [muted, setMuted] = useState(getMuteState());
+  const [confirmLeave, setConfirmLeave] = useState(false);
 
   const handleMuteToggle = () => {
     const isMutedNow = toggleMute();
@@ -57,15 +59,46 @@ export default function ScoreBoard({
             </span>
           </div>
 
-          {/* Mute Button */}
-          <button 
-            onClick={handleMuteToggle}
-            className={`mute-btn ${muted ? 'active' : ''}`}
-            title={muted ? "Activar Sonido" : "Silenciar Sonido"}
-          >
-            {muted ? <VolumeX size={16} /> : <Volume2 size={16} />}
-          </button>
+          <div className="sidebar-header-actions">
+            {/* Mute Button */}
+            <button
+              onClick={handleMuteToggle}
+              className={`mute-btn ${muted ? 'active' : ''}`}
+              title={muted ? 'Activar Sonido' : 'Silenciar Sonido'}
+            >
+              {muted ? <VolumeX size={16} /> : <Volume2 size={16} />}
+            </button>
+
+            {/* Salir de la sala */}
+            {onLeave && (
+              <button
+                onClick={() => setConfirmLeave(v => !v)}
+                className={`mute-btn ${confirmLeave ? 'active' : ''}`}
+                title="Salir de la sala"
+                aria-label="Salir de la sala"
+              >
+                <LogOut size={16} />
+              </button>
+            )}
+          </div>
         </div>
+
+        {/* Confirmación: se dice qué pasa con la partida de los demás */}
+        {confirmLeave && (
+          <div className="leave-confirm">
+            <span className="leave-confirm-text">
+              ¿Abandonar la partida? Un bot ocupará tu sitio y los demás seguirán jugando.
+            </span>
+            <div className="leave-confirm-actions">
+              <button onClick={onLeave} className="leave-confirm-yes">
+                Salir de la sala
+              </button>
+              <button onClick={() => setConfirmLeave(false)} className="leave-confirm-no">
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="separator" />
 

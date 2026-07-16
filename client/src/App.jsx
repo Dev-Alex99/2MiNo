@@ -159,20 +159,22 @@ export default function App() {
   };
 
   const handleLeaveRoom = () => {
-    socket.emit('disconnect'); // Forzar desconexión
-    socket.disconnect();
-    
-    // Limpiar almacenamiento local
+    // Salida explícita: el servidor libera la silla en vez de reservarla
+    // esperando una reconexión que no va a llegar. No hace falta tirar el
+    // socket: sigue vivo y listo para crear o unirse a otra sala.
+    socket.emit('leave_room');
+
     sessionStorage.removeItem('domino_room_id');
     sessionStorage.removeItem('domino_player_id');
-    
+
     setRoomId('');
     setPlayerId('');
     setGameState(null);
+    setSelectedTileIndex(null);
+    setSelectedPower(null);
+    setPendingTargetType(null);
     prevGameStatusRef.current = null;
-    
-    // Reconectar el socket en limpio
-    socket.connect();
+    setError('');
   };
 
   const me = gameState ? gameState.players.find(p => p.id === playerId) : null;
@@ -350,6 +352,7 @@ export default function App() {
         teamScores={gameState.teamScores}
         teamNames={gameState.teamNames}
         drawEnabled={gameState.drawEnabled !== false}
+        onLeave={handleLeaveRoom}
       />
 
       {/* Área de Juego Principal */}

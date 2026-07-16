@@ -558,6 +558,61 @@ body {
   width: 100%;
 }
 
+.sidebar-header-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* --- CONFIRMACIÓN AL ABANDONAR --- */
+.leave-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  background: rgba(239, 68, 68, 0.07);
+  animation: fade-in 0.15s ease-out;
+}
+
+.leave-confirm-text {
+  font-size: 0.68rem;
+  line-height: 1.45;
+  color: #fca5a5;
+}
+
+.leave-confirm-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.leave-confirm-yes,
+.leave-confirm-no {
+  flex: 1 1 0;
+  padding: 7px 8px;
+  border-radius: 9px;
+  font-family: var(--font-family);
+  font-size: 0.68rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.leave-confirm-yes {
+  background: rgba(239, 68, 68, 0.85);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  color: #fff;
+}
+.leave-confirm-yes:hover { background: #ef4444; }
+
+.leave-confirm-no {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--glass-border);
+  color: var(--text-main);
+}
+.leave-confirm-no:hover { background: rgba(255, 255, 255, 0.1); }
+
 .sidebar-section-title {
   color: var(--text-muted);
   font-size: 0.65rem;
@@ -779,6 +834,141 @@ body {
   background: rgba(239, 68, 68, 0.12);
   color: #f87171;
   text-decoration: line-through;
+}
+
+.voice-cam-btn {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.voice-cam-btn:hover:not(:disabled) {
+  background: rgba(99, 102, 241, 0.12);
+  color: #a5b4fc;
+}
+.voice-cam-btn.on {
+  background: rgba(99, 102, 241, 0.2);
+  border-color: rgba(99, 102, 241, 0.45);
+  color: #a5b4fc;
+}
+.voice-cam-btn:disabled { opacity: 0.5; cursor: wait; }
+
+/* --- SELECTOR DE DISPOSITIVOS --- */
+.device-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 9px;
+  border-radius: 10px;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.03);
+  animation: fade-in 0.15s ease-out;
+}
+
+.device-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.device-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.58rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.device-select {
+  width: 100%;
+  max-width: 100%;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  color: var(--text-main);
+  font-family: var(--font-family);
+  font-size: 0.68rem;
+  padding: 5px 6px;
+  cursor: pointer;
+  outline: none;
+  /* Los nombres de dispositivo son larguísimos: que no ensanchen la barra. */
+  text-overflow: ellipsis;
+}
+.device-select:focus-visible {
+  border-color: var(--primary);
+}
+.device-select:disabled { opacity: 0.5; cursor: wait; }
+.device-select option { background: #0d121e; color: var(--text-main); }
+
+.device-note {
+  font-size: 0.55rem;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+/* --- MINIATURAS DE VÍDEO --- */
+.video-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+  gap: 5px;
+}
+
+.video-tile {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  border-radius: 9px;
+  overflow: hidden;
+  background: #05080f;
+  border: 1px solid var(--glass-border);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.video-tile.talking {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary), 0 0 10px var(--primary-glow);
+}
+
+.video-tile video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  /* La cámara frontal en espejo: es lo que la gente espera de sí misma. */
+  transform: scaleX(-1);
+}
+
+.video-tile-name {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 5px;
+  font-size: 0.55rem;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(to top, rgba(0,0,0,.8), transparent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 1024px) {
+  .video-grid {
+    grid-template-columns: repeat(auto-fit, minmax(58px, 1fr));
+  }
 }
 
 .voice-leave-btn {

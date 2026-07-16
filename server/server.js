@@ -320,6 +320,48 @@ io.on('connection', (socket) => {
     broadcastGameState(roomId);
   });
 
+  // 2.7 Abandonar la sala de forma explícita.
+  // Antes esto se simulaba desconectando el socket, y el servidor lo trataba
+  // como una caída: la silla quedaba reservada esperando una reconexión que
+  // nunca llegaba.
+  socket.on('leave_room', () => {
+    const ctx = findMe();
+    if (!ctx) return;
+    const { roomId, game, player } = ctx;
+
+    leaveVoice(ctx);
+    socket.leave(roomId);
+
+    if (game.status === 'waiting') {
+      game.removePlayerById(player.id);
+    } else {
+      // Partida en curso: no se puede quitar la silla sin romperle el juego a
+      // los demás (turnos, equipos, puntuación). La hereda un bot con su misma
+      // mano y su mismo sitio, y la partida sigue.
+      player.isBot = true;
+      player.difficulty = 'normal';
+      player.socketId = null;
+      player.ready = true;
+
+      io.to(roomId).emit('receive_quick_message', {
+        playerName: 'SISTEMA',
+        text: `🤖 ${player.name} abandonó la partida. Un bot ocupa su sitio.`,
+        type: 'phrase'
+      });
+    }
+
+    if (!game.hasHumans()) {
+      rooms.delete(roomId);
+      clearRoomTimers(roomId);
+      console.log(`Sala ${roomId} eliminada: se fue el último humano`);
+      return;
+    }
+
+    advanceRoom(roomId); // por si ahora le toca mover al bot recién heredado
+    broadcastGameState(roomId);
+    console.log(`${player.name} abandonó la sala ${roomId}`);
+  });
+
   // 3. Cambiar estado de "Listo"
   socket.on('toggle_ready', ({ roomId, playerId }) => {
     const game = rooms.get(roomId);
@@ -538,15 +580,28 @@ io.on('connection', (socket) => {
   function leaveVoice(ctx) {
     if (!ctx || !ctx.player.inVoice) return;
     ctx.player.inVoice = false;
+    ctx.player.camOn = false;
     socket.to(ctx.roomId).emit('voice_peer_left', { playerId: ctx.player.id });
     broadcastGameState(ctx.roomId);
   }
+
+  // Estado de la cámara. Va por aquí y NO se deduce del track remoto:
+  // replaceTrack(null) deja de enviar fotogramas pero el track del receptor NO
+  // pasa a "muted", así que los demás verían el último fotograma congelado.
+  // Al vivir en el estado del jugador, quien entre después también se entera.
+  socket.on('voice_cam', ({ on }) => {
+    const ctx = findMe();
+    if (!ctx || !ctx.player.inVoice) return;
+    ctx.player.camOn = !!on;
+    broadcastGameState(ctx.roomId);
+  });
 
   socket.on('voice_join', () => {
     const ctx = findMe();
     if (!ctx) return socket.emit('error_msg', 'No estás en ninguna sala');
 
     ctx.player.inVoice = true;
+    ctx.player.camOn = false;
 
     // A quién debe llamar: los que ya estaban dentro y siguen conectados.
     const peers = ctx.game.players

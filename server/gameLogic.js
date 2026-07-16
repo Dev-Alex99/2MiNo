@@ -1027,6 +1027,7 @@ class DominoGame {
           score: p.score,
           team: p.team,
           inVoice: !!p.inVoice,
+          camOn: !!p.camOn,
           isBot: !!p.isBot,
           difficulty: p.isBot ? p.difficulty : undefined,
           handCount: p.hand.length,

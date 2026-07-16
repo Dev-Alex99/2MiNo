@@ -1,6 +1,8 @@
-import React from 'react';
-import { Mic, MicOff, PhoneOff, Loader2, AlertCircle, Radio } from 'lucide-react';
+import React, { useState } from 'react';
+import { Mic, MicOff, PhoneOff, Loader2, AlertCircle, Radio, Video, VideoOff, Settings2 } from 'lucide-react';
 import { useVoice } from '../voice/VoiceContext';
+import VideoTile from './VideoTile';
+import DeviceSelector from './DeviceSelector';
 
 // Estado de la malla resumido para el usuario: no le interesa "ICE failed",
 // le interesa si se le oye.
@@ -17,11 +19,30 @@ function connectionLabel(peerStates, players, playerId) {
 export default function VoiceChat({ playerId, players }) {
   // El estado vive en el provider (App) para que la llamada sobreviva al paso
   // de la sala de espera al tablero.
+  const [showDevices, setShowDevices] = useState(false);
   const voice = useVoice();
   if (!voice) return null;
-  const { joined, connecting, muted, error, peerStates, speaking, join, leave, toggleMute } = voice;
+  const {
+    joined, connecting, muted, error, peerStates, speaking, join, leave, toggleMute,
+    camOn, camBusy, localVideo, remoteVideos, toggleCam,
+    devices, selected, switching, selectMic, selectCam, selectSpeaker, canPickSpeaker
+  } = voice;
 
   const inVoice = players.filter(p => p.inVoice);
+
+  // Quién sale en vídeo lo manda el estado del jugador (camOn), no el track:
+  // al apagar la cámara el track remoto NO se marca como "muted" y se quedaría
+  // el último fotograma congelado.
+  const tiles = [];
+  if (camOn && localVideo) {
+    tiles.push({ key: playerId, stream: localVideo, name: 'Tú', isMe: true, talking: speaking[playerId], muted });
+  }
+  players.forEach(p => {
+    if (p.id === playerId || !p.camOn) return;
+    const stream = remoteVideos[p.id];
+    if (!stream) return;
+    tiles.push({ key: p.id, stream, name: p.name, isMe: false, talking: speaking[p.id], muted: false });
+  });
 
   return (
     <div className="voice-panel">
@@ -75,9 +96,58 @@ export default function VoiceChat({ playerId, players }) {
             </div>
           </div>
 
+          <button
+            onClick={toggleCam}
+            disabled={camBusy}
+            className={`voice-cam-btn ${camOn ? 'on' : ''}`}
+            title={camOn ? 'Apagar cámara' : 'Encender cámara'}
+            aria-pressed={camOn}
+          >
+            {camBusy ? <Loader2 size={14} className="voice-spin" />
+              : camOn ? <Video size={14} /> : <VideoOff size={14} />}
+          </button>
+
+          <button
+            onClick={() => setShowDevices(v => !v)}
+            className={`voice-cam-btn ${showDevices ? 'on' : ''}`}
+            title="Elegir micrófono, cámara o altavoz"
+            aria-expanded={showDevices}
+          >
+            <Settings2 size={14} />
+          </button>
+
           <button onClick={leave} className="voice-leave-btn" title="Salir del chat de voz">
             <PhoneOff size={14} />
           </button>
+        </div>
+      )}
+
+      {joined && showDevices && (
+        <DeviceSelector
+          devices={devices}
+          selected={selected}
+          switching={switching}
+          camOn={camOn}
+          canPickSpeaker={canPickSpeaker}
+          onMic={selectMic}
+          onCam={selectCam}
+          onSpeaker={selectSpeaker}
+        />
+      )}
+
+      {/* Miniaturas: solo de quien tiene la cámara encendida */}
+      {tiles.length > 0 && (
+        <div className="video-grid">
+          {tiles.map(t => (
+            <VideoTile
+              key={t.key}
+              stream={t.stream}
+              name={t.name}
+              isMe={t.isMe}
+              talking={t.talking}
+              muted={t.muted}
+            />
+          ))}
         </div>
       )}
 

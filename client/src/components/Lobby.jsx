@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Play, Plus, ArrowRight, User, Zap, Layers, Settings2 } from 'lucide-react';
+import { Play, Plus, ArrowRight, User, Zap, Layers, Settings2, Users, Download, Medal, ChevronDown } from 'lucide-react';
 import { socket } from '../socket';
 
 // Debe coincidir con VARIANTS en server/gameLogic.js
@@ -14,6 +14,20 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom }) {
   // Opciones de sala (solo aplican al CREAR; al unirse manda la config del anfitrión)
   const [powersEnabled, setPowersEnabled] = useState(true);
   const [maxPip, setMaxPip] = useState(6);
+  const [teamsEnabled, setTeamsEnabled] = useState(false);
+  const [drawEnabled, setDrawEnabled] = useState(true);
+  const [maxScore, setMaxScore] = useState(null); // null => el propio de la variante
+  // Plegadas por defecto: si no, el botón de crear sala se va de la pantalla
+  // en un móvil y hay que scrollear para la acción principal.
+  const [showOptions, setShowOptions] = useState(false);
+
+  const optionsSummary = [
+    VARIANT_INFO[maxPip].label,
+    teamsEnabled ? 'Parejas' : 'Individual',
+    powersEnabled ? 'Poderes' : 'Clásico',
+    drawEnabled ? null : 'Sin pozo',
+    `${maxScore ?? (maxPip === 9 ? 200 : 100)} pts`
+  ].filter(Boolean).join(' · ');
 
   const handleCreate = (e) => {
     e.preventDefault();
@@ -22,7 +36,7 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom }) {
       return;
     }
     setError('');
-    onCreateRoom({ powersEnabled, maxPip });
+    onCreateRoom({ powersEnabled, maxPip, teamsEnabled, drawEnabled, maxScore });
   };
 
   const handleJoin = (e) => {
@@ -83,12 +97,26 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom }) {
 
           <div className="separator"></div>
 
-          {/* Opciones de la sala a crear */}
+          {/* Opciones de la sala a crear (plegadas por defecto) */}
           <div className="lobby-form-field">
-            <label className="lobby-form-label">
-              <Settings2 size={14} />
-              Opciones de la sala nueva
-            </label>
+            <button
+              type="button"
+              onClick={() => setShowOptions((v) => !v)}
+              aria-expanded={showOptions}
+              className={`options-summary ${showOptions ? 'open' : ''}`}
+            >
+              <span className="options-summary-main">
+                <span className="options-summary-title">
+                  <Settings2 size={14} />
+                  Opciones de la sala
+                </span>
+                <span className="options-summary-value">{optionsSummary}</span>
+              </span>
+              <ChevronDown size={16} className="options-chevron" />
+            </button>
+
+            {showOptions && (
+              <div className="options-panel">
 
             {/* Variante del dominó */}
             <div className="segmented" role="group" aria-label="Variante del dominó">
@@ -105,6 +133,27 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom }) {
                     {VARIANT_INFO[pip].label}
                   </span>
                   <span className="segmented-sub">{VARIANT_INFO[pip].desc}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Límite de puntos */}
+            <div className="segmented" role="group" aria-label="Límite de puntos">
+              {[null, 100, 200, 300].map((pts) => (
+                <button
+                  key={pts ?? 'auto'}
+                  type="button"
+                  onClick={() => setMaxScore(pts)}
+                  aria-pressed={maxScore === pts}
+                  className={`segmented-btn compact ${maxScore === pts ? 'active' : ''}`}
+                >
+                  <span className="segmented-title">
+                    {pts === null ? <Medal size={13} /> : null}
+                    {pts === null ? 'Auto' : pts}
+                  </span>
+                  <span className="segmented-sub">
+                    {pts === null ? `${maxPip === 9 ? 200 : 100} pts` : 'puntos'}
+                  </span>
                 </button>
               ))}
             </div>
@@ -131,6 +180,54 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom }) {
                 <span className="switch-knob" />
               </span>
             </button>
+
+            {/* Parejas 2v2 */}
+            <button
+              type="button"
+              onClick={() => setTeamsEnabled((v) => !v)}
+              aria-pressed={teamsEnabled}
+              className={`option-toggle teams ${teamsEnabled ? 'on' : ''}`}
+            >
+              <span className="option-toggle-text">
+                <span className="option-toggle-title">
+                  <Users size={14} />
+                  Jugar en Parejas
+                </span>
+                <span className="option-toggle-desc">
+                  {teamsEnabled
+                    ? '2 contra 2 · requiere 4 jugadores'
+                    : 'Cada uno a lo suyo'}
+                </span>
+              </span>
+              <span className="switch" aria-hidden="true">
+                <span className="switch-knob" />
+              </span>
+            </button>
+
+            {/* Robar del pozo */}
+            <button
+              type="button"
+              onClick={() => setDrawEnabled((v) => !v)}
+              aria-pressed={drawEnabled}
+              className={`option-toggle draw ${drawEnabled ? 'on' : ''}`}
+            >
+              <span className="option-toggle-text">
+                <span className="option-toggle-title">
+                  <Download size={14} />
+                  Robar del Pozo
+                </span>
+                <span className="option-toggle-desc">
+                  {drawEnabled
+                    ? 'Sin jugada, robas del pozo'
+                    : 'Sin jugada, pasas turno'}
+                </span>
+              </span>
+              <span className="switch" aria-hidden="true">
+                <span className="switch-knob" />
+              </span>
+            </button>
+              </div>
+            )}
           </div>
 
           {/* Sección de acciones */}
@@ -177,7 +274,8 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom }) {
 
       {/* Footer minimalista */}
       <div className="waiting-footer-desc" style={{ position: 'absolute', bottom: '16px' }}>
-        Dominó {VARIANT_INFO[maxPip].label} · {powersEnabled ? 'Con Poderes' : 'Clásico'} · Creado con ❤️
+        Dominó {VARIANT_INFO[maxPip].label} · {teamsEnabled ? 'Parejas' : 'Individual'}
+        {' · '}{powersEnabled ? 'Con Poderes' : 'Clásico'}{!drawEnabled && ' · Sin Pozo'} · Creado con ❤️
       </div>
     </div>
   );

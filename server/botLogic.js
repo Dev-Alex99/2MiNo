@@ -33,11 +33,26 @@ function scoreMove(game, player, move, difficulty) {
   const openEnd = game.resultingEnd(player.id, move);
   if (openEnd === null) return score;
 
+  // En parejas, el de enfrente es rival y el compañero no. Sin equipos, todos
+  // son rivales.
+  const rivals = game.players.filter(p =>
+    p.id !== player.id && (!game.teamsEnabled || p.team !== player.team)
+  );
+  const partners = game.teamsEnabled
+    ? game.players.filter(p => p.id !== player.id && p.team === player.team)
+    : [];
+
   // Bloquear: si un rival ya pasó sobre ese número, dejárselo otra vez es oro.
-  const opponents = game.players.filter(p => p.id !== player.id);
-  for (const opp of opponents) {
+  for (const opp of rivals) {
     const passedOn = game.playerPassedOn[opp.id] || [];
     if (passedOn.includes(openEnd)) score += 14;
+  }
+
+  // Y no ahogar al compañero: dejarle un palo sobre el que ya pasó es tirar
+  // piedras contra tu propio tejado.
+  for (const mate of partners) {
+    const passedOn = game.playerPassedOn[mate.id] || [];
+    if (passedOn.includes(openEnd)) score -= 14;
   }
 
   // Flexibilidad: mejor dejar expuesto un número que yo todavía pueda servir.

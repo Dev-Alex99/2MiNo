@@ -14,6 +14,10 @@ const socketUrl = import.meta.env.VITE_SERVER_URL || (isLocal
   ? `${window.location.protocol}//${window.location.hostname}:${PORT}`
   : window.location.origin);
 
+// Exportada para que otras piezas (p. ej. el chat de voz, que pide /ice-config)
+// no dependan de la API interna del manager de Socket.IO.
+export const serverUrl = socketUrl;
+
 console.log(`Conectando Socket.IO a: ${socketUrl}`);
 
 export const socket = io(socketUrl, {

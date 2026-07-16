@@ -28,14 +28,21 @@ const VARIANTS = {
 
 class DominoGame {
   // maxScore = null => usa el propio de la variante.
-  // options: { powersEnabled: bool, maxPip: 6 | 9 }
+  // options: { powersEnabled, maxPip: 6|9, teamsEnabled, drawEnabled }
   constructor(roomId, maxScore = null, options = {}) {
-    const { powersEnabled = true, maxPip = 6 } = options;
+    const { powersEnabled = true, maxPip = 6, teamsEnabled = false, drawEnabled = true } = options;
 
     this.maxPip = VARIANTS[maxPip] ? maxPip : 6;
     const variant = VARIANTS[this.maxPip];
     this.handSize = variant.handSize;
     this.powersEnabled = powersEnabled !== false;
+    // Parejas: exige exactamente 4 jugadores. Se sientan alternados (0,2) vs (1,3),
+    // así los compañeros nunca juegan seguidos.
+    this.teamsEnabled = teamsEnabled === true;
+    // Sin pozo: quien no tiene jugada pasa directamente, aunque queden fichas.
+    this.drawEnabled = drawEnabled !== false;
+    this.teamScores = [0, 0];
+    this.teamNames = ['Equipo A', 'Equipo B'];
 
     this.roomId = roomId;
     this.maxScore = maxScore || variant.defaultMaxScore;
@@ -87,9 +94,11 @@ class DominoGame {
       ready: false,
       powers: [],
       shieldActive: false,
-      isBot: false
+      isBot: false,
+      team: 0
     };
     this.players.push(player);
+    this.assignTeams();
     return player;
   }
 
@@ -109,9 +118,11 @@ class DominoGame {
       powers: [],
       shieldActive: false,
       isBot: true,
+      team: 0,
       difficulty: ['facil', 'normal', 'dificil'].includes(difficulty) ? difficulty : 'normal'
     };
     this.players.push(bot);
+    this.assignTeams();
     return bot;
   }
 
@@ -120,7 +131,36 @@ class DominoGame {
     if (index === -1) return null;
     const removed = this.players[index];
     this.players.splice(index, 1);
+    this.assignTeams();
     return removed;
+  }
+
+  // Equipo por asiento: pares contra impares. Al ir el turno en orden alrededor
+  // de la mesa, los compañeros quedan siempre enfrentados y nunca consecutivos.
+  assignTeams() {
+    this.players.forEach((p, i) => { p.team = i % 2; });
+  }
+
+  // Intercambia el sitio de dos jugadores. Como el equipo se deduce del asiento,
+  // esto es lo que permite elegir compañero (y cambia el orden de turnos).
+  swapSeats(idA, idB) {
+    if (this.status !== 'waiting') return false;
+    if (idA === idB) return false;
+
+    const a = this.players.findIndex(p => p.id === idA);
+    const b = this.players.findIndex(p => p.id === idB);
+    if (a === -1 || b === -1) return false;
+
+    [this.players[a], this.players[b]] = [this.players[b], this.players[a]];
+    this.assignTeams();
+    return true;
+  }
+
+  // Suma de puntos que un equipo tiene aún en la mano.
+  teamHandSum(team) {
+    return this.players
+      .filter(p => p.team === team)
+      .reduce((sum, p) => sum + this.getHandSum(p.hand), 0);
   }
 
   // ¿Quedan humanos en la sala? Si no, no tiene sentido mantenerla viva.
@@ -153,6 +193,8 @@ class DominoGame {
   }
 
   allReady() {
+    // En parejas la mesa tiene que estar completa: 2v2 no se juega a 3.
+    if (this.teamsEnabled && this.players.length !== 4) return false;
     return this.players.length >= 2 && this.players.every(p => p.ready);
   }
 
@@ -188,7 +230,11 @@ class DominoGame {
 
   startNewGame() {
     this.players.forEach(p => p.score = 0);
+    this.teamScores = [0, 0];
+    this.gameWinnerTeam = null;
+    this.roundWinnerTeam = null;
     this.roundNumber = 0;
+    this.assignTeams();
     this.startNewRound();
   }
 
@@ -402,7 +448,7 @@ class DominoGame {
     let move = this.findValidMove(player.id);
     let drew = 0;
 
-    while (!move && this.boneyard.length > 0) {
+    while (!move && this.drawEnabled && this.boneyard.length > 0) {
       const drawn = this.drawTile(player.id);
       if (!drawn.success) break;
       drew++;
@@ -533,6 +579,7 @@ class DominoGame {
   drawTile(playerId) {
     const player = this.players[this.currentPlayerIndex];
     if (!player || player.id !== playerId) return { success: false, error: 'No es tu turno' };
+    if (!this.drawEnabled) return { success: false, error: 'En esta sala no se roba del pozo: si no tienes jugada, pasa' };
     if (this.boneyard.length === 0) return { success: false, error: 'El pozo está vacío' };
     if (this.hasValidMove(playerId)) return { success: false, error: 'Tienes jugadas disponibles, no puedes robar' };
 
@@ -547,7 +594,10 @@ class DominoGame {
   passTurn(playerId) {
     const player = this.players[this.currentPlayerIndex];
     if (!player || player.id !== playerId) return { success: false, error: 'No es tu turno' };
-    if (this.boneyard.length > 0) return { success: false, error: 'Quedan fichas en el pozo, debes robar' };
+    // Solo estás obligado a robar si la sala permite robar.
+    if (this.drawEnabled && this.boneyard.length > 0) {
+      return { success: false, error: 'Quedan fichas en el pozo, debes robar' };
+    }
     if (this.hasValidMove(playerId)) return { success: false, error: 'Tienes jugadas disponibles, no puedes pasar' };
 
     // Un pase es información pública: revela que ese jugador no tiene NINGUNO
@@ -625,8 +675,56 @@ class DominoGame {
     }
   }
 
+  // Cierre de ronda en parejas: puntúa el EQUIPO, y se lleva los puntos que
+  // queden en las manos de los DOS rivales.
+  endRoundTeams(winnerId, isBlocked) {
+    let winningTeam;
+
+    if (!isBlocked) {
+      const winner = this.players.find(p => p.id === winnerId);
+      winningTeam = winner.team;
+      this.roundWinner = winner.id;
+      this.startingPlayerId = winner.id;
+    } else {
+      // Tranca: gana la pareja que menos puntos tenga entre los dos.
+      const totals = [this.teamHandSum(0), this.teamHandSum(1)];
+
+      if (totals[0] === totals[1]) {
+        this.roundWinner = 'tie';
+        this.roundWinnerTeam = null;
+        this.checkGameEndTeams();
+        return;
+      }
+
+      winningTeam = totals[0] < totals[1] ? 0 : 1;
+      // Sale el miembro del equipo ganador con la mano más baja.
+      const starter = this.players
+        .filter(p => p.team === winningTeam)
+        .reduce((a, b) => (this.getHandSum(a.hand) <= this.getHandSum(b.hand) ? a : b));
+      this.roundWinner = starter.id;
+      this.startingPlayerId = starter.id;
+    }
+
+    const losingTeam = winningTeam === 0 ? 1 : 0;
+    this.teamScores[winningTeam] += this.teamHandSum(losingTeam);
+    this.roundWinnerTeam = winningTeam;
+    this.checkGameEndTeams();
+  }
+
+  checkGameEndTeams() {
+    const idx = this.teamScores.findIndex(s => s >= this.maxScore);
+    if (idx !== -1) {
+      this.status = 'game_ended';
+      this.gameWinnerTeam = idx;
+      this.gameWinner = `team_${idx}`;
+    }
+  }
+
   endRound(winnerId, isBlocked) {
     this.status = 'round_ended';
+
+    if (this.teamsEnabled) return this.endRoundTeams(winnerId, isBlocked);
+
     let roundPoints = 0;
 
     if (!isBlocked) {
@@ -894,6 +992,12 @@ class DominoGame {
       // Configuración de la sala, fijada al crearla
       powersEnabled: this.powersEnabled,
       maxPip: this.maxPip,
+      teamsEnabled: this.teamsEnabled,
+      drawEnabled: this.drawEnabled,
+      teamScores: this.teamScores,
+      teamNames: this.teamNames,
+      roundWinnerTeam: this.roundWinnerTeam ?? null,
+      gameWinnerTeam: this.gameWinnerTeam ?? null,
       // Temporizador de turno: turnEndsAt sirve al cliente para detectar que el
       // reloj se rearmó; los segundos van calculados aquí para evitar desfases.
       turnEndsAt: this.turnEndsAt,
@@ -921,6 +1025,8 @@ class DominoGame {
           name: p.name,
           ready: p.ready,
           score: p.score,
+          team: p.team,
+          inVoice: !!p.inVoice,
           isBot: !!p.isBot,
           difficulty: p.isBot ? p.difficulty : undefined,
           handCount: p.hand.length,

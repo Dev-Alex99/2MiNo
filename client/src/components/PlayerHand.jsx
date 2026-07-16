@@ -15,7 +15,8 @@ export default function PlayerHand({
   boneyardCount,
   boardIsEmpty,
   onTileClickOverride,
-  wildcardActive = false
+  wildcardActive = false,
+  drawEnabled = true
 }) {
   
   // Verifica si una ficha es jugable en el tablero actual
@@ -63,7 +64,7 @@ export default function PlayerHand({
       <div className="hand-status-row">
         {isMyTurn ? (
           !hasMoves ? (
-            boneyardCount > 0 ? (
+            drawEnabled && boneyardCount > 0 ? (
               <button
                 onClick={onDraw}
                 className="btn-premium btn-accent"
@@ -79,7 +80,9 @@ export default function PlayerHand({
                 style={{ padding: '8px 20px', fontSize: '0.8rem', color: '#f59e0b' }}
               >
                 <ArrowLeftRight size={16} />
-                No tienes jugadas ni pozo. Pasar Turno
+                {drawEnabled
+                  ? 'No tienes jugadas ni pozo. Pasar Turno'
+                  : 'No tienes jugadas. Pasar Turno'}
               </button>
             )
           ) : selectedTileIndex !== null ? (

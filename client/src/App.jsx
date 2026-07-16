@@ -9,6 +9,7 @@ import ScoreBoard from './components/ScoreBoard';
 import Chat from './components/Chat';
 import EndGameModal from './components/EndGameModal';
 import PowerCards from './components/PowerCards';
+import { VoiceProvider } from './voice/VoiceContext';
 import { Wifi, AlertCircle } from 'lucide-react';
 
 export default function App() {
@@ -143,8 +144,14 @@ export default function App() {
   }, []);
 
   const handleCreateRoom = (options = {}) => {
-    const { powersEnabled = true, maxPip = 6 } = options;
-    socket.emit('create_room', { name, powersEnabled, maxPip });
+    const {
+      powersEnabled = true,
+      maxPip = 6,
+      teamsEnabled = false,
+      drawEnabled = true,
+      maxScore = null
+    } = options;
+    socket.emit('create_room', { name, powersEnabled, maxPip, teamsEnabled, drawEnabled, maxScore });
   };
 
   const handleJoinRoom = (code) => {
@@ -259,19 +266,18 @@ export default function App() {
     );
   }
 
-  if (gameState.status === 'waiting') {
-    return (
-      <WaitingRoom
-        gameState={gameState}
-        playerId={playerId}
-        onLeave={handleLeaveRoom}
-      />
-    );
-  }
-
-
-
+  // UN SOLO provider de voz envolviendo sala de espera Y tablero. Si hubiera uno
+  // por pantalla, React desmontaría el hook al empezar la partida y la llamada
+  // se cortaría justo en ese momento.
   return (
+    <VoiceProvider roomId={roomId} playerId={playerId}>
+      {gameState.status === 'waiting' ? (
+        <WaitingRoom
+          gameState={gameState}
+          playerId={playerId}
+          onLeave={handleLeaveRoom}
+        />
+      ) : (
     <div className="app-container">
       
       {/* Banner flotante de Tu Turno */}
@@ -340,6 +346,10 @@ export default function App() {
         maxScore={gameState.maxScore}
         maxPip={gameState.maxPip}
         powersEnabled={gameState.powersEnabled}
+        teamsEnabled={gameState.teamsEnabled}
+        teamScores={gameState.teamScores}
+        teamNames={gameState.teamNames}
+        drawEnabled={gameState.drawEnabled !== false}
       />
 
       {/* Área de Juego Principal */}
@@ -396,6 +406,7 @@ export default function App() {
             boneyardCount={gameState.boneyardCount}
             boardIsEmpty={gameState.board.length === 0}
             wildcardActive={isWildcardActive}
+            drawEnabled={gameState.drawEnabled !== false}
             onTileClickOverride={
               (pendingTargetType === 'hand_tile_target' || pendingTargetType === 'smuggle_select_tile')
                 ? handleTileClickOverride
@@ -408,5 +419,7 @@ export default function App() {
       {/* Modal de Finalización de Ronda / Partida */}
       <EndGameModal gameState={gameState} playerId={playerId} />
     </div>
+      )}
+    </VoiceProvider>
   );
 }

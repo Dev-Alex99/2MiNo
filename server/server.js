@@ -8,6 +8,30 @@ const { chooseMove, choosePower, pickBotName } = require('./botLogic');
 const app = express();
 app.use(cors());
 
+// Configuración ICE para el chat de voz. Se sirve desde aquí (y no se incrusta
+// en el cliente) para que las credenciales TURN vivan en variables de entorno
+// y se puedan rotar sin volver a desplegar el front.
+app.get('/ice-config', (req, res) => {
+  const iceServers = [
+    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }
+  ];
+
+  // TURN es opcional: sin él, el ~10-20% tras NAT simétrico no conectará.
+  if (process.env.TURN_URL) {
+    iceServers.push({
+      urls: process.env.TURN_URL.split(',').map(s => s.trim()).filter(Boolean),
+      username: process.env.TURN_USERNAME,
+      credential: process.env.TURN_CREDENTIAL
+    });
+  }
+
+  // Cachear poco: las credenciales TURN suelen ser efímeras.
+  res.set('Cache-Control', 'public, max-age=60');
+  res.json({ iceServers, turnConfigured: !!process.env.TURN_URL });
+});
+
+app.get('/health', (req, res) => res.json({ ok: true, rooms: rooms.size }));
+
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
@@ -172,17 +196,22 @@ io.on('connection', (socket) => {
   console.log(`Nuevo cliente conectado: ${socket.id}`);
 
   // 1. Crear una sala
-  socket.on('create_room', ({ name, playerId, powersEnabled, maxPip }) => {
+  socket.on('create_room', ({ name, playerId, powersEnabled, maxPip, teamsEnabled, drawEnabled, maxScore }) => {
     if (!name) return socket.emit('error_msg', 'Nombre requerido');
 
     // No confiamos en el cliente: normalizamos las opciones aquí.
     const safeMaxPip = maxPip === 9 ? 9 : 6;
     const safePowers = powersEnabled !== false;
+    const safeTeams = teamsEnabled === true;
+    const safeDraw = drawEnabled !== false;
+    const safeScore = [100, 150, 200, 300].includes(maxScore) ? maxScore : null;
 
     const roomId = generateRoomId();
-    const game = new DominoGame(roomId, null, {
+    const game = new DominoGame(roomId, safeScore, {
       powersEnabled: safePowers,
-      maxPip: safeMaxPip
+      maxPip: safeMaxPip,
+      teamsEnabled: safeTeams,
+      drawEnabled: safeDraw
     });
     game.turnDurationMs = TURN_SECONDS * 1000;
 
@@ -194,7 +223,8 @@ io.on('connection', (socket) => {
 
     socket.emit('room_created', { roomId, playerId: actualPlayerId });
     broadcastGameState(roomId);
-    console.log(`Sala creada: ${roomId} por ${name} (doble ${safeMaxPip}, poderes: ${safePowers ? 'sí' : 'no'})`);
+    console.log(`Sala creada: ${roomId} por ${name} (doble ${safeMaxPip}, poderes: ${safePowers ? 'sí' : 'no'}, ` +
+      `${safeTeams ? 'parejas' : 'individual'}, pozo: ${safeDraw ? 'sí' : 'no'}, ${game.maxScore} pts)`);
   });
 
   // 2. Unirse a una sala (soporta reconexión si se pasa el playerId existente)
@@ -258,6 +288,24 @@ io.on('connection', (socket) => {
       advanceRoom(roomId);
       broadcastGameState(roomId);
     }
+  });
+
+  // 2.6 Cambiar de sitio (así se elige compañero: el equipo sale del asiento)
+  socket.on('swap_seats', ({ roomId, playerA, playerB }) => {
+    const game = rooms.get(roomId);
+    if (!game) return;
+    if (game.status !== 'waiting') {
+      return socket.emit('error_msg', 'No se pueden cambiar los sitios con la partida en curso');
+    }
+    if (!game.swapSeats(playerA, playerB)) {
+      return socket.emit('error_msg', 'No se pudo cambiar de sitio');
+    }
+
+    // Cambiar de sitio cambia los equipos y el orden de turnos: que todo el
+    // mundo reconfirme en vez de arrancar con una mesa que nadie aceptó.
+    game.players.forEach(p => { if (!p.isBot) p.ready = false; });
+
+    broadcastGameState(roomId);
   });
 
   socket.on('remove_bot', ({ roomId, botId }) => {
@@ -474,8 +522,70 @@ io.on('connection', (socket) => {
     });
   });
 
+  // --- CHAT DE VOZ (WebRTC en malla) ---
+  // El audio va peer-to-peer y NUNCA pasa por aquí: por el servidor solo viajan
+  // ofertas, respuestas y candidatos ICE (unos pocos KB al conectar).
+
+  function findMe() {
+    for (const [roomId, game] of rooms.entries()) {
+      const player = game.players.find(p => p.socketId === socket.id);
+      if (player) return { roomId, game, player };
+    }
+    return null;
+  }
+
+  // Saca a un jugador de la voz y avisa al resto. Se usa al salir y al caerse.
+  function leaveVoice(ctx) {
+    if (!ctx || !ctx.player.inVoice) return;
+    ctx.player.inVoice = false;
+    socket.to(ctx.roomId).emit('voice_peer_left', { playerId: ctx.player.id });
+    broadcastGameState(ctx.roomId);
+  }
+
+  socket.on('voice_join', () => {
+    const ctx = findMe();
+    if (!ctx) return socket.emit('error_msg', 'No estás en ninguna sala');
+
+    ctx.player.inVoice = true;
+
+    // A quién debe llamar: los que ya estaban dentro y siguen conectados.
+    const peers = ctx.game.players
+      .filter(p => p.inVoice && p.socketId && p.id !== ctx.player.id)
+      .map(p => ({ playerId: p.id, name: p.name }));
+
+    socket.emit('voice_peers', { peers });
+    socket.to(ctx.roomId).emit('voice_peer_joined', { playerId: ctx.player.id, name: ctx.player.name });
+    broadcastGameState(ctx.roomId);
+  });
+
+  socket.on('voice_leave', () => {
+    leaveVoice(findMe());
+  });
+
+  // Relay de señalización dirigido a UN peer concreto de la misma sala.
+  socket.on('voice_signal', ({ to, data }) => {
+    const ctx = findMe();
+    if (!ctx || !to || !data) return;
+
+    const target = ctx.game.players.find(p => p.id === to);
+    // Solo se retransmite dentro de la sala y a alguien realmente conectado:
+    // el servidor no es un relay abierto.
+    if (!target || !target.socketId) return;
+
+    io.to(target.socketId).emit('voice_signal', { from: ctx.player.id, data });
+  });
+
+  // Quién está hablando. Va aparte del game_state porque cambia ~1 vez/seg y
+  // no queremos reemitir la partida entera por eso.
+  socket.on('voice_speaking', ({ speaking }) => {
+    const ctx = findMe();
+    if (!ctx || !ctx.player.inVoice) return;
+    socket.to(ctx.roomId).emit('voice_speaking', { playerId: ctx.player.id, speaking: !!speaking });
+  });
+
   // 10. Desconexión
   socket.on('disconnect', () => {
+    leaveVoice(findMe());
     console.log(`Cliente desconectado: ${socket.id}`);
     
     // Buscar la sala donde estaba este socket

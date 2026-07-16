@@ -42,9 +42,18 @@ body {
   overscroll-behavior: none;
 }
 
+/* #root es el contenedor con scroll de la app.
+   El body va en overflow:hidden para que la página no rebote, pero eso también
+   impide scrollear con el dedo. Las pantallas tipo documento (lobby, sala de
+   espera) pueden pasarse de alto en móviles bajos y hay que poder alcanzarlas.
+   El tablero mide exactamente 100dvh, así que nunca desborda y sigue fijo. */
 #root {
   height: 100%;
   width: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
 }
 
 /* --- SCROLLBAR --- */
@@ -643,6 +652,283 @@ body {
   border-radius: 4px;
 }
 
+/* --- CHAT DE VOZ --- */
+.voice-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.voice-join-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  background: rgba(99, 102, 241, 0.08);
+  color: #c7d2fe;
+  font-family: var(--font-family);
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.voice-join-btn:hover:not(:disabled) {
+  background: rgba(99, 102, 241, 0.18);
+  color: #fff;
+}
+.voice-join-btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+.voice-join-btn span:first-of-type { flex-grow: 1; text-align: left; }
+
+.voice-count {
+  background: var(--secondary);
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 800;
+  min-width: 17px;
+  height: 17px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+}
+
+.voice-active {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  background: rgba(16, 185, 129, 0.06);
+}
+
+.voice-mic-btn {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.voice-mic-btn.speaking {
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25);
+}
+.voice-mic-btn.muted {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #f87171;
+  box-shadow: none;
+}
+
+.voice-info {
+  flex-grow: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.voice-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.voice-peers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.voice-peer {
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-muted);
+  border: 1px solid transparent;
+  transition: all 0.15s;
+}
+.voice-peer.talking {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: var(--primary);
+  color: #6ee7b7;
+}
+.voice-peer.failed {
+  background: rgba(239, 68, 68, 0.12);
+  color: #f87171;
+  text-decoration: line-through;
+}
+
+.voice-leave-btn {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.voice-leave-btn:hover {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #f87171;
+}
+
+.voice-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  font-size: 0.62rem;
+  line-height: 1.4;
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  padding: 6px 8px;
+  border-radius: 8px;
+}
+.voice-error svg { flex-shrink: 0; margin-top: 1px; }
+
+.player-voice-mic {
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+@keyframes voice-spin { to { transform: rotate(360deg); } }
+.voice-spin { animation: voice-spin 0.9s linear infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .voice-spin { animation: none; }
+}
+
+/* --- PAREJAS (2v2) ---
+   Dos colores fijos, uno por equipo, usados igual en el marcador, en las
+   tarjetas y en la sala de espera para que la pareja se lea de un vistazo. */
+.team-score-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.team-score-card {
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.02);
+  border-left: 3px solid var(--team-color, var(--primary));
+}
+.team-score-card.team-0 { --team-color: #10b981; }
+.team-score-card.team-1 { --team-color: #f43f5e; }
+.team-score-card.mine {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.team-score-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.team-score-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--team-color);
+}
+
+.team-score-value {
+  font-size: 1.1rem;
+  font-weight: 900;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+.team-score-members {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  margin: 2px 0 6px;
+}
+
+.team-score-card .player-score-bar { margin-top: 0; }
+.team-score-card .player-score-progress {
+  background: var(--team-color);
+}
+
+.team-chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.58rem;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 5px;
+  margin-right: 5px;
+}
+.team-chip.team-0 { background: rgba(16, 185, 129, 0.15); color: #6ee7b7; }
+.team-chip.team-1 { background: rgba(244, 63, 94, 0.15); color: #fda4af; }
+
+/* Franja lateral del equipo en la tarjeta de jugador */
+.player-card.on-team { border-left: 3px solid var(--team-color, transparent); }
+.player-card.on-team.team-0 { --team-color: #10b981; }
+.player-card.on-team.team-1 { --team-color: #f43f5e; }
+
+.room-mode-tag.teams {
+  background: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.25);
+  color: #6ee7b7;
+}
+
+.option-toggle.teams.on {
+  background: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.3);
+}
+.option-toggle.teams.on .switch { background: var(--primary); border-color: rgba(16,185,129,.5); }
+.option-toggle.teams.on .option-toggle-title svg { color: var(--primary); }
+
+.option-toggle.draw.on {
+  background: rgba(99, 102, 241, 0.08);
+  border-color: rgba(99, 102, 241, 0.3);
+}
+.option-toggle.draw.on .switch { background: var(--secondary); border-color: rgba(99,102,241,.5); }
+.option-toggle.draw.on .option-toggle-title svg { color: #818cf8; }
+
+.segmented-btn.compact { padding: 7px 4px; }
+.segmented-btn.compact .segmented-title { font-size: 0.78rem; }
+
+.modal-row-members {
+  display: block;
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
 .player-badge-bot {
   font-size: 0.6rem;
   font-weight: 800;
@@ -727,6 +1013,60 @@ body {
   opacity: 0.45;
   cursor: not-allowed;
   transform: none;
+}
+
+/* --- CAMBIAR DE SITIO (elegir compañero) --- */
+.seat-swap-btn {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--glass-border);
+  color: var(--text-muted);
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+.seat-swap-btn:hover {
+  background: rgba(99, 102, 241, 0.12);
+  border-color: rgba(99, 102, 241, 0.35);
+  color: #a5b4fc;
+}
+.seat-swap-btn.active {
+  background: var(--secondary);
+  border-color: var(--secondary);
+  color: #fff;
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.4);
+}
+.seat-swap-btn.target {
+  border-style: dashed;
+  border-color: rgba(99, 102, 241, 0.5);
+  color: #a5b4fc;
+  animation: pulse-glow 1.6s infinite;
+}
+
+.swap-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: rgba(99, 102, 241, 0.1);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  color: #c7d2fe;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+.swap-hint span { flex-grow: 1; }
+.swap-hint strong { color: #fff; }
+
+.swap-tip {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  padding: 0 4px 2px;
 }
 
 .bot-remove-btn {
@@ -1607,6 +1947,73 @@ body {
   border-radius: 12px;
 }
 
+/* --- OPCIONES PLEGABLES DEL LOBBY --- */
+.options-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-main);
+  font-family: var(--font-family);
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: left;
+}
+.options-summary:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.options-summary.open {
+  border-color: rgba(16, 185, 129, 0.3);
+  background: rgba(16, 185, 129, 0.05);
+}
+
+.options-summary-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.options-summary-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.options-summary-value {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.options-chevron {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transition: transform 0.25s ease;
+}
+.options-summary.open .options-chevron {
+  transform: rotate(180deg);
+  color: var(--primary);
+}
+
+.options-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+  animation: fade-in 0.2s ease-out;
+}
+
 /* --- SELECTOR SEGMENTADO (variante del dominó) --- */
 .segmented {
   display: flex;
@@ -2131,6 +2538,80 @@ body {
   }
   .divider {
     margin: 2px 0;
+  }
+}
+
+/* --- LOBBY Y SALA DE ESPERA EN MÓVIL ---
+   Con el scroll de #root ya se alcanza todo, pero la acción principal (Crear
+   sala / Listo) no debería quedar fuera de pantalla de salida. Compactamos para
+   que quepa, dejando el scroll como red de seguridad. */
+@media (max-width: 1024px) {
+  .lobby-header {
+    margin-bottom: 16px;
+  }
+  .lobby-title {
+    font-size: 2.4rem;
+  }
+  .lobby-subtitle {
+    font-size: 0.78rem;
+  }
+  .lobby-card,
+  .waiting-room-card {
+    padding: 20px;
+  }
+  .lobby-form {
+    gap: 14px;
+  }
+  .waiting-room-card {
+    gap: 14px;
+  }
+  .code-box {
+    padding: 10px;
+    border-radius: 14px;
+  }
+  .code-box-value {
+    font-size: 1.6rem;
+  }
+  .code-box-row {
+    gap: 10px;
+    margin-top: 2px;
+  }
+  .player-row {
+    padding: 9px 10px;
+    border-radius: 12px;
+  }
+  .waiting-room-header-title {
+    font-size: 1.25rem;
+  }
+  /* En flujo: flotando encima se solapaba con la tarjeta al crecer el contenido. */
+  .lobby-screen .waiting-footer-desc {
+    position: static !important;
+    margin-top: 14px;
+  }
+}
+
+/* Pantallas muy bajas (móvil en horizontal): el titular decorativo se come
+   media pantalla. Se recorta para dejar sitio a lo que se usa. */
+@media (max-height: 480px) {
+  .lobby-header {
+    margin-bottom: 8px;
+  }
+  .lobby-title {
+    font-size: 1.55rem;
+  }
+  .lobby-subtitle {
+    display: none;
+  }
+  .lobby-screen .waiting-footer-desc {
+    display: none;
+  }
+  .lobby-screen,
+  .waiting-room-screen {
+    padding: 10px;
+  }
+  .waiting-room-card,
+  .lobby-card {
+    padding: 14px;
   }
 }
 

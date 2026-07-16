@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Volume2, VolumeX, Medal, Layers, WifiOff, Star, ShieldAlert } from 'lucide-react';
+import { Volume2, VolumeX, Medal, Layers, WifiOff, Star, ShieldAlert, Mic } from 'lucide-react';
 import { toggleMute, getMuteState } from '../audio';
+import VoiceChat from './VoiceChat';
 
 export default function ScoreBoard({
   players,
@@ -13,8 +14,14 @@ export default function ScoreBoard({
   onSelectPlayerTarget,
   maxScore = 100,
   maxPip = 6,
-  powersEnabled = true
+  powersEnabled = true,
+  teamsEnabled = false,
+  teamScores = [0, 0],
+  teamNames = ['Equipo A', 'Equipo B'],
+  drawEnabled = true
 }) {
+  // En parejas el marcador que importa es el del equipo, no el individual.
+  const myTeam = players.find(p => p.id === playerId)?.team ?? 0;
   const [muted, setMuted] = useState(getMuteState());
 
   const handleMuteToggle = () => {
@@ -62,9 +69,45 @@ export default function ScoreBoard({
 
         <div className="separator" />
 
+        {/* Chat de voz de la sala */}
+        <VoiceChat playerId={playerId} players={players} />
+
+        <div className="separator" />
+
+        {/* Marcador de equipos (solo en parejas) */}
+        {teamsEnabled && (
+          <div>
+            <span className="sidebar-section-title">Marcador de Parejas</span>
+            <div className="team-score-list">
+              {[0, 1].map((t) => (
+                <div key={t} className={`team-score-card team-${t} ${t === myTeam ? 'mine' : ''}`}>
+                  <div className="team-score-head">
+                    <span className="team-score-name">
+                      {teamNames[t]}
+                      {t === myTeam && <span className="player-badge-me">TÚ</span>}
+                    </span>
+                    <span className="team-score-value">{teamScores[t]}</span>
+                  </div>
+                  <div className="team-score-members">
+                    {players.filter(p => p.team === t).map(p => p.name).join(' · ') || '—'}
+                  </div>
+                  <div className="player-score-bar">
+                    <div
+                      className="player-score-progress"
+                      style={{ width: `${Math.min(100, (teamScores[t] / maxScore) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Lista de Jugadores */}
         <div>
-          <span className="sidebar-section-title">Clasificación</span>
+          <span className="sidebar-section-title">
+            {teamsEnabled ? 'En la mesa' : 'Clasificación'}
+          </span>
           
           <div className="players-list">
             {players.map((player) => {
@@ -76,9 +119,9 @@ export default function ScoreBoard({
               );
               
               return (
-                <div 
+                <div
                   key={player.id}
-                  className={`player-card ${isActive ? 'active-turn' : ''} ${player.shieldActive ? 'shielded' : ''}`}
+                  className={`player-card ${isActive ? 'active-turn' : ''} ${player.shieldActive ? 'shielded' : ''} ${teamsEnabled ? `on-team team-${player.team}` : ''}`}
                   style={{ position: 'relative' }}
                 >
                   {showTargetOverlay && (
@@ -102,6 +145,9 @@ export default function ScoreBoard({
                           {player.name}
                           {isMe && <span className="player-badge-me">TÚ</span>}
                           {player.isBot && <span className="player-badge-bot">BOT</span>}
+                          {player.inVoice && (
+                            <Mic size={11} className="player-voice-mic" aria-label="En el chat de voz" />
+                          )}
                           {powersEnabled && player.powersCount > 0 && (
                             <span 
                               style={{ color: '#fbbf24', marginLeft: '6px', fontSize: '0.65rem', fontWeight: 800 }}
@@ -127,22 +173,32 @@ export default function ScoreBoard({
                     </div>
                   </div>
 
-                  {/* Scorebar global y puntuación */}
-                  <div className="player-score-row">
-                    <span className="player-score-label">Puntuación:</span>
-                    <div className="player-score-value">
-                      <Medal size={14} style={{ color: '#f59e0b' }} />
-                      <span>{player.score} / {maxScore} pts</span>
+                  {/* En parejas el marcador es del equipo: aquí solo se indica cuál. */}
+                  {teamsEnabled ? (
+                    <div className="player-score-row">
+                      <span className={`team-chip team-${player.team}`}>
+                        {teamNames[player.team]}
+                      </span>
                     </div>
-                  </div>
+                  ) : (
+                    <>
+                      <div className="player-score-row">
+                        <span className="player-score-label">Puntuación:</span>
+                        <div className="player-score-value">
+                          <Medal size={14} style={{ color: '#f59e0b' }} />
+                          <span>{player.score} / {maxScore} pts</span>
+                        </div>
+                      </div>
 
-                  {/* Barra de progreso visual hacia el límite de la sala */}
-                  <div className="player-score-bar">
-                    <div
-                      className="player-score-progress"
-                      style={{ width: `${Math.min(100, (player.score / maxScore) * 100)}%` }}
-                    />
-                  </div>
+                      {/* Barra de progreso visual hacia el límite de la sala */}
+                      <div className="player-score-bar">
+                        <div
+                          className="player-score-progress"
+                          style={{ width: `${Math.min(100, (player.score / maxScore) * 100)}%` }}
+                        />
+                      </div>
+                    </>
+                  )}
 
                   {/* Fichas reveladas por espía */}
                   {player.hand && player.hand.length > 0 && !isMe && (
@@ -213,10 +269,10 @@ export default function ScoreBoard({
             <span className="info-box-label">Código de Sala</span>
             <span className="room-code-value">{roomId}</span>
           </div>
-          <div className="info-box-label" style={{ fontSize: '0.6rem', textAlign: 'right' }}>
-            Doble {maxPip}
+          <div className="info-box-label" style={{ fontSize: '0.6rem', textAlign: 'right', lineHeight: 1.5 }}>
+            Doble {maxPip} · {teamsEnabled ? 'Parejas' : 'Individual'}
             <br />
-            {powersEnabled ? 'Con Poderes' : 'Clásico'}
+            {powersEnabled ? 'Con Poderes' : 'Clásico'}{!drawEnabled && ' · Sin Pozo'}
           </div>
         </div>
       </div>

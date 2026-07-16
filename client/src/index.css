@@ -32,10 +32,14 @@ body {
   background: var(--bg-app);
   color: var(--text-main);
   overflow: hidden;
+  /* dvh = viewport dinámico: en móvil la barra de direcciones se muestra/oculta y
+     100vh mide SIEMPRE el viewport grande, dejando la mano del jugador cortada
+     bajo el navegador (e inalcanzable, porque el body no scrollea). */
   height: 100vh;
-  width: 100vw;
+  height: 100dvh;
+  width: 100%;
   -webkit-font-smoothing: antialiased;
-  overscroll-behavior: contain;
+  overscroll-behavior: none;
 }
 
 #root {
@@ -245,12 +249,16 @@ body {
   border: 1px solid rgba(0, 0, 0, 0.05);
 }
 
-.hand-tile:hover {
-  transform: translateY(-18px) scale(1.06);
-  box-shadow: 
-    0 15px 25px rgba(0, 0, 0, 0.5),
-    0 0 14px var(--primary);
-  z-index: 10;
+/* Solo en dispositivos con puntero real: evita el "hover pegajoso" al tocar
+   en móvil, que dejaba la ficha levantada tras el tap. */
+@media (hover: hover) {
+  .hand-tile:hover {
+    transform: translateY(-18px) scale(1.06);
+    box-shadow:
+      0 15px 25px rgba(0, 0, 0, 0.5),
+      0 0 14px var(--primary);
+    z-index: 10;
+  }
 }
 
 .domino-tile.selected {
@@ -345,7 +353,8 @@ body {
   display: flex;
   flex-direction: row;
   height: 100vh;
-  width: 100vw;
+  height: 100dvh;
+  width: 100%;
   overflow: hidden;
   position: relative;
   background: var(--bg-app);
@@ -441,6 +450,20 @@ body {
   height: 100%;
   overflow: hidden;
   position: relative;
+  /* min-height/width: 0 => permite que el tablero ceda espacio a la mano
+     en lugar de desbordar (por defecto un flex item no baja de su contenido). */
+  min-height: 0;
+  min-width: 0;
+}
+
+/* Región del tablero: envuelve tablero + chat para que el botón flotante del
+   chat quede anclado al tablero y no encima de las fichas de la mano. */
+.board-region {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
 }
 
 /* --- SIDEBAR (SCOREBOARD) --- */
@@ -620,6 +643,112 @@ body {
   border-radius: 4px;
 }
 
+.player-badge-bot {
+  font-size: 0.6rem;
+  font-weight: 800;
+  background: rgba(99, 102, 241, 0.2);
+  color: #a5b4fc;
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+
+/* --- AÑADIR BOTS EN LA SALA DE ESPERA --- */
+.bot-add-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px dashed rgba(99, 102, 241, 0.25);
+  background: rgba(99, 102, 241, 0.05);
+}
+
+.bot-add-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #a5b4fc;
+}
+
+.bot-add-controls {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  flex-wrap: wrap;
+}
+
+.bot-level-group {
+  display: flex;
+  flex: 1 1 160px;
+  min-width: 0;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  padding: 3px;
+  gap: 3px;
+}
+
+.bot-level-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  border-radius: 9px;
+  color: var(--text-muted);
+  font-family: var(--font-family);
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 7px 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.bot-level-btn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.05);
+}
+.bot-level-btn.active {
+  background: var(--secondary);
+  color: #fff;
+  box-shadow: 0 4px 10px rgba(99, 102, 241, 0.25);
+}
+
+.bot-add-btn {
+  flex: 0 0 auto;
+  padding: 8px 16px;
+  font-size: 0.78rem;
+  border-radius: 12px;
+}
+.bot-add-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.bot-remove-btn {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--glass-border);
+  color: var(--text-muted);
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+.bot-remove-btn:hover {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #f87171;
+}
+
 .player-hand-indicator {
   display: flex;
   align-items: center;
@@ -744,6 +873,8 @@ body {
   position: relative;
   overflow: hidden;
   background: var(--bg-table);
+  min-height: 0;
+  min-width: 0;
 }
 
 .zoom-controls {
@@ -791,8 +922,51 @@ body {
   padding: 8px 16px;
   border-radius: 14px;
   display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+.turn-banner-row {
+  display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* Reloj de turno: al bajar de 10s el banner entero avisa. */
+.turn-banner.urgent {
+  border-color: rgba(239, 68, 68, 0.5);
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.25);
+}
+
+.turn-timer-value {
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  min-width: 26px;
+  text-align: right;
+}
+.turn-banner.urgent .turn-timer-value {
+  color: #f87171;
+}
+
+.turn-timer-track {
+  height: 3px;
+  width: 100%;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.turn-timer-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--primary);
+  transition: width 1s linear, background 0.3s;
+}
+.turn-banner.urgent .turn-timer-fill {
+  background: #ef4444;
 }
 
 .turn-pulse-dot {
@@ -835,6 +1009,27 @@ body {
    que la media query móvil descuadre el cálculo geométrico de la serpiente. */
 .board-tile-wrap {
   will-change: left, top;
+}
+
+/* Última ficha colocada: el dato ya viajaba en lastPlay sin usarse. */
+.board-tile-wrap.last-played {
+  z-index: 5;
+}
+.board-tile-wrap.last-played .domino-tile {
+  box-shadow:
+    0 0 0 2px var(--primary),
+    0 5px 12px rgba(0, 0, 0, 0.35),
+    0 0 20px var(--primary-glow);
+  animation: last-played-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes last-played-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px var(--primary), 0 5px 12px rgba(0,0,0,.35), 0 0 12px var(--primary-glow); }
+  50%      { box-shadow: 0 0 0 2px var(--primary), 0 5px 12px rgba(0,0,0,.35), 0 0 26px var(--primary-glow); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .board-tile-wrap.last-played .domino-tile { animation: none; }
 }
 .board-tile-anim {
   width: 100%;
@@ -931,13 +1126,15 @@ body {
 .player-hand-container {
   width: 100%;
   background: linear-gradient(to top, rgba(2, 4, 10, 0.95) 0%, rgba(2, 4, 10, 0.4) 60%, transparent 100%);
-  padding: 16px 24px 28px 24px;
+  /* env(safe-area-inset-bottom): deja libre la barra gestual/notch del móvil. */
+  padding: 16px 24px calc(28px + env(safe-area-inset-bottom, 0px)) 24px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 10px;
   border-top: 1px solid rgba(255, 255, 255, 0.04);
   box-sizing: border-box;
+  flex-shrink: 0; /* la mano nunca se comprime: es la zona jugable */
 }
 
 .hand-status-row {
@@ -945,6 +1142,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
 }
 
 .turn-notification {
@@ -985,14 +1183,27 @@ body {
 
 .hand-tiles-row {
   display: flex;
+  /* "safe center": centra, pero al desbordar alinea al inicio para que la
+     primera ficha siga siendo alcanzable con scroll. Navegadores sin soporte
+     ignoran la 2ª línea y conservan el center normal. */
   justify-content: center;
+  justify-content: safe center;
   align-items: flex-end;
   gap: 12px;
+  width: 100%;
   max-width: 100%;
   overflow-x: auto;
-  padding: 10px 40px 10px 40px;
+  overflow-y: hidden;
+  /* No encadenar el scroll de la mano al tablero/página. */
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x;
+  /* padding-top holgado: la ficha seleccionada se eleva (translateY + scale) y
+     overflow-x:auto obliga a recortar por arriba. Debe cubrir 28px + el crecido
+     del scale, o la ficha elegida sale decapitada. */
+  padding: 38px 40px 10px 40px;
   box-sizing: border-box;
-  min-height: 120px;
+  min-height: 144px;
 }
 
 .tile-double-badge {
@@ -1069,7 +1280,11 @@ body {
   position: absolute;
   bottom: 60px;
   right: 0;
-  width: 280px;
+  /* Nunca más ancho que la pantalla en móviles estrechos. */
+  width: min(280px, calc(100vw - 40px));
+  max-height: 60vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 16px;
   display: flex;
   flex-direction: column;
@@ -1289,14 +1504,16 @@ body {
 /* --- LOBBY (PANTALLA DE INICIO) --- */
 .lobby-screen {
   min-height: 100vh;
-  width: 100vw;
+  min-height: 100dvh;
+  width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 16px;
   position: relative;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
   background: #02040a;
 }
 
@@ -1390,6 +1607,138 @@ body {
   border-radius: 12px;
 }
 
+/* --- SELECTOR SEGMENTADO (variante del dominó) --- */
+.segmented {
+  display: flex;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
+  padding: 4px;
+}
+
+.segmented-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 6px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-family);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.segmented-btn:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-main);
+}
+.segmented-btn.active {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.35);
+  color: #fff;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.15);
+}
+
+.segmented-title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+.segmented-btn.active .segmented-title svg {
+  color: var(--primary);
+}
+
+.segmented-sub {
+  font-size: 0.6rem;
+  font-weight: 600;
+  opacity: 0.75;
+  text-align: center;
+}
+
+/* --- INTERRUPTOR DE OPCIÓN (cartas de poder) --- */
+.option-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-main);
+  font-family: var(--font-family);
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: left;
+}
+.option-toggle:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.option-toggle.on {
+  background: rgba(245, 158, 11, 0.08);
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.option-toggle-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.option-toggle-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+.option-toggle.on .option-toggle-title svg {
+  color: var(--accent);
+}
+
+.option-toggle-desc {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+}
+
+.switch {
+  flex-shrink: 0;
+  width: 42px;
+  height: 24px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--glass-border);
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  transition: background 0.25s;
+}
+.option-toggle.on .switch {
+  background: var(--accent);
+  border-color: rgba(245, 158, 11, 0.5);
+}
+
+.switch-knob {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.option-toggle.on .switch-knob {
+  transform: translateX(18px);
+}
+
 .lobby-join-group {
   display: flex;
   gap: 8px;
@@ -1402,14 +1751,16 @@ body {
 /* --- WAITING ROOM (SALA DE ESPERA) --- */
 .waiting-room-screen {
   min-height: 100vh;
-  width: 100vw;
+  min-height: 100dvh;
+  width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 16px;
   position: relative;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
   background: #02040a;
 }
 
@@ -1445,6 +1796,32 @@ body {
   font-size: 1.5rem;
   color: white;
   margin-top: 2px;
+}
+
+.room-mode-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.room-mode-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--glass-border);
+  color: var(--text-muted);
+}
+
+.room-mode-tag.accent {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.25);
+  color: #fbbf24;
 }
 
 .waiting-room-leave-btn {
@@ -1652,6 +2029,7 @@ body {
     border-right: none;
     border-bottom: 1px solid var(--glass-border);
     padding: 12px;
+    flex-shrink: 0; /* la cabecera manda su altura; el tablero se adapta */
   }
   .sidebar-top {
     gap: 8px;
@@ -1664,6 +2042,9 @@ body {
   .players-list {
     flex-direction: row;
     overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    touch-action: pan-x;
     width: 100%;
     gap: 8px;
     padding-bottom: 4px;
@@ -1712,13 +2093,23 @@ body {
   .sidebar-bottom {
     display: none; /* Ocultar pozo secundario y código en móvil, se ve arriba */
   }
+  /* Antes: height: calc(100vh - 150px). Asumía una sidebar de 150px cuando en
+     realidad mide ~174px, y 100vh ignora la barra del navegador. Con flex, el
+     área de juego toma exactamente el espacio que sobra, sea cual sea. */
   .game-area {
-    height: calc(100vh - 150px);
+    height: auto;
+    flex: 1 1 auto;
+    min-height: 0;
   }
   .hand-tiles-row {
-    padding: 4px 10px;
+    padding: 22px 10px 4px 10px;
     gap: 6px;
-    min-height: 90px;
+    min-height: 104px;
+  }
+  /* Elevación proporcional a la ficha pequeña: así basta menos padding-top y
+     el tablero conserva altura. */
+  .domino-tile.selected {
+    transform: translateY(-14px) scale(1.05);
   }
   .domino-tile {
     width: 38px;
@@ -1743,21 +2134,106 @@ body {
   }
 }
 
+/* --- MÓVIL EN HORIZONTAL (landscape) ---
+   Apilar en columna deja ~200px de alto para tablero + mano: el tablero se
+   quedaba en 0px y la mano salía fuera de pantalla. En horizontal sobra ANCHO,
+   así que volvemos a la barra lateral y recuperamos toda la altura. */
+@media (max-width: 1024px) and (orientation: landscape) {
+  .app-container {
+    flex-direction: row;
+  }
+  .sidebar {
+    width: 190px;
+    height: 100%;
+    border-right: 1px solid var(--glass-border);
+    border-bottom: none;
+    padding: 10px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .players-list {
+    flex-direction: column;
+    overflow-x: visible;
+    gap: 6px;
+  }
+  .player-card {
+    width: 100%;
+  }
+  .player-score-row {
+    justify-content: space-between;
+  }
+  .power-cards-container {
+    gap: 6px;
+    padding: 2px;
+  }
+  .power-card-item {
+    width: 58px;
+    height: 82px;
+    padding: 4px;
+  }
+  .power-card-title {
+    font-size: 0.52rem;
+  }
+  .power-card-type-label {
+    display: none;
+  }
+  .player-hand-container {
+    padding: 4px 12px calc(8px + env(safe-area-inset-bottom, 0px)) 12px;
+    gap: 4px;
+  }
+  .hand-status-row {
+    min-height: 30px;
+  }
+  .hand-tiles-row {
+    min-height: 84px;
+    padding: 18px 10px 2px 10px;
+  }
+  .domino-tile.selected {
+    transform: translateY(-10px) scale(1.04);
+  }
+  .domino-tile {
+    width: 30px;
+    height: 58px;
+    padding: 3px;
+  }
+  .domino-tile.horizontal {
+    width: 58px;
+    height: 30px;
+    padding: 3px;
+  }
+  .pip-grid {
+    height: 18px;
+  }
+  .pip {
+    width: 3px;
+    height: 3px;
+  }
+}
+
 /* --- CARTAS DE PODERES --- */
 .power-cards-container {
   display: flex;
   justify-content: center;
+  justify-content: safe center;
   gap: 12px;
   width: 100%;
   padding: 8px;
   box-sizing: border-box;
   margin-top: 4px;
+  /* El nº de cartas puede crecer (p. ej. Robo del Destino): que scrollee
+     en vez de comprimirse o salirse de pantalla. */
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x;
+  flex-shrink: 0;
 }
 
 .power-card-item {
   position: relative;
   width: 90px;
   height: 130px;
+  flex-shrink: 0;
   border-radius: 12px;
   border: 1px solid var(--glass-border);
   padding: 8px;

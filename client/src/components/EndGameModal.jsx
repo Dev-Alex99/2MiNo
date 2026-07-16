@@ -51,7 +51,7 @@ export default function EndGameModal({ gameState, playerId }) {
             </div>
 
             <p style={{ color: '#9ca3af', fontSize: '0.85rem' }}>
-              Has alcanzado el límite de 100 puntos y has conquistado la mesa de dominó.
+              Has alcanzado el límite de {gameState.maxScore} puntos y has conquistado la mesa de dominó.
             </p>
           </>
         ) : (

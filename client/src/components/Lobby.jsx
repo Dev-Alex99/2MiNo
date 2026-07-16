@@ -1,10 +1,19 @@
 import React, { useState } from 'react';
-import { Play, Plus, ArrowRight, User } from 'lucide-react';
+import { Play, Plus, ArrowRight, User, Zap, Layers, Settings2 } from 'lucide-react';
 import { socket } from '../socket';
+
+// Debe coincidir con VARIANTS en server/gameLogic.js
+const VARIANT_INFO = {
+  6: { label: 'Doble 6', desc: '28 fichas · 7 en mano · 100 pts' },
+  9: { label: 'Doble 9', desc: '55 fichas · 10 en mano · 200 pts' }
+};
 
 export default function Lobby({ name, setName, onCreateRoom, onJoinRoom }) {
   const [roomCode, setRoomCode] = useState('');
   const [error, setError] = useState('');
+  // Opciones de sala (solo aplican al CREAR; al unirse manda la config del anfitrión)
+  const [powersEnabled, setPowersEnabled] = useState(true);
+  const [maxPip, setMaxPip] = useState(6);
 
   const handleCreate = (e) => {
     e.preventDefault();
@@ -13,7 +22,7 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom }) {
       return;
     }
     setError('');
-    onCreateRoom();
+    onCreateRoom({ powersEnabled, maxPip });
   };
 
   const handleJoin = (e) => {
@@ -74,6 +83,56 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom }) {
 
           <div className="separator"></div>
 
+          {/* Opciones de la sala a crear */}
+          <div className="lobby-form-field">
+            <label className="lobby-form-label">
+              <Settings2 size={14} />
+              Opciones de la sala nueva
+            </label>
+
+            {/* Variante del dominó */}
+            <div className="segmented" role="group" aria-label="Variante del dominó">
+              {[6, 9].map((pip) => (
+                <button
+                  key={pip}
+                  type="button"
+                  onClick={() => setMaxPip(pip)}
+                  aria-pressed={maxPip === pip}
+                  className={`segmented-btn ${maxPip === pip ? 'active' : ''}`}
+                >
+                  <span className="segmented-title">
+                    <Layers size={13} />
+                    {VARIANT_INFO[pip].label}
+                  </span>
+                  <span className="segmented-sub">{VARIANT_INFO[pip].desc}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Cartas de poder on/off */}
+            <button
+              type="button"
+              onClick={() => setPowersEnabled((v) => !v)}
+              aria-pressed={powersEnabled}
+              className={`option-toggle ${powersEnabled ? 'on' : ''}`}
+            >
+              <span className="option-toggle-text">
+                <span className="option-toggle-title">
+                  <Zap size={14} />
+                  Cartas de Poder
+                </span>
+                <span className="option-toggle-desc">
+                  {powersEnabled
+                    ? 'Poderes especiales activados'
+                    : 'Dominó clásico, sin poderes'}
+                </span>
+              </span>
+              <span className="switch" aria-hidden="true">
+                <span className="switch-knob" />
+              </span>
+            </button>
+          </div>
+
           {/* Sección de acciones */}
           <div className="lobby-form-field">
             {/* Crear Sala */}
@@ -118,7 +177,7 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom }) {
 
       {/* Footer minimalista */}
       <div className="waiting-footer-desc" style={{ position: 'absolute', bottom: '16px' }}>
-        Dominó Clásico Doble Seis · 100 Puntos · Creado con ❤️
+        Dominó {VARIANT_INFO[maxPip].label} · {powersEnabled ? 'Con Poderes' : 'Clásico'} · Creado con ❤️
       </div>
     </div>
   );

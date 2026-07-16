@@ -17,10 +17,33 @@ const POWER_CATALOG = {
   russian_roulette: { id: 'russian_roulette', name: 'Ruleta Rusa', desc: 'Todos los jugadores pasan una ficha al azar al jugador de su derecha.', type: 'caos' }
 };
 
+// Variantes de dominó soportadas, indexadas por el valor máximo de puntos.
+// - Doble 6: 28 fichas. Con 4 jugadores × 7 fichas se reparte el mazo entero (pozo vacío).
+// - Doble 9: 55 fichas. Con 10 fichas por jugador siempre queda pozo.
+// El límite de puntos sube en el doble 9 porque las manos valen bastante más.
+const VARIANTS = {
+  6: { handSize: 7, defaultMaxScore: 100 },
+  9: { handSize: 10, defaultMaxScore: 200 }
+};
+
 class DominoGame {
-  constructor(roomId, maxScore = 100) {
+  // maxScore = null => usa el propio de la variante.
+  // options: { powersEnabled: bool, maxPip: 6 | 9 }
+  constructor(roomId, maxScore = null, options = {}) {
+    const { powersEnabled = true, maxPip = 6 } = options;
+
+    this.maxPip = VARIANTS[maxPip] ? maxPip : 6;
+    const variant = VARIANTS[this.maxPip];
+    this.handSize = variant.handSize;
+    this.powersEnabled = powersEnabled !== false;
+
     this.roomId = roomId;
-    this.maxScore = maxScore;
+    this.maxScore = maxScore || variant.defaultMaxScore;
+
+    // Temporizador de turno. El servidor arma el timer real; aquí solo vive la
+    // duración y el instante límite para poder enviarlos al cliente.
+    this.turnDurationMs = 30000;
+    this.turnEndsAt = null;
     this.players = []; // { id, name, socketId, hand: [], score: 0, ready: false, powers: [], shieldActive: false }
     this.status = 'waiting'; // 'waiting' | 'playing' | 'round_ended' | 'game_ended'
     this.board = []; // Array de [val1, val2] ordenados de izquierda a derecha
@@ -32,6 +55,9 @@ class DominoGame {
     this.passedTurns = 0; // Contador de turnos seguidos pasados para detectar bloqueo
     this.roundNumber = 0;
     this.startingPlayerId = null; // Quien inicia la ronda
+    // playerId -> números sobre los que ya pasó. Es información pública (todos
+    // ven el pase) y permite a los bots difíciles deducir y bloquear.
+    this.playerPassedOn = {};
     
     // Estados activos para cartas de poderes
     this.powerDeck = [];
@@ -60,10 +86,46 @@ class DominoGame {
       score: 0,
       ready: false,
       powers: [],
-      shieldActive: false
+      shieldActive: false,
+      isBot: false
     };
     this.players.push(player);
     return player;
+  }
+
+  // Añade un bot. Va siempre "listo": no tiene a quién esperar, así que
+  // allReady() depende solo de los humanos.
+  addBot(name, difficulty = 'normal') {
+    if (this.players.length >= 4) return null;
+    if (this.status !== 'waiting') return null;
+
+    const bot = {
+      id: `bot_${Math.random().toString(36).substring(2, 9)}`,
+      name,
+      socketId: null,
+      hand: [],
+      score: 0,
+      ready: true,
+      powers: [],
+      shieldActive: false,
+      isBot: true,
+      difficulty: ['facil', 'normal', 'dificil'].includes(difficulty) ? difficulty : 'normal'
+    };
+    this.players.push(bot);
+    return bot;
+  }
+
+  removePlayerById(id) {
+    const index = this.players.findIndex(p => p.id === id);
+    if (index === -1) return null;
+    const removed = this.players[index];
+    this.players.splice(index, 1);
+    return removed;
+  }
+
+  // ¿Quedan humanos en la sala? Si no, no tiene sentido mantenerla viva.
+  hasHumans() {
+    return this.players.some(p => !p.isBot);
   }
 
   removePlayer(socketId) {
@@ -136,6 +198,7 @@ class DominoGame {
     this.lastPlay = null;
     this.passedTurns = 0;
     this.roundWinner = null;
+    this.playerPassedOn = {};
     this.status = 'playing';
 
     // Inicializar efectos activos de poderes
@@ -151,19 +214,22 @@ class DominoGame {
       wildcardActive: false
     };
 
-    // Generar mazo de cartas de poderes (2 de cada una)
-    const allPowers = [];
-    Object.keys(POWER_CATALOG).forEach(key => {
-      allPowers.push({ ...POWER_CATALOG[key] });
-      allPowers.push({ ...POWER_CATALOG[key] });
-    });
-    this.shuffle(allPowers);
-    this.powerDeck = allPowers;
+    // Generar mazo de cartas de poderes (2 de cada una). En modo clásico no se usa.
+    this.powerDeck = [];
+    if (this.powersEnabled) {
+      const allPowers = [];
+      Object.keys(POWER_CATALOG).forEach(key => {
+        allPowers.push({ ...POWER_CATALOG[key] });
+        allPowers.push({ ...POWER_CATALOG[key] });
+      });
+      this.shuffle(allPowers);
+      this.powerDeck = allPowers;
+    }
 
-    // Generar las 28 fichas del dominó doble seis
+    // Generar las fichas de la variante (doble 6 => 28, doble 9 => 55)
     const deck = [];
-    for (let i = 0; i <= 6; i++) {
-      for (let j = i; j <= 6; j++) {
+    for (let i = 0; i <= this.maxPip; i++) {
+      for (let j = i; j <= this.maxPip; j++) {
         deck.push([i, j]);
       }
     }
@@ -171,15 +237,17 @@ class DominoGame {
     // Barajar
     this.shuffle(deck);
 
-    // Repartir 7 fichas y 2 poderes a cada jugador
+    // Repartir fichas y (si aplica) 2 poderes a cada jugador
     const numPlayers = this.players.length;
     this.players.forEach(p => {
       p.hand = [];
-      p.powers = [this.powerDeck.pop(), this.powerDeck.pop()];
+      p.powers = this.powersEnabled ? [this.powerDeck.pop(), this.powerDeck.pop()] : [];
       p.shieldActive = false;
     });
 
-    for (let i = 0; i < 7; i++) {
+    // Nunca repartir más fichas de las que hay en el mazo.
+    const dealCount = Math.min(this.handSize, Math.floor(deck.length / numPlayers));
+    for (let i = 0; i < dealCount; i++) {
       for (let p = 0; p < numPlayers; p++) {
         this.players[p].hand.push(deck.pop());
       }
@@ -267,6 +335,96 @@ class DominoGame {
       
       return canPlayL || canPlayR;
     });
+  }
+
+  // Devuelve TODAS las jugadas legales de un jugador: [{ tileIndex, side }, ...]
+  // Respeta extremos congelados y el comodín, igual que hasValidMove().
+  getValidMoves(playerId) {
+    const player = this.players.find(p => p.id === playerId);
+    if (!player || player.hand.length === 0) return [];
+
+    // Tablero vacío: cualquier ficha vale.
+    if (this.board.length === 0) {
+      return player.hand.map((_, i) => ({ tileIndex: i, side: 'left' }));
+    }
+
+    const left = this.getLeftEnd();
+    const right = this.getRightEnd();
+    const leftFrozen = this.activeEffects.frozenEnd === 'left' && this.activeEffects.frozenEndOwnerId !== playerId;
+    const rightFrozen = this.activeEffects.frozenEnd === 'right' && this.activeEffects.frozenEndOwnerId !== playerId;
+
+    const moves = [];
+    for (let i = 0; i < player.hand.length; i++) {
+      const tile = player.hand[i];
+
+      if (this.activeEffects.wildcardActive) {
+        if (!leftFrozen) moves.push({ tileIndex: i, side: 'left' });
+        if (!rightFrozen) moves.push({ tileIndex: i, side: 'right' });
+        continue;
+      }
+
+      if (!leftFrozen && (tile[0] === left || tile[1] === left)) moves.push({ tileIndex: i, side: 'left' });
+      if (!rightFrozen && (tile[0] === right || tile[1] === right)) moves.push({ tileIndex: i, side: 'right' });
+    }
+    return moves;
+  }
+
+  // Primera jugada legal, o null. Base del turno forzado por tiempo.
+  findValidMove(playerId) {
+    return this.getValidMoves(playerId)[0] || null;
+  }
+
+  // Valor que quedaría expuesto en ese extremo tras la jugada. null si el
+  // tablero está vacío (ahí no hay todavía un extremo que "heredar").
+  resultingEnd(playerId, move) {
+    const player = this.players.find(p => p.id === playerId);
+    if (!player || this.board.length === 0) return null;
+    const tile = player.hand[move.tileIndex];
+    if (!tile) return null;
+
+    if (move.side === 'left') {
+      const left = this.getLeftEnd();
+      return tile[1] === left ? tile[0] : tile[1];
+    }
+    const right = this.getRightEnd();
+    return tile[0] === right ? tile[1] : tile[0];
+  }
+
+  // Resuelve el turno del jugador activo cuando se le acaba el tiempo.
+  // Aplica las mismas reglas que si jugara él: si tiene jugada, está obligado a
+  // jugarla; si no, roba mientras haya pozo; y solo pasa si no queda otra.
+  forceTurn() {
+    if (this.status !== 'playing') return { action: 'none' };
+
+    const player = this.players[this.currentPlayerIndex];
+    if (!player) return { action: 'none' };
+
+    let move = this.findValidMove(player.id);
+    let drew = 0;
+
+    while (!move && this.boneyard.length > 0) {
+      const drawn = this.drawTile(player.id);
+      if (!drawn.success) break;
+      drew++;
+      move = this.findValidMove(player.id);
+    }
+
+    if (move) {
+      const played = this.playTile(player.id, move.tileIndex, move.side);
+      if (played.success) {
+        return { action: 'played', playerId: player.id, playerName: player.name, drew };
+      }
+    }
+
+    const passed = this.passTurn(player.id);
+    if (passed.success) {
+      return { action: 'passed', playerId: player.id, playerName: player.name, drew };
+    }
+
+    // Salvavidas: si ni jugar ni pasar es legal, avanzamos igualmente para no
+    // dejar la mesa bloqueada, que es justo lo que este método existe para evitar.
+    this.nextTurn();
+    return { action: 'skipped', playerId: player.id, playerName: player.name, drew };
   }
 
   // Ejecuta una jugada: tileIndex de la mano del jugador en un lado ('left' o 'right')
@@ -391,6 +549,16 @@ class DominoGame {
     if (!player || player.id !== playerId) return { success: false, error: 'No es tu turno' };
     if (this.boneyard.length > 0) return { success: false, error: 'Quedan fichas en el pozo, debes robar' };
     if (this.hasValidMove(playerId)) return { success: false, error: 'Tienes jugadas disponibles, no puedes pasar' };
+
+    // Un pase es información pública: revela que ese jugador no tiene NINGUNO
+    // de los dos extremos. Lo guardamos para que los bots difíciles bloqueen.
+    if (this.board.length > 0) {
+      const seen = this.playerPassedOn[playerId] || [];
+      [this.getLeftEnd(), this.getRightEnd()].forEach(v => {
+        if (!seen.includes(v)) seen.push(v);
+      });
+      this.playerPassedOn[playerId] = seen;
+    }
 
     this.passedTurns++;
     this.lastPlay = { playerId, tile: null, side: 'pass' };
@@ -520,6 +688,10 @@ class DominoGame {
 
   // Ejecuta el uso de una carta de poder
   usePowerCard(playerId, cardId, targetId, tileIndex) {
+    if (!this.powersEnabled) {
+      return { success: false, error: 'Esta sala juega en modo clásico, sin cartas de poder' };
+    }
+
     const player = this.players.find(p => p.id === playerId);
     if (!player) return { success: false, error: 'Jugador no encontrado' };
 
@@ -719,6 +891,16 @@ class DominoGame {
       roomId: this.roomId,
       status: this.status,
       maxScore: this.maxScore,
+      // Configuración de la sala, fijada al crearla
+      powersEnabled: this.powersEnabled,
+      maxPip: this.maxPip,
+      // Temporizador de turno: turnEndsAt sirve al cliente para detectar que el
+      // reloj se rearmó; los segundos van calculados aquí para evitar desfases.
+      turnEndsAt: this.turnEndsAt,
+      turnDurationSeconds: Math.round(this.turnDurationMs / 1000),
+      turnSecondsRemaining: this.turnEndsAt && this.status === 'playing'
+        ? Math.max(0, Math.ceil((this.turnEndsAt - Date.now()) / 1000))
+        : null,
       board: this.board,
       boneyardCount: this.boneyard.length,
       currentPlayerId: this.players[this.currentPlayerIndex] ? this.players[this.currentPlayerIndex].id : null,
@@ -739,6 +921,8 @@ class DominoGame {
           name: p.name,
           ready: p.ready,
           score: p.score,
+          isBot: !!p.isBot,
+          difficulty: p.isBot ? p.difficulty : undefined,
           handCount: p.hand.length,
           shieldActive: p.shieldActive,
           powersCount: p.powers ? p.powers.length : 0,

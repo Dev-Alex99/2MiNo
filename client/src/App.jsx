@@ -142,8 +142,9 @@ export default function App() {
     };
   }, []);
 
-  const handleCreateRoom = () => {
-    socket.emit('create_room', { name });
+  const handleCreateRoom = (options = {}) => {
+    const { powersEnabled = true, maxPip = 6 } = options;
+    socket.emit('create_room', { name, powersEnabled, maxPip });
   };
 
   const handleJoinRoom = (code) => {
@@ -336,30 +337,39 @@ export default function App() {
         boneyardCount={gameState.boneyardCount}
         pendingTargetType={pendingTargetType}
         onSelectPlayerTarget={handlePlayerTargetSelected}
+        maxScore={gameState.maxScore}
+        maxPip={gameState.maxPip}
+        powersEnabled={gameState.powersEnabled}
       />
 
       {/* Área de Juego Principal */}
       <div className="game-area">
-        {/* Tablero */}
-        <GameBoard
-          board={gameState.board}
-          selectedTileIndex={selectedTileIndex}
-          onPlay={handlePlayTile}
-          isMyTurn={isMyTurn}
-          players={gameState.players}
-          currentPlayerId={gameState.currentPlayerId}
-          canPlayLeft={canPlayLeft}
-          canPlayRight={canPlayRight}
-          pendingTargetType={pendingTargetType}
-          onSelectEndTarget={handleEndTargetSelected}
-          activeEffects={gameState.activeEffects}
-        />
+        {/* Tablero + chat: el botón flotante se ancla aquí para no tapar la mano */}
+        <div className="board-region">
+          <GameBoard
+            board={gameState.board}
+            selectedTileIndex={selectedTileIndex}
+            onPlay={handlePlayTile}
+            isMyTurn={isMyTurn}
+            players={gameState.players}
+            currentPlayerId={gameState.currentPlayerId}
+            canPlayLeft={canPlayLeft}
+            canPlayRight={canPlayRight}
+            pendingTargetType={pendingTargetType}
+            onSelectEndTarget={handleEndTargetSelected}
+            activeEffects={gameState.activeEffects}
+            lastPlay={gameState.lastPlay}
+            turnEndsAt={gameState.turnEndsAt}
+            turnSecondsRemaining={gameState.turnSecondsRemaining}
+            turnDurationSeconds={gameState.turnDurationSeconds}
+          />
 
-        {/* Chat rápido de Emojis y Frases */}
-        <Chat roomId={roomId} playerId={playerId} />
+          {/* Chat rápido de Emojis y Frases */}
+          <Chat roomId={roomId} playerId={playerId} />
+        </div>
 
-        {/* Cartas de Poderes del Jugador */}
-        {me && gameState.status === 'playing' && (
+        {/* Cartas de Poderes del Jugador (ocultas en modo clásico) */}
+        {me && gameState.status === 'playing' && gameState.powersEnabled !== false && (
           <PowerCards
             powers={me.powers}
             isMyTurn={isMyTurn}

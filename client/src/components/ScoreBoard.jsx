@@ -2,15 +2,18 @@ import React, { useState } from 'react';
 import { Volume2, VolumeX, Medal, Layers, WifiOff, Star, ShieldAlert } from 'lucide-react';
 import { toggleMute, getMuteState } from '../audio';
 
-export default function ScoreBoard({ 
-  players, 
-  currentPlayerId, 
-  playerId, 
-  roomId, 
-  roundNumber, 
+export default function ScoreBoard({
+  players,
+  currentPlayerId,
+  playerId,
+  roomId,
+  roundNumber,
   boneyardCount,
   pendingTargetType,
-  onSelectPlayerTarget
+  onSelectPlayerTarget,
+  maxScore = 100,
+  maxPip = 6,
+  powersEnabled = true
 }) {
   const [muted, setMuted] = useState(getMuteState());
 
@@ -98,7 +101,8 @@ export default function ScoreBoard({
                         <span className="player-name">
                           {player.name}
                           {isMe && <span className="player-badge-me">TÚ</span>}
-                          {player.powersCount > 0 && (
+                          {player.isBot && <span className="player-badge-bot">BOT</span>}
+                          {powersEnabled && player.powersCount > 0 && (
                             <span 
                               style={{ color: '#fbbf24', marginLeft: '6px', fontSize: '0.65rem', fontWeight: 800 }}
                               title={`${player.powersCount} cartas de poder`}
@@ -108,7 +112,7 @@ export default function ScoreBoard({
                           )}
                         </span>
                         
-                        {player.handCount === 0 && player.score >= 100 && (
+                        {player.handCount === 0 && player.score >= maxScore && (
                           <span style={{ color: '#f59e0b', fontSize: '0.65rem', display: 'flex', alignItems: 'center', gap: '3px', fontWeight: 600 }}>
                             <Star size={10} fill="currentColor" /> Ganador
                           </span>
@@ -128,15 +132,15 @@ export default function ScoreBoard({
                     <span className="player-score-label">Puntuación:</span>
                     <div className="player-score-value">
                       <Medal size={14} style={{ color: '#f59e0b' }} />
-                      <span>{player.score} / 100 pts</span>
+                      <span>{player.score} / {maxScore} pts</span>
                     </div>
                   </div>
 
-                  {/* Barra de progreso visual hacia los 100 puntos */}
+                  {/* Barra de progreso visual hacia el límite de la sala */}
                   <div className="player-score-bar">
-                    <div 
+                    <div
                       className="player-score-progress"
-                      style={{ width: `${Math.min(100, player.score)}%` }}
+                      style={{ width: `${Math.min(100, (player.score / maxScore) * 100)}%` }}
                     />
                   </div>
 
@@ -209,8 +213,10 @@ export default function ScoreBoard({
             <span className="info-box-label">Código de Sala</span>
             <span className="room-code-value">{roomId}</span>
           </div>
-          <div className="info-box-label" style={{ fontSize: '0.6rem' }}>
-            Clásico Doble 6
+          <div className="info-box-label" style={{ fontSize: '0.6rem', textAlign: 'right' }}>
+            Doble {maxPip}
+            <br />
+            {powersEnabled ? 'Con Poderes' : 'Clásico'}
           </div>
         </div>
       </div>

@@ -18,8 +18,29 @@ const getPipsForValue = (val, isHorizontal) => {
       return isHorizontal
         ? [0, 1, 2, 6, 7, 8]
         : [0, 2, 3, 5, 6, 8];
+    // --- Valores del dominó doble 9 ---
+    case 7:
+      // El 6 más el punto central.
+      return isHorizontal
+        ? [0, 1, 2, 4, 6, 7, 8]
+        : [0, 2, 3, 4, 5, 6, 8];
+    case 8:
+      // Rejilla completa menos el centro (igual en ambas orientaciones).
+      return [0, 1, 2, 3, 5, 6, 7, 8];
+    case 9:
+      // Rejilla 3x3 completa.
+      return [0, 1, 2, 3, 4, 5, 6, 7, 8];
     default: return [];
   }
+};
+
+// Color por valor: en el doble 9 la rejilla se llena mucho y distinguir 7/8/9
+// de un vistazo es difícil solo por el patrón.
+const PIP_COLORS = {
+  6: '#10b981', // esmeralda
+  7: '#f59e0b', // ámbar
+  8: '#6366f1', // índigo
+  9: '#f43f5e'  // rosa
 };
 
 function DominoTile({
@@ -46,7 +67,7 @@ function DominoTile({
               key={idx}
               className={`pip ${isActive ? 'active' : ''}`}
               style={{
-                background: val === 6 ? '#10b981' : undefined // Puntos del 6 en esmeralda para estilo premium
+                background: PIP_COLORS[val] // undefined => color por defecto del CSS
               }}
             />
           );

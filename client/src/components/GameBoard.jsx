@@ -142,6 +142,9 @@ function computeSnakeLayout(board, maxWidth) {
   };
 }
 
+// Clave estable de una ficha física, independiente de cómo esté orientada.
+const tileKey = (tile) => `${Math.min(tile[0], tile[1])}-${Math.max(tile[0], tile[1])}`;
+
 export default function GameBoard({
   board,
   selectedTileIndex,
@@ -153,7 +156,11 @@ export default function GameBoard({
   canPlayRight,
   pendingTargetType,
   onSelectEndTarget,
-  activeEffects
+  activeEffects,
+  lastPlay,
+  turnEndsAt,
+  turnSecondsRemaining,
+  turnDurationSeconds = 30
 }) {
   const containerRef = useRef(null);
   const boardRef = useRef(null);
@@ -266,6 +273,36 @@ export default function GameBoard({
 
   const activePlayer = players.find((p) => p.id === currentPlayerId);
 
+  // Cuenta atrás del turno. El servidor manda los segundos ya calculados y
+  // turnEndsAt cambia en cada rearme, así que basta con resincronizar ahí y
+  // descontar en local: sin depender de que los relojes coincidan.
+  const [secondsLeft, setSecondsLeft] = useState(turnSecondsRemaining);
+
+  useEffect(() => {
+    setSecondsLeft(turnSecondsRemaining);
+  }, [turnSecondsRemaining, turnEndsAt, currentPlayerId]);
+
+  useEffect(() => {
+    if (turnSecondsRemaining == null) return undefined;
+    const id = setInterval(() => {
+      setSecondsLeft((s) => (s == null ? s : Math.max(0, s - 1)));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [turnSecondsRemaining, turnEndsAt, currentPlayerId]);
+
+  const showTimer = secondsLeft != null;
+  const timerUrgent = showTimer && secondsLeft <= 10;
+  const timerPct = showTimer
+    ? Math.max(0, Math.min(100, (secondsLeft / turnDurationSeconds) * 100))
+    : 0;
+
+  // Resaltar la última ficha colocada: ayuda a seguir el hilo, sobre todo en
+  // doble 9 donde el tablero puede llegar a 55 fichas.
+  const lastKey = lastPlay && lastPlay.tile ? tileKey(lastPlay.tile) : null;
+  const lastPlayerName = lastPlay
+    ? players.find((p) => p.id === lastPlay.playerId)?.name
+    : null;
+
   return (
     <div
       ref={containerRef}
@@ -292,12 +329,22 @@ export default function GameBoard({
         </button>
       </div>
 
-      {/* Indicador de Turno Flotante */}
+      {/* Indicador de Turno Flotante + reloj */}
       {activePlayer && (
-        <div className="turn-banner">
-          <span className="turn-pulse-dot" />
-          <span className="turn-banner-label">Turno de:</span>
-          <span className="turn-banner-name">{activePlayer.name}</span>
+        <div className={`turn-banner ${timerUrgent ? 'urgent' : ''}`}>
+          <div className="turn-banner-row">
+            <span className="turn-pulse-dot" />
+            <span className="turn-banner-label">Turno de:</span>
+            <span className="turn-banner-name">{activePlayer.name}</span>
+            {showTimer && (
+              <span className="turn-timer-value">{secondsLeft}s</span>
+            )}
+          </div>
+          {showTimer && (
+            <div className="turn-timer-track">
+              <div className="turn-timer-fill" style={{ width: `${timerPct}%` }} />
+            </div>
+          )}
         </div>
       )}
 
@@ -332,11 +379,13 @@ export default function GameBoard({
             {layout.map((item) => {
               // Clave estable por ficha física (independiente de la orientación):
               // evita re-montar y re-animar todas las fichas al jugar a la izquierda.
-              const key = `${Math.min(item.tile[0], item.tile[1])}-${Math.max(item.tile[0], item.tile[1])}`;
+              const key = tileKey(item.tile);
+              const isLast = lastKey !== null && key === lastKey;
               return (
                 <div
                   key={key}
-                  className="board-tile-wrap"
+                  className={`board-tile-wrap ${isLast ? 'last-played' : ''}`}
+                  title={isLast && lastPlayerName ? `Última ficha · ${lastPlayerName}` : undefined}
                   style={{
                     position: 'absolute',
                     left: `calc(50% + ${item.cx}px)`,

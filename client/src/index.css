@@ -271,11 +271,13 @@ body {
   }
 }
 
+/* La elevación obliga a reservar padding arriba en la fila de la mano, y ese
+   padding se lo quita al tablero. 18px se lee igual de bien que 28. */
 .domino-tile.selected {
-  transform: translateY(-28px) scale(1.08);
-  box-shadow: 
-    0 15px 30px rgba(0, 0, 0, 0.5),
-    0 0 20px var(--primary);
+  transform: translateY(-18px) scale(1.05);
+  box-shadow:
+    0 12px 24px rgba(0, 0, 0, 0.5),
+    0 0 18px var(--primary);
   border-color: var(--primary);
 }
 
@@ -2066,18 +2068,18 @@ body {
   width: 100%;
   background: linear-gradient(to top, rgba(2, 4, 10, 0.95) 0%, rgba(2, 4, 10, 0.4) 60%, transparent 100%);
   /* env(safe-area-inset-bottom): deja libre la barra gestual/notch del móvil. */
-  padding: 16px 24px calc(28px + env(safe-area-inset-bottom, 0px)) 24px;
+  padding: 8px 24px calc(14px + env(safe-area-inset-bottom, 0px)) 24px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
   border-top: 1px solid rgba(255, 255, 255, 0.04);
   box-sizing: border-box;
   flex-shrink: 0; /* la mano nunca se comprime: es la zona jugable */
 }
 
 .hand-status-row {
-  min-height: 40px;
+  min-height: 34px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2140,9 +2142,9 @@ body {
   /* padding-top holgado: la ficha seleccionada se eleva (translateY + scale) y
      overflow-x:auto obliga a recortar por arriba. Debe cubrir 28px + el crecido
      del scale, o la ficha elegida sale decapitada. */
-  padding: 38px 40px 10px 40px;
+  padding: 26px 40px 8px 40px;
   box-sizing: border-box;
-  min-height: 144px;
+  min-height: 130px;
 }
 
 .tile-double-badge {
@@ -3227,6 +3229,23 @@ body {
 
 
 /* --- CARTAS DE PODERES --- */
+.power-cards-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.power-cards-title {
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: var(--primary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 3px;
+}
+
 .power-cards-container {
   display: flex;
   justify-content: center;
@@ -3247,8 +3266,8 @@ body {
 
 .power-card-item {
   position: relative;
-  width: 90px;
-  height: 130px;
+  width: 78px;
+  height: 106px;
   flex-shrink: 0;
   border-radius: 12px;
   border: 1px solid var(--glass-border);
@@ -3405,20 +3424,40 @@ body {
     margin-top: 0;
     padding: 4px;
   }
+  /* Las cartas se llevaban ~145px de alto (tarjeta 75x110 + cabecera +
+     etiqueta). Aquí van a lo mínimo: icono y nombre. */
+  .power-cards-title {
+    display: none;
+  }
   .power-card-item {
-    width: 75px;
-    height: 110px;
-    padding: 6px;
+    width: 56px;
+    height: 72px;
+    padding: 4px;
+    border-radius: 9px;
   }
   .power-card-icon {
     font-size: 1.35rem;
   }
   .power-card-title {
-    font-size: 0.62rem;
+    font-size: 0.5rem;
+    line-height: 1.05;
   }
+  /* "BENEFICIO"/"ATAQUE": el color de la carta ya lo dice. */
   .power-card-type-label {
-    font-size: 0.45rem;
-    padding: 1px 4px;
+    display: none;
+  }
+  .power-card-svg-icon {
+    width: 20px;
+    height: 20px;
+  }
+
+  /* La mano gastaba ~44px solo en padding. */
+  .player-hand-container {
+    padding: 5px 10px calc(8px + env(safe-area-inset-bottom, 0px)) 10px;
+    gap: 5px;
+  }
+  .hand-status-row {
+    min-height: 32px;
   }
 }
 

@@ -192,11 +192,13 @@ export default function PowerCards({
   if (powers.length === 0) return null;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
-      <div style={{ fontSize: '0.75rem', fontWeight: 800, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' }}>
+    <div className="power-cards-wrap">
+      {/* En móvil esta cabecera se oculta: las cartas se explican solas y ahí
+          cada píxel se lo quita al tablero. */}
+      <div className="power-cards-title">
         Cartas de Poder ({powers.length})
       </div>
-      
+
       <div className="power-cards-container">
         {powers.map((card, idx) => {
           const isSelected = selectedPower && selectedPower.id === card.id;

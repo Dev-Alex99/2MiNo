@@ -25,6 +25,9 @@ export default function App() {
   const [isConnected, setIsConnected] = useState(socket.connected);
   const [selectedTileIndex, setSelectedTileIndex] = useState(null);
   const [quickNotifications, setQuickNotifications] = useState([]);
+  const [publicRooms, setPublicRooms] = useState([]);
+  const [roomsLoading, setRoomsLoading] = useState(true);
+  const [lobbyStats, setLobbyStats] = useState(null);
   const [showTurnBanner, setShowTurnBanner] = useState(false);
   
   // Estados para cartas de poderes
@@ -126,6 +129,26 @@ export default function App() {
       setTimeout(() => setError(''), 5000);
     }
 
+    function onRoomsList(list) {
+      setPublicRooms(Array.isArray(list) ? list : []);
+      setRoomsLoading(false);
+    }
+
+    function onLobbyStats(stats) {
+      setLobbyStats(stats);
+    }
+
+    // Nos expulsó el administrador: volvemos al lobby (el servidor ya nos sacó).
+    function onKicked({ by }) {
+      sessionStorage.removeItem('domino_room_id');
+      sessionStorage.removeItem('domino_player_id');
+      setRoomId('');
+      setGameState(null);
+      prevGameStatusRef.current = null;
+      setError(`${by || 'El administrador'} te expulsó de la sala.`);
+      setTimeout(() => setError(''), 6000);
+    }
+
     socket.on('connect', onConnect);
     socket.on('disconnect', onDisconnect);
     socket.on('room_created', onRoomCreated);
@@ -134,6 +157,9 @@ export default function App() {
     socket.on('play_sound', onPlaySound);
     socket.on('receive_quick_message', onReceiveQuickMessage);
     socket.on('error_msg', onErrorMsg);
+    socket.on('rooms_list', onRoomsList);
+    socket.on('lobby_stats', onLobbyStats);
+    socket.on('kicked', onKicked);
 
     return () => {
       socket.off('connect', onConnect);
@@ -144,8 +170,20 @@ export default function App() {
       socket.off('play_sound', onPlaySound);
       socket.off('receive_quick_message', onReceiveQuickMessage);
       socket.off('error_msg', onErrorMsg);
+      socket.off('rooms_list', onRoomsList);
+      socket.off('lobby_stats', onLobbyStats);
+      socket.off('kicked', onKicked);
     };
   }, []);
+
+  // Suscripción a la lista de salas: solo mientras se está en el lobby.
+  const inLobby = !gameState || !roomId;
+  useEffect(() => {
+    if (!isConnected || !inLobby) return undefined;
+    setRoomsLoading(true);
+    socket.emit('lobby_subscribe');
+    return () => socket.emit('lobby_unsubscribe');
+  }, [isConnected, inLobby]);
 
   const handleCreateRoom = (options = {}) => {
     const {
@@ -153,9 +191,16 @@ export default function App() {
       maxPip = 6,
       teamsEnabled = false,
       drawEnabled = true,
-      maxScore = null
+      maxScore = null,
+      isPublic = true
     } = options;
-    socket.emit('create_room', { name, powersEnabled, maxPip, teamsEnabled, drawEnabled, maxScore });
+    socket.emit('create_room', {
+      name, powersEnabled, maxPip, teamsEnabled, drawEnabled, maxScore, isPublic
+    });
+  };
+
+  const handleQuickPlay = () => {
+    socket.emit('quick_play', { name, playerId });
   };
 
   const handleJoinRoom = (code) => {
@@ -268,6 +313,10 @@ export default function App() {
         setName={setName}
         onCreateRoom={handleCreateRoom}
         onJoinRoom={handleJoinRoom}
+        onQuickPlay={handleQuickPlay}
+        publicRooms={publicRooms}
+        roomsLoading={roomsLoading}
+        stats={lobbyStats}
       />
     );
   }

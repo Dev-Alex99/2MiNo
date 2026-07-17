@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Copy, Check, Users, Sparkles, LogOut, CheckCircle2, Zap, Layers, Medal, Bot, X, Download, ArrowLeftRight } from 'lucide-react';
+import { Copy, Check, Users, Sparkles, LogOut, CheckCircle2, Zap, Layers, Medal, Bot, X, Download, ArrowLeftRight, Crown, UserX } from 'lucide-react';
 import { socket } from '../socket';
 import VoiceChat from './VoiceChat';
 
@@ -23,6 +23,11 @@ export default function WaitingRoom({ gameState, playerId, onLeave }) {
 
   const removeBot = (botId) => {
     socket.emit('remove_bot', { roomId: gameState.roomId, botId });
+  };
+
+  const amHost = gameState.hostId === playerId;
+  const kickPlayer = (targetId) => {
+    socket.emit('kick_player', { targetId });
   };
 
   // Intercambio de asientos: se elige uno y luego con quién cambiarlo.
@@ -126,8 +131,9 @@ export default function WaitingRoom({ gameState, playerId, onLeave }) {
         </div>
 
         {/* Chat de voz: disponible ya desde aquí, para coordinaros antes de
-            empezar. La llamada sigue viva al arrancar la partida. */}
-        <VoiceChat playerId={playerId} players={gameState.players} />
+            empezar. La llamada sigue viva al arrancar la partida. El nudge
+            invita a entrar, que es donde más se pierde la gente. */}
+        <VoiceChat playerId={playerId} players={gameState.players} nudge />
 
         {/* Lista de Jugadores */}
         <div className="waiting-players-section">
@@ -171,6 +177,9 @@ export default function WaitingRoom({ gameState, playerId, onLeave }) {
                   <div className="player-row-name-box">
                     <span className="player-row-name">
                       {player.name}
+                      {player.id === gameState.hostId && (
+                        <Crown size={12} className="host-crown" aria-label="Administrador" />
+                      )}
                       {player.id === playerId && (
                         <span className="player-badge-me">Tú</span>
                       )}
@@ -222,6 +231,18 @@ export default function WaitingRoom({ gameState, playerId, onLeave }) {
                       aria-label={`Quitar a ${player.name}`}
                     >
                       <X size={14} />
+                    </button>
+                  )}
+
+                  {/* Expulsar: solo el admin, y solo a otros humanos. */}
+                  {amHost && !player.isBot && player.id !== playerId && (
+                    <button
+                      onClick={() => kickPlayer(player.id)}
+                      className="bot-remove-btn"
+                      title={`Expulsar a ${player.name}`}
+                      aria-label={`Expulsar a ${player.name}`}
+                    >
+                      <UserX size={14} />
                     </button>
                   )}
                 </div>

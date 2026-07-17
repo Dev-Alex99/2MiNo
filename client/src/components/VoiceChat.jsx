@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Mic, MicOff, PhoneOff, Loader2, AlertCircle, Radio, Video, VideoOff, Settings2 } from 'lucide-react';
+import { Mic, MicOff, PhoneOff, Loader2, AlertCircle, Radio, Video, VideoOff, Settings2, X } from 'lucide-react';
 import { useVoice } from '../voice/VoiceContext';
 import DeviceSelector from './DeviceSelector';
 
@@ -15,10 +15,12 @@ function connectionLabel(peerStates, players, playerId) {
   return `Hablando con ${connected}`;
 }
 
-export default function VoiceChat({ playerId, players }) {
+export default function VoiceChat({ playerId, players, nudge = false }) {
   // El estado vive en el provider (App) para que la llamada sobreviva al paso
   // de la sala de espera al tablero.
   const [showDevices, setShowDevices] = useState(false);
+  // Burbuja que invita a entrar a la voz. Se descarta al pulsarla o al unirse.
+  const [nudgeDismissed, setNudgeDismissed] = useState(false);
   const voice = useVoice();
   if (!voice) return null;
   const {
@@ -29,21 +31,44 @@ export default function VoiceChat({ playerId, players }) {
 
   const inVoice = players.filter(p => p.inVoice);
 
+  const showNudge = nudge && !joined && !connecting && !nudgeDismissed;
+
   return (
     <div className="voice-panel">
       {!joined ? (
-        <button
-          onClick={join}
-          disabled={connecting}
-          className="voice-join-btn"
-          title="Entrar al chat de voz"
-        >
-          {connecting ? <Loader2 size={15} className="voice-spin" /> : <Mic size={15} />}
-          <span>{connecting ? 'Conectando…' : 'Chat'}</span>
-          {inVoice.length > 0 && (
-            <span className="voice-count">{inVoice.length}</span>
+        <div className="voice-join-wrap">
+          {showNudge && (
+            <div className="voice-nudge" role="status">
+              <span className="voice-nudge-icon">🎙️</span>
+              <span>
+                {inVoice.length > 0
+                  ? `¡${inVoice.length} ${inVoice.length === 1 ? 'jugador está' : 'jugadores están'} en la voz! Únete y habla con la mesa`
+                  : 'Activa tu micro y habla con la mesa en tiempo real'}
+              </span>
+              <button
+                className="voice-nudge-close"
+                onClick={() => setNudgeDismissed(true)}
+                aria-label="Ocultar aviso"
+              >
+                <X size={12} />
+              </button>
+            </div>
           )}
-        </button>
+          <button
+            onClick={join}
+            disabled={connecting}
+            className={`voice-join-btn ${showNudge ? 'inviting' : ''}`}
+            title="Entrar al chat de voz de la sala"
+          >
+            {connecting ? <Loader2 size={15} className="voice-spin" /> : <Mic size={15} />}
+            {/* Etiqueta completa donde hay sitio (sala de espera, nudge=true);
+                corta en la barra de partida. */}
+            <span>{connecting ? 'Conectando…' : (nudge ? 'Entrar a la voz' : 'Voz')}</span>
+            {inVoice.length > 0 && (
+              <span className="voice-count">{inVoice.length}</span>
+            )}
+          </button>
+        </div>
       ) : (
         <div className="voice-active">
           <button

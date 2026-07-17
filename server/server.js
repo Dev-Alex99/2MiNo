@@ -30,18 +30,40 @@ app.get('/ice-config', (req, res) => {
   res.json({ iceServers, turnConfigured: !!process.env.TURN_URL });
 });
 
-app.get('/health', (req, res) => res.json({ ok: true, rooms: rooms.size }));
+app.get('/health', (req, res) => {
+  const m = process.memoryUsage();
+  res.json({
+    ok: true,
+    rooms: rooms.size,
+    sockets: onlineCount,
+    rssMB: +(m.rss / 1048576).toFixed(1),
+    heapMB: +(m.heapUsed / 1048576).toFixed(1)
+  });
+});
 
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
     origin: '*', // En un entorno real se limitaría a los dominios del frontend
     methods: ['GET', 'POST']
-  }
+  },
+  // Memoria acotada por conexión (crítico en 512MB):
+  // - perMessageDeflate apagado explícito: con compresión, cada socket reserva
+  //   contextos zlib de ~300KB. En v4 ya viene apagado, pero lo fijamos para
+  //   que un cambio de versión no lo reactive y nos tumbe la RAM.
+  // - maxHttpBufferSize bajo: nuestros mensajes son diminutos (jugadas, señales
+  //   de voz); 100KB sobra y acota memoria y superficie de abuso.
+  perMessageDeflate: false,
+  maxHttpBufferSize: 1e5
 });
 
 // Almacén de salas activas: roomId -> DominoGame
 const rooms = new Map();
+
+// Conectados. Contador propio en vez de io.engine.clientsCount: ese no ha
+// decrementado todavía cuando se dispara el evento 'disconnect', y el número
+// salía desfasado.
+let onlineCount = 0;
 
 // Temporizadores por sala: roomId -> handle
 const turnTimers = new Map();   // reloj de turno
@@ -69,11 +91,65 @@ function broadcastGameState(roomId) {
   const game = rooms.get(roomId);
   if (!game) return;
 
+  // La parte común (config, tablero, efectos, reloj…) se calcula UNA vez y se
+  // reutiliza; solo la lista de jugadores se filtra por destinatario. Evita
+  // rehacer ~25 campos y el spread de activeEffects por cada jugador.
+  const shared = game.getSharedState();
+
   game.players.forEach(player => {
     if (player.socketId) {
-      io.to(player.socketId).emit('game_state', game.getGameStateForPlayer(player.id));
+      io.to(player.socketId).emit('game_state', game.getGameStateForPlayer(player.id, shared));
     }
   });
+}
+
+// --- LISTA DE SALAS PÚBLICAS ---
+// Se listan solo las que esperan jugadores y tienen sitio: una sala en curso o
+// llena no sirve de nada en el lobby.
+function publicRoomsList() {
+  const list = [];
+  for (const [roomId, game] of rooms.entries()) {
+    if (!game.isPublic || game.status !== 'waiting' || game.players.length >= 4) continue;
+    const host = game.players.find(p => !p.isBot);
+    list.push({
+      roomId,
+      host: host ? host.name : '—',
+      players: game.players.length,
+      bots: game.players.filter(p => p.isBot).length,
+      maxPip: game.maxPip,
+      maxScore: game.maxScore,
+      powersEnabled: game.powersEnabled,
+      teamsEnabled: game.teamsEnabled,
+      drawEnabled: game.drawEnabled
+    });
+  }
+  // Primero las que están más cerca de arrancar.
+  return list.sort((a, b) => b.players - a.players);
+}
+
+// Cifras para el lobby. online = sockets conectados (interpretación honesta de
+// "en línea"); playing = humanos en salas que ya están jugando.
+function lobbyStats() {
+  let playing = 0;
+  for (const game of rooms.values()) {
+    if (game.status === 'playing') playing += game.players.filter(p => !p.isBot).length;
+  }
+  return {
+    online: onlineCount,
+    playing,
+    openRooms: publicRoomsList().length
+  };
+}
+
+function broadcastStats() {
+  io.to('lobby').emit('lobby_stats', lobbyStats());
+}
+
+// Los clientes que están en el lobby se suscriben a una sala de Socket.IO
+// llamada 'lobby' para recibir la lista en vivo, sin sondear.
+function broadcastLobby() {
+  io.to('lobby').emit('rooms_list', publicRoomsList());
+  broadcastStats(); // una sala que cambia también cambia "salas abiertas"
 }
 
 function clearRoomTimers(roomId) {
@@ -194,24 +270,26 @@ function advanceRoom(roomId) {
 
 io.on('connection', (socket) => {
   console.log(`Nuevo cliente conectado: ${socket.id}`);
+  onlineCount++;
+  broadcastStats(); // subió el nº de conectados
 
-  // 1. Crear una sala
-  socket.on('create_room', ({ name, playerId, powersEnabled, maxPip, teamsEnabled, drawEnabled, maxScore }) => {
-    if (!name) return socket.emit('error_msg', 'Nombre requerido');
-
+  // Crea una sala y sienta al jugador. Compartido por create_room y quick_play.
+  function createRoomFor(name, playerId, opts = {}) {
     // No confiamos en el cliente: normalizamos las opciones aquí.
-    const safeMaxPip = maxPip === 9 ? 9 : 6;
-    const safePowers = powersEnabled !== false;
-    const safeTeams = teamsEnabled === true;
-    const safeDraw = drawEnabled !== false;
-    const safeScore = [100, 150, 200, 300].includes(maxScore) ? maxScore : null;
+    const safeMaxPip = opts.maxPip === 9 ? 9 : 6;
+    const safePowers = opts.powersEnabled !== false;
+    const safeTeams = opts.teamsEnabled === true;
+    const safeDraw = opts.drawEnabled !== false;
+    const safePublic = opts.isPublic !== false;
+    const safeScore = [100, 150, 200, 300].includes(opts.maxScore) ? opts.maxScore : null;
 
     const roomId = generateRoomId();
     const game = new DominoGame(roomId, safeScore, {
       powersEnabled: safePowers,
       maxPip: safeMaxPip,
       teamsEnabled: safeTeams,
-      drawEnabled: safeDraw
+      drawEnabled: safeDraw,
+      isPublic: safePublic
     });
     game.turnDurationMs = TURN_SECONDS * 1000;
 
@@ -220,11 +298,58 @@ io.on('connection', (socket) => {
 
     rooms.set(roomId, game);
     socket.join(roomId);
+    socket.leave('lobby'); // ya no está mirando la lista
 
-    socket.emit('room_created', { roomId, playerId: actualPlayerId });
-    broadcastGameState(roomId);
-    console.log(`Sala creada: ${roomId} por ${name} (doble ${safeMaxPip}, poderes: ${safePowers ? 'sí' : 'no'}, ` +
-      `${safeTeams ? 'parejas' : 'individual'}, pozo: ${safeDraw ? 'sí' : 'no'}, ${game.maxScore} pts)`);
+    console.log(`Sala creada: ${roomId} por ${name} (doble ${safeMaxPip}, ${safePublic ? 'pública' : 'privada'}, ` +
+      `poderes: ${safePowers ? 'sí' : 'no'}, ${safeTeams ? 'parejas' : 'individual'}, ${game.maxScore} pts)`);
+
+    return { roomId, playerId: actualPlayerId };
+  }
+
+  // 1. Crear una sala
+  socket.on('create_room', ({ name, playerId, ...opts }) => {
+    if (!name) return socket.emit('error_msg', 'Nombre requerido');
+    const created = createRoomFor(name, playerId, opts);
+    socket.emit('room_created', created);
+    broadcastGameState(created.roomId);
+    broadcastLobby();
+  });
+
+  // 1.5 Lista de salas públicas en vivo
+  socket.on('lobby_subscribe', () => {
+    socket.join('lobby');
+    socket.emit('rooms_list', publicRoomsList());
+    socket.emit('lobby_stats', lobbyStats());
+  });
+
+  socket.on('lobby_unsubscribe', () => socket.leave('lobby'));
+
+  // 1.6 Partida rápida: sienta al jugador en la sala pública más avanzada, y si
+  // no hay ninguna, le crea una. Un botón y a jugar, sin códigos.
+  socket.on('quick_play', ({ name, playerId }) => {
+    if (!name) return socket.emit('error_msg', 'Nombre requerido');
+
+    const candidate = publicRoomsList()[0]; // ya vienen ordenadas por ocupación
+    if (candidate) {
+      const game = rooms.get(candidate.roomId);
+      const actualPlayerId = playerId || `p_${Math.random().toString(36).substring(2, 9)}`;
+      if (game && game.addPlayer(actualPlayerId, name, socket.id)) {
+        socket.join(candidate.roomId);
+        socket.leave('lobby');
+        socket.emit('room_joined', { roomId: candidate.roomId, playerId: actualPlayerId });
+        broadcastGameState(candidate.roomId);
+        broadcastLobby();
+        console.log(`Partida rápida: ${name} -> sala ${candidate.roomId}`);
+        return;
+      }
+    }
+
+    // No había ninguna libre: se crea una pública y clásica (sin poderes).
+    const created = createRoomFor(name, playerId, { isPublic: true, powersEnabled: false });
+    socket.emit('room_created', created);
+    broadcastGameState(created.roomId);
+    broadcastLobby();
+    console.log(`Partida rápida: ${name} abrió sala nueva ${created.roomId}`);
   });
 
   // 2. Unirse a una sala (soporta reconexión si se pasa el playerId existente)
@@ -245,6 +370,7 @@ io.on('connection', (socket) => {
       socket.join(roomId);
       socket.emit('room_joined', { roomId, playerId: actualPlayerId });
       broadcastGameState(roomId);
+      broadcastLobby();
       console.log(`Jugador reconectado: ${existingPlayer.name} a sala ${roomId}`);
       return;
     }
@@ -265,6 +391,7 @@ io.on('connection', (socket) => {
     
     socket.emit('room_joined', { roomId, playerId: actualPlayerId });
     broadcastGameState(roomId);
+    broadcastLobby();
     console.log(`Jugador ${name} se unió a sala ${roomId}`);
   });
 
@@ -279,12 +406,14 @@ io.on('connection', (socket) => {
     if (!bot) return socket.emit('error_msg', 'No se pudo añadir el bot');
 
     broadcastGameState(roomId);
+    broadcastLobby();
     console.log(`Bot ${bot.name} (${bot.difficulty}) añadido a sala ${roomId}`);
 
     // Un bot entra ya listo: puede completar el "todos listos".
     if (game.allReady()) {
       game.startNewGame();
       io.to(roomId).emit('game_started');
+      broadcastLobby(); // al arrancar deja de listarse
       advanceRoom(roomId);
       broadcastGameState(roomId);
     }
@@ -308,6 +437,64 @@ io.on('connection', (socket) => {
     broadcastGameState(roomId);
   });
 
+  // 2.8 Expulsar a un jugador. Solo el administrador de la sala.
+  socket.on('kick_player', ({ targetId }) => {
+    const ctx = findMe();
+    if (!ctx) return;
+    const { roomId, game, player } = ctx;
+
+    if (game.hostId !== player.id) {
+      return socket.emit('error_msg', 'Solo el administrador puede expulsar');
+    }
+    if (!targetId || targetId === player.id) {
+      return socket.emit('error_msg', 'No puedes expulsarte a ti mismo');
+    }
+    const target = game.players.find(p => p.id === targetId);
+    if (!target) return;
+
+    const targetSocketId = target.socketId;
+
+    if (target.isBot || game.status === 'waiting') {
+      // En espera (o si es un bot) se libera la silla directamente.
+      game.removePlayerById(targetId);
+    } else {
+      // En partida no se puede quitar la silla sin romper turnos/puntuación:
+      // la hereda un bot, igual que cuando alguien abandona.
+      target.isBot = true;
+      target.difficulty = 'normal';
+      target.socketId = null;
+      target.ready = true;
+      game.ensureHost();
+    }
+
+    // Sacar al expulsado de su socket y avisarle para que vuelva al lobby.
+    if (targetSocketId && !target.isBot) {
+      const targetSocket = io.sockets.sockets.get(targetSocketId);
+      if (targetSocket) targetSocket.leave(roomId);
+    }
+    if (targetSocketId) {
+      io.to(targetSocketId).emit('kicked', { by: player.name });
+    }
+
+    io.to(roomId).emit('receive_quick_message', {
+      playerName: 'SISTEMA',
+      text: `👢 ${player.name} expulsó a ${target.name}.`,
+      type: 'phrase'
+    });
+
+    if (!game.hasHumans()) {
+      rooms.delete(roomId);
+      clearRoomTimers(roomId);
+      broadcastLobby();
+      return;
+    }
+
+    advanceRoom(roomId);
+    broadcastGameState(roomId);
+    broadcastLobby();
+    console.log(`${player.name} expulsó a ${target.name} de ${roomId}`);
+  });
+
   socket.on('remove_bot', ({ roomId, botId }) => {
     const game = rooms.get(roomId);
     if (!game) return;
@@ -318,6 +505,7 @@ io.on('connection', (socket) => {
 
     game.removePlayerById(botId);
     broadcastGameState(roomId);
+    broadcastLobby();
   });
 
   // 2.7 Abandonar la sala de forma explícita.
@@ -348,17 +536,20 @@ io.on('connection', (socket) => {
         text: `🤖 ${player.name} abandonó la partida. Un bot ocupa su sitio.`,
         type: 'phrase'
       });
+      game.ensureHost(); // si el que se fue era el admin, lo hereda otro humano
     }
 
     if (!game.hasHumans()) {
       rooms.delete(roomId);
       clearRoomTimers(roomId);
+      broadcastLobby();
       console.log(`Sala ${roomId} eliminada: se fue el último humano`);
       return;
     }
 
     advanceRoom(roomId); // por si ahora le toca mover al bot recién heredado
     broadcastGameState(roomId);
+    broadcastLobby(); // ha quedado un sitio libre
     console.log(`${player.name} abandonó la sala ${roomId}`);
   });
 
@@ -374,6 +565,7 @@ io.on('connection', (socket) => {
     if (game.allReady()) {
       game.startNewGame();
       io.to(roomId).emit('game_started');
+      broadcastLobby(); // al arrancar deja de listarse
       advanceRoom(roomId);
       broadcastGameState(roomId);
       console.log(`Partida iniciada en sala ${roomId}`);
@@ -661,6 +853,7 @@ io.on('connection', (socket) => {
           } else {
             broadcastGameState(roomId);
           }
+          broadcastLobby(); // la sala se fue de la lista, o le quedó un hueco
         } else {
           // Si la partida está activa, no lo eliminamos, marcamos socketId como nulo para darle tiempo a reconectar
           player.socketId = null;
@@ -676,6 +869,7 @@ io.on('connection', (socket) => {
               if (checkGame && checkGame.players.every(p => p.socketId === null)) {
                 rooms.delete(roomId);
                 clearRoomTimers(roomId);
+                broadcastLobby();
                 console.log(`Sala ${roomId} eliminada por inactividad prolongada (todos offline).`);
               }
             }, 120000);
@@ -684,6 +878,9 @@ io.on('connection', (socket) => {
         break;
       }
     }
+
+    onlineCount = Math.max(0, onlineCount - 1);
+    broadcastStats();
   });
 });
 

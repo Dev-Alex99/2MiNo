@@ -30,7 +30,17 @@ class DominoGame {
   // maxScore = null => usa el propio de la variante.
   // options: { powersEnabled, maxPip: 6|9, teamsEnabled, drawEnabled }
   constructor(roomId, maxScore = null, options = {}) {
-    const { powersEnabled = true, maxPip = 6, teamsEnabled = false, drawEnabled = true } = options;
+    const {
+      powersEnabled = true, maxPip = 6, teamsEnabled = false, drawEnabled = true,
+      isPublic = true
+    } = options;
+
+    // Pública: aparece en la lista del lobby mientras espera jugadores.
+    // Privada: solo se entra con el código.
+    this.isPublic = isPublic !== false;
+
+    // Administrador de la sala (puede expulsar). Se fija con el primer humano.
+    this.hostId = null;
 
     this.maxPip = VARIANTS[maxPip] ? maxPip : 6;
     const variant = VARIANTS[this.maxPip];
@@ -99,7 +109,17 @@ class DominoGame {
     };
     this.players.push(player);
     this.assignTeams();
+    this.ensureHost();
     return player;
+  }
+
+  // El administrador de la sala: por defecto quien la creó (primer humano).
+  // Si se va, lo hereda el siguiente humano presente.
+  ensureHost() {
+    const current = this.players.find(p => p.id === this.hostId);
+    if (current && !current.isBot) return;
+    const human = this.players.find(p => !p.isBot);
+    this.hostId = human ? human.id : null;
   }
 
   // Añade un bot. Va siempre "listo": no tiene a quién esperar, así que
@@ -132,6 +152,7 @@ class DominoGame {
     const removed = this.players[index];
     this.players.splice(index, 1);
     this.assignTeams();
+    this.ensureHost(); // si se fue el admin, lo hereda otro humano
     return removed;
   }
 
@@ -181,6 +202,7 @@ class DominoGame {
       this.resetGame();
     }
 
+    this.ensureHost(); // pudo haberse ido el admin
     return removedPlayer;
   }
 
@@ -980,26 +1002,26 @@ class DominoGame {
     return { success: true };
   }
 
-  // Retorna una versión del estado del juego lista para enviar al cliente.
-  // Protege la privacidad de las fichas de los otros jugadores
-  getGameStateForPlayer(playerId) {
+  // Parte del estado idéntica para TODOS los jugadores de la sala. Se calcula
+  // una sola vez por difusión (ver broadcastGameState) en lugar de rehacer todo
+  // el objeto —cuentas de Date.now, spread de activeEffects, etc.— por cada
+  // destinatario. Solo la lista de jugadores varía por receptor (privacidad).
+  getSharedState() {
     const isSpyActive = this.activeEffects.spyEyeTargetId && this.activeEffects.spyEyeEndTime > Date.now();
-
     return {
       roomId: this.roomId,
       status: this.status,
       maxScore: this.maxScore,
-      // Configuración de la sala, fijada al crearla
       powersEnabled: this.powersEnabled,
       maxPip: this.maxPip,
       teamsEnabled: this.teamsEnabled,
       drawEnabled: this.drawEnabled,
+      isPublic: this.isPublic,
+      hostId: this.hostId,
       teamScores: this.teamScores,
       teamNames: this.teamNames,
       roundWinnerTeam: this.roundWinnerTeam ?? null,
       gameWinnerTeam: this.gameWinnerTeam ?? null,
-      // Temporizador de turno: turnEndsAt sirve al cliente para detectar que el
-      // reloj se rearmó; los segundos van calculados aquí para evitar desfases.
       turnEndsAt: this.turnEndsAt,
       turnDurationSeconds: Math.round(this.turnDurationMs / 1000),
       turnSecondsRemaining: this.turnEndsAt && this.status === 'playing'
@@ -1016,10 +1038,25 @@ class DominoGame {
         ...this.activeEffects,
         spyEyeActive: isSpyActive,
         spyEyeTimeRemaining: isSpyActive ? Math.max(0, Math.round((this.activeEffects.spyEyeEndTime - Date.now()) / 1000)) : 0
-      },
+      }
+    };
+  }
+
+  // Retorna una versión del estado del juego lista para enviar al cliente.
+  // Protege la privacidad de las fichas de los otros jugadores.
+  // shared: parte común precalculada (opcional; si falta, se calcula aquí).
+  getGameStateForPlayer(playerId, shared) {
+    shared = shared || this.getSharedState();
+    const isSpyActive = shared.activeEffects.spyEyeActive;
+    const spyTargetId = this.activeEffects.spyEyeTargetId;
+    const spyOwnerId = this.activeEffects.spyEyeOwnerId;
+
+    return {
+      ...shared,
+      // Lo único que varía por destinatario: qué manos y poderes puede ver.
       players: this.players.map(p => {
-        const isRevealedBySpy = isSpyActive && p.id === this.activeEffects.spyEyeTargetId && this.activeEffects.spyEyeOwnerId === playerId;
-        
+        const isRevealedBySpy = isSpyActive && p.id === spyTargetId && spyOwnerId === playerId;
+
         return {
           id: p.id,
           name: p.name,

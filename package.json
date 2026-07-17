@@ -6,7 +6,7 @@
     "dev:server": "pnpm --filter domino-server dev",
     "dev:client": "pnpm --filter domino-client dev",
     "dev": "concurrently \"pnpm dev:server\" \"pnpm dev:client\"",
-    "test": "node server/testLogic.js && node server/testPowerCards.js && node server/testVariants.js && node server/testTurnTimer.js && node server/testBots.js && node server/testTeams.js"
+    "test": "node server/testLogic.js && node server/testPowerCards.js && node server/testVariants.js && node server/testTurnTimer.js && node server/testBots.js && node server/testTeams.js && node server/testState.js"
   },
   "dependencies": {
     "concurrently": "^8.2.2"

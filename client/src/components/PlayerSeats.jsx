@@ -31,6 +31,58 @@ function SeatVideo({ stream }) {
   return <video ref={ref} autoPlay playsInline muted className="seat-video" />;
 }
 
+/**
+ * Un asiento, memoizado. Recibe solo primitivas (y el stream, que es una ref
+ * estable cuando no cambia). Así, cuando alguien empieza o deja de hablar y el
+ * contexto de voz se re-renderiza, React salta todos los asientos MENOS el que
+ * de verdad cambió su `talking`. El resto no vuelve a pintarse.
+ */
+const Seat = React.memo(function Seat({
+  id, pos, name, isBot, teamClass, isActive, talking,
+  stream, shieldActive, inVoice, handCount, powersCount, showPowers,
+  targeting, onSelect
+}) {
+  return (
+    <div
+      className={`seat seat-${pos} ${isActive ? 'active' : ''} ${teamClass} ${
+        talking ? 'talking' : ''
+      } ${targeting ? 'targetable' : ''}`}
+      onClick={targeting ? () => onSelect(id) : undefined}
+      role={targeting ? 'button' : undefined}
+    >
+      <div className="seat-face">
+        {stream ? <SeatVideo stream={stream} /> : (
+          <span className="seat-avatar">
+            {isBot ? <Bot size={13} /> : initials(name)}
+          </span>
+        )}
+        {shieldActive && <Shield size={9} className="seat-shield" />}
+        {inVoice && !stream && <Mic size={8} className="seat-mic" />}
+      </div>
+
+      <span className="seat-name">{name}</span>
+
+      {/* Las fichas en la mano, como barritas: se ve de un vistazo quién está a
+          punto de cerrar, sin tener que leer un número. */}
+      <div className="seat-tiles" title={`${handCount} fichas`}>
+        {Array.from({ length: Math.min(handCount, 10) }).map((_, i) => (
+          <i key={i} />
+        ))}
+        <span className="seat-count">{handCount}</span>
+
+        {showPowers && powersCount > 0 && (
+          <span className="seat-powers" title={`${powersCount} cartas de poder`}>
+            <Zap size={8} />
+            {powersCount}
+          </span>
+        )}
+      </div>
+
+      {targeting && <span className="seat-target">🎯</span>}
+    </div>
+  );
+});
+
 export default function PlayerSeats({
   players,
   playerId,
@@ -61,54 +113,26 @@ export default function PlayerSeats({
 
   return (
     <>
-      {seats.map(({ player, pos }) => {
-        const isActive = player.id === currentPlayerId;
-        const stream = player.camOn ? remoteVideos[player.id] : null;
-        const teamClass = teamsEnabled ? `team-${player.team}` : '';
-
-        return (
-          <div
-            key={player.id}
-            className={`seat seat-${pos} ${isActive ? 'active' : ''} ${teamClass} ${
-              speaking[player.id] ? 'talking' : ''
-            } ${targeting ? 'targetable' : ''}`}
-            onClick={targeting ? () => onSelectPlayerTarget(player.id) : undefined}
-            role={targeting ? 'button' : undefined}
-          >
-            <div className="seat-face">
-              {stream ? <SeatVideo stream={stream} /> : (
-                <span className="seat-avatar">
-                  {player.isBot ? <Bot size={13} /> : initials(player.name)}
-                </span>
-              )}
-              {player.shieldActive && <Shield size={9} className="seat-shield" />}
-              {player.inVoice && !stream && <Mic size={8} className="seat-mic" />}
-            </div>
-
-            <span className="seat-name">{player.name}</span>
-
-            {/* Las fichas en la mano, como barritas: se ve de un vistazo quién
-                está a punto de cerrar, sin tener que leer un número. */}
-            <div className="seat-tiles" title={`${player.handCount} fichas`}>
-              {Array.from({ length: Math.min(player.handCount, 10) }).map((_, i) => (
-                <i key={i} />
-              ))}
-              <span className="seat-count">{player.handCount}</span>
-
-              {/* Cuántas cartas de poder le quedan: saberlo cambia cómo juegas
-                  contra él. Vivía en la barra lateral que se eliminó. */}
-              {powersEnabled && player.powersCount > 0 && (
-                <span className="seat-powers" title={`${player.powersCount} cartas de poder`}>
-                  <Zap size={8} />
-                  {player.powersCount}
-                </span>
-              )}
-            </div>
-
-            {targeting && <span className="seat-target">🎯</span>}
-          </div>
-        );
-      })}
+      {seats.map(({ player, pos }) => (
+        <Seat
+          key={player.id}
+          id={player.id}
+          pos={pos}
+          name={player.name}
+          isBot={player.isBot}
+          teamClass={teamsEnabled ? `team-${player.team}` : ''}
+          isActive={player.id === currentPlayerId}
+          talking={!!speaking[player.id]}
+          stream={player.camOn ? remoteVideos[player.id] || null : null}
+          shieldActive={player.shieldActive}
+          inVoice={player.inVoice}
+          handCount={player.handCount}
+          powersCount={player.powersCount}
+          showPowers={powersEnabled}
+          targeting={targeting}
+          onSelect={onSelectPlayerTarget}
+        />
+      ))}
     </>
   );
 }

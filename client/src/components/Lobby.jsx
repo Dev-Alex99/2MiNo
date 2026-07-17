@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Play, Plus, ArrowRight, User, Zap, Layers, Settings2, Users, Download, Medal, ChevronDown } from 'lucide-react';
+import { Play, Plus, ArrowRight, User, Zap, Layers, Settings2, Users, Download, Medal, ChevronDown, Zap as Bolt, Globe, Lock } from 'lucide-react';
 import { socket } from '../socket';
+import RoomList from './RoomList';
 
 // Debe coincidir con VARIANTS en server/gameLogic.js
 const VARIANT_INFO = {
@@ -8,15 +9,31 @@ const VARIANT_INFO = {
   9: { label: 'Doble 9', desc: '55 fichas · 10 en mano · 200 pts' }
 };
 
-export default function Lobby({ name, setName, onCreateRoom, onJoinRoom }) {
+export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuickPlay, publicRooms = [], roomsLoading, stats }) {
   const [roomCode, setRoomCode] = useState('');
   const [error, setError] = useState('');
   // Opciones de sala (solo aplican al CREAR; al unirse manda la config del anfitrión)
-  const [powersEnabled, setPowersEnabled] = useState(true);
+  // Poderes OFF por defecto: dominó clásico de entrada, se activan si se quieren.
+  const [powersEnabled, setPowersEnabled] = useState(false);
   const [maxPip, setMaxPip] = useState(6);
   const [teamsEnabled, setTeamsEnabled] = useState(false);
   const [drawEnabled, setDrawEnabled] = useState(true);
   const [maxScore, setMaxScore] = useState(null); // null => el propio de la variante
+  const [isPublic, setIsPublic] = useState(true);
+
+  const requireName = () => {
+    if (!name.trim()) { setError('Por favor, ingresa tu nombre.'); return false; }
+    setError('');
+    return true;
+  };
+
+  const handleQuick = () => {
+    if (requireName()) onQuickPlay();
+  };
+
+  const handleJoinFromList = (code) => {
+    if (requireName()) onJoinRoom(code);
+  };
   // Plegadas por defecto: si no, el botón de crear sala se va de la pantalla
   // en un móvil y hay que scrollear para la acción principal.
   const [showOptions, setShowOptions] = useState(false);
@@ -36,7 +53,7 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom }) {
       return;
     }
     setError('');
-    onCreateRoom({ powersEnabled, maxPip, teamsEnabled, drawEnabled, maxScore });
+    onCreateRoom({ powersEnabled, maxPip, teamsEnabled, drawEnabled, maxScore, isPublic });
   };
 
   const handleJoin = (e) => {
@@ -65,14 +82,25 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom }) {
           DOMINÓ ONLINE
         </h1>
         <p className="lobby-subtitle">
-          Crea una sala privada y juega con tus amigos al instante
+          Juega al instante o crea tu sala con amigos
         </p>
+
+        {stats && stats.online > 0 && (
+          <div className="online-badge" title="Jugadores conectados ahora mismo">
+            <span className="online-dot" />
+            <strong>{stats.online}</strong>
+            {stats.online === 1 ? ' en línea' : ' en línea'}
+            {stats.playing > 0 && (
+              <span className="online-playing"> · {stats.playing} jugando</span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Tarjeta principal con glassmorphism */}
       <div className="lobby-card glass-panel animate-scale-up">
         <form onSubmit={(e) => e.preventDefault()} className="lobby-form">
-          
+
           {/* Campo de Nombre */}
           <div className="lobby-form-field">
             <label className="lobby-form-label">
@@ -94,6 +122,25 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom }) {
               {error}
             </div>
           )}
+
+          {/* Partida rápida: te sienta en una sala abierta o te abre una. */}
+          <button
+            type="button"
+            onClick={handleQuick}
+            className="btn-premium btn-primary quick-play-btn"
+          >
+            <Bolt size={18} fill="currentColor" />
+            Jugar Ahora
+          </button>
+
+          {/* Salas públicas abiertas, en vivo */}
+          <div className="lobby-form-field">
+            <label className="lobby-form-label">
+              <Globe size={14} />
+              Salas abiertas
+            </label>
+            <RoomList rooms={publicRooms} loading={roomsLoading} onJoin={handleJoinFromList} />
+          </div>
 
           <div className="separator"></div>
 
@@ -220,6 +267,29 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom }) {
                   {drawEnabled
                     ? 'Sin jugada, robas del pozo'
                     : 'Sin jugada, pasas turno'}
+                </span>
+              </span>
+              <span className="switch" aria-hidden="true">
+                <span className="switch-knob" />
+              </span>
+            </button>
+
+            {/* Pública o privada */}
+            <button
+              type="button"
+              onClick={() => setIsPublic((v) => !v)}
+              aria-pressed={isPublic}
+              className={`option-toggle ${isPublic ? 'on' : ''}`}
+            >
+              <span className="option-toggle-text">
+                <span className="option-toggle-title">
+                  {isPublic ? <Globe size={14} /> : <Lock size={14} />}
+                  {isPublic ? 'Sala Pública' : 'Sala Privada'}
+                </span>
+                <span className="option-toggle-desc">
+                  {isPublic
+                    ? 'Cualquiera puede verla y entrar'
+                    : 'Solo se entra con el código'}
                 </span>
               </span>
               <span className="switch" aria-hidden="true">

@@ -23,6 +23,14 @@ console.log(`Conectando Socket.IO a: ${socketUrl}`);
 export const socket = io(socketUrl, {
   autoConnect: false,
   reconnection: true,
-  reconnectionAttempts: 15,
-  reconnectionDelay: 1000
+  // Nunca rendirse: en móvil se cambia de WiFi a 4G, se pasa por túneles y se
+  // pierde señal en ascensores. Como al reconectar resincronizamos por ESTADO
+  // COMPLETO, recuperar es barato y seguro por muchos intentos que haga.
+  reconnectionAttempts: Infinity,
+  reconnectionDelay: 1000,
+  reconnectionDelayMax: 5000,
+  randomizationFactor: 0.5
+  // Nota: se mantiene el fallback polling->websocket por defecto. Forzar
+  // 'websocket' aligeraría el servidor de 512MB, pero rompería la conectividad
+  // tras proxies que bloquean websocket. Queda como decisión aparte.
 });

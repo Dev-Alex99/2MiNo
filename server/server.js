@@ -182,12 +182,17 @@ function armTurnTimer(roomId) {
     const result = current.forceTurn();
     if (result.action === 'none') return;
 
-    const detail = result.drew > 0 ? ` (robó ${result.drew})` : '';
-    const text = result.action === 'played'
-      ? `⏱️ A ${result.playerName} se le acabó el tiempo: jugó automáticamente${detail}.`
-      : `⏱️ A ${result.playerName} se le acabó el tiempo: pasó turno${detail}.`;
+    const drew = result.drew > 0 ? result.drew : 0;
+    const key = result.action === 'played'
+      ? (drew ? 'srv.sys.timeoutPlayedDrew' : 'srv.sys.timeoutPlayed')
+      : (drew ? 'srv.sys.timeoutPassedDrew' : 'srv.sys.timeoutPassed');
 
-    io.to(roomId).emit('receive_quick_message', { playerName: 'SISTEMA', text, type: 'phrase' });
+    io.to(roomId).emit('receive_quick_message', {
+      playerName: 'SISTEMA',
+      key,
+      params: { name: result.playerName, n: drew },
+      type: 'phrase'
+    });
     io.to(roomId).emit('play_sound', { type: result.action === 'played' ? 'place' : 'pass' });
 
     advanceRoom(roomId);
@@ -236,7 +241,8 @@ function scheduleBotTurn(roomId) {
         io.to(roomId).emit('play_sound', { type: 'power' });
         io.to(roomId).emit('receive_quick_message', {
           playerName: 'SISTEMA',
-          text: `🤖 ${bot.name} usó una carta de poder.`,
+          key: 'srv.sys.botUsedPower',
+          params: { name: bot.name },
           type: 'phrase'
         });
       }
@@ -308,7 +314,7 @@ io.on('connection', (socket) => {
 
   // 1. Crear una sala
   socket.on('create_room', ({ name, playerId, ...opts }) => {
-    if (!name) return socket.emit('error_msg', 'Nombre requerido');
+    if (!name) return socket.emit('error_msg', { key: 'srv.err.nameRequired' });
     const created = createRoomFor(name, playerId, opts);
     socket.emit('room_created', created);
     broadcastGameState(created.roomId);
@@ -327,7 +333,7 @@ io.on('connection', (socket) => {
   // 1.6 Partida rápida: sienta al jugador en la sala pública más avanzada, y si
   // no hay ninguna, le crea una. Un botón y a jugar, sin códigos.
   socket.on('quick_play', ({ name, playerId }) => {
-    if (!name) return socket.emit('error_msg', 'Nombre requerido');
+    if (!name) return socket.emit('error_msg', { key: 'srv.err.nameRequired' });
 
     const candidate = publicRoomsList()[0]; // ya vienen ordenadas por ocupación
     if (candidate) {
@@ -358,7 +364,7 @@ io.on('connection', (socket) => {
     const game = rooms.get(roomId);
     
     if (!game) {
-      return socket.emit('error_msg', 'La sala no existe');
+      return socket.emit('error_msg', { key: 'srv.err.roomNotFound' });
     }
 
     const actualPlayerId = playerId || `p_${Math.random().toString(36).substring(2, 9)}`;
@@ -377,13 +383,13 @@ io.on('connection', (socket) => {
 
     // Si es un nuevo jugador
     if (game.players.length >= 4) {
-      return socket.emit('error_msg', 'La sala está llena (máximo 4 jugadores)');
+      return socket.emit('error_msg', { key: 'srv.err.roomFull' });
     }
     if (game.status !== 'waiting') {
-      return socket.emit('error_msg', 'La partida ya ha comenzado');
+      return socket.emit('error_msg', { key: 'srv.err.gameStarted' });
     }
     if (!name) {
-      return socket.emit('error_msg', 'Nombre requerido');
+      return socket.emit('error_msg', { key: 'srv.err.nameRequired' });
     }
 
     game.addPlayer(actualPlayerId, name, socket.id);
@@ -398,12 +404,12 @@ io.on('connection', (socket) => {
   // 2.5 Añadir / quitar bots (solo en la sala de espera)
   socket.on('add_bot', ({ roomId, difficulty }) => {
     const game = rooms.get(roomId);
-    if (!game) return socket.emit('error_msg', 'La sala no existe');
-    if (game.status !== 'waiting') return socket.emit('error_msg', 'No se pueden añadir bots con la partida en curso');
-    if (game.players.length >= 4) return socket.emit('error_msg', 'La sala está llena (máximo 4 jugadores)');
+    if (!game) return socket.emit('error_msg', { key: 'srv.err.roomNotFound' });
+    if (game.status !== 'waiting') return socket.emit('error_msg', { key: 'srv.err.noBotsInGame' });
+    if (game.players.length >= 4) return socket.emit('error_msg', { key: 'srv.err.roomFull' });
 
     const bot = game.addBot(pickBotName(game.players.map(p => p.name)), difficulty);
-    if (!bot) return socket.emit('error_msg', 'No se pudo añadir el bot');
+    if (!bot) return socket.emit('error_msg', { key: 'srv.err.botAddFailed' });
 
     broadcastGameState(roomId);
     broadcastLobby();
@@ -424,10 +430,10 @@ io.on('connection', (socket) => {
     const game = rooms.get(roomId);
     if (!game) return;
     if (game.status !== 'waiting') {
-      return socket.emit('error_msg', 'No se pueden cambiar los sitios con la partida en curso');
+      return socket.emit('error_msg', { key: 'srv.err.noSwapInGame' });
     }
     if (!game.swapSeats(playerA, playerB)) {
-      return socket.emit('error_msg', 'No se pudo cambiar de sitio');
+      return socket.emit('error_msg', { key: 'srv.err.swapFailed' });
     }
 
     // Cambiar de sitio cambia los equipos y el orden de turnos: que todo el
@@ -444,10 +450,10 @@ io.on('connection', (socket) => {
     const { roomId, game, player } = ctx;
 
     if (game.hostId !== player.id) {
-      return socket.emit('error_msg', 'Solo el administrador puede expulsar');
+      return socket.emit('error_msg', { key: 'srv.err.onlyHostKick' });
     }
     if (!targetId || targetId === player.id) {
-      return socket.emit('error_msg', 'No puedes expulsarte a ti mismo');
+      return socket.emit('error_msg', { key: 'srv.err.cantKickSelf' });
     }
     const target = game.players.find(p => p.id === targetId);
     if (!target) return;
@@ -478,7 +484,8 @@ io.on('connection', (socket) => {
 
     io.to(roomId).emit('receive_quick_message', {
       playerName: 'SISTEMA',
-      text: `👢 ${player.name} expulsó a ${target.name}.`,
+      key: 'srv.sys.kicked',
+      params: { name: player.name, target: target.name },
       type: 'phrase'
     });
 
@@ -498,10 +505,10 @@ io.on('connection', (socket) => {
   socket.on('remove_bot', ({ roomId, botId }) => {
     const game = rooms.get(roomId);
     if (!game) return;
-    if (game.status !== 'waiting') return socket.emit('error_msg', 'No se pueden quitar bots con la partida en curso');
+    if (game.status !== 'waiting') return socket.emit('error_msg', { key: 'srv.err.noRemoveBotInGame' });
 
     const target = game.players.find(p => p.id === botId);
-    if (!target || !target.isBot) return socket.emit('error_msg', 'Ese jugador no es un bot');
+    if (!target || !target.isBot) return socket.emit('error_msg', { key: 'srv.err.notABot' });
 
     game.removePlayerById(botId);
     broadcastGameState(roomId);
@@ -533,7 +540,8 @@ io.on('connection', (socket) => {
 
       io.to(roomId).emit('receive_quick_message', {
         playerName: 'SISTEMA',
-        text: `🤖 ${player.name} abandonó la partida. Un bot ocupa su sitio.`,
+        key: 'srv.sys.leftGame',
+        params: { name: player.name },
         type: 'phrase'
       });
       game.ensureHost(); // si el que se fue era el admin, lo hereda otro humano
@@ -584,7 +592,7 @@ io.on('connection', (socket) => {
       advanceRoom(roomId);
       broadcastGameState(roomId);
     } else {
-      socket.emit('error_msg', result.error);
+      socket.emit('error_msg', { key: result.error });
     }
   });
 
@@ -599,7 +607,7 @@ io.on('connection', (socket) => {
       advanceRoom(roomId); // robar no cede el turno: se da margen nuevo
       broadcastGameState(roomId);
     } else {
-      socket.emit('error_msg', result.error);
+      socket.emit('error_msg', { key: result.error });
     }
   });
 
@@ -614,7 +622,7 @@ io.on('connection', (socket) => {
       advanceRoom(roomId);
       broadcastGameState(roomId);
     } else {
-      socket.emit('error_msg', result.error);
+      socket.emit('error_msg', { key: result.error });
     }
   });
 
@@ -631,73 +639,46 @@ io.on('connection', (socket) => {
       // Emitir sonido de poder activado a toda la sala
       io.to(roomId).emit('play_sound', { type: 'power' });
 
-      // Preparar notificaciones de chat según el poder
-      let messageText = '';
+      // Preparar notificación de chat según el poder. El servidor envía una
+      // CLAVE i18n + parámetros; cada cliente la traduce a su propio idioma
+      // (así una sala con jugadores en idiomas distintos ve cada uno el suyo).
       const targetPlayer = targetId ? game.players.find(p => p.id === targetId) : null;
+      // '@opponent' es un centinela: el cliente lo sustituye por "un oponente"
+      // traducido cuando el poder no apuntó a un jugador concreto.
+      const targetName = targetPlayer ? targetPlayer.name : '@opponent';
+      let msgKey;
+      const msgParams = { name: player.name };
 
       if (result.shielded) {
-        messageText = `¡${player.name} intentó lanzar un poder contra ${result.targetName}, pero fue bloqueado por su Escudo de Neón!`;
+        msgKey = 'srv.pw.shielded';
+        msgParams.target = result.targetName;
       } else {
         switch (cardId) {
-          case 'double_shot':
-            messageText = `¡${player.name} usó Doble Tiro! Jugará dos veces seguidas.`;
-            break;
-          case 'smuggle':
-            messageText = `¡${player.name} le regaló una ficha a ${targetPlayer ? targetPlayer.name : 'un oponente'} mediante Contrabando!`;
-            break;
-          case 'spy_eye':
-            messageText = `¡${player.name} usó El Ojo Soplón para espiar las fichas de ${targetPlayer ? targetPlayer.name : 'un oponente'}!`;
-            break;
-          case 'skip':
-            messageText = `¡${player.name} usó Salto de Turno! Se saltó al siguiente jugador.`;
-            break;
-          case 'draw_penalty':
-            messageText = `¡${player.name} penalizó a ${targetPlayer ? targetPlayer.name : 'un oponente'} obligándolo a robar del pozo!`;
-            break;
-          case 'reverse':
-            messageText = `¡${player.name} invirtió el sentido del juego!`;
-            break;
-          case 'trade':
-            messageText = `¡${player.name} cambió una ficha de su mano por una del pozo!`;
-            break;
-          case 'shield':
-            messageText = `¡${player.name} activó su Escudo de Neón y es inmune a ataques!`;
-            break;
-          case 'freeze':
-            const frozenSide = targetId === 'left' ? 'izquierdo' : 'derecho';
-            messageText = `¡${player.name} congeló el extremo ${frozenSide} del tablero! Nadie más puede jugar ahí este turno.`;
-            break;
-          case 'destiny_steal':
-            messageText = `¡${player.name} le robó una carta de poder a ${targetPlayer ? targetPlayer.name : 'un oponente'}!`;
-            break;
-          case 'mind_swap':
-            messageText = `¡${player.name} usó Intercambio Mental e intercambió su mano completa con ${targetPlayer ? targetPlayer.name : 'un oponente'}!`;
-            break;
-          case 'tile_demolition':
-            const demolishedSide = targetId === 'left' ? 'izquierdo' : 'derecho';
-            messageText = `¡${player.name} usó Ficha Dinamita y destruyó la ficha del extremo ${demolishedSide}!`;
-            break;
-          case 'wildcard':
-            messageText = `¡${player.name} usó una Ficha Comodín! Podrá colocar cualquier ficha en el tablero este turno.`;
-            break;
-          case 'boneyard_reset':
-            messageText = `¡${player.name} usó Reinicio Estelar y cambió toda su mano por fichas del pozo!`;
-            break;
-          case 'magnetic_pull':
-            messageText = `¡${player.name} usó Atracción Magnética sobre ${targetPlayer ? targetPlayer.name : 'un oponente'} obligándolo a robar del pozo!`;
-            break;
-          case 'russian_roulette':
-            messageText = `¡${player.name} activó la Ruleta Rusa! Todos los jugadores pasan una ficha al de su derecha.`;
-            break;
-          default:
-            messageText = `¡${player.name} usó una carta de poder!`;
+          case 'double_shot': msgKey = 'srv.pw.double_shot'; break;
+          case 'smuggle': msgKey = 'srv.pw.smuggle'; msgParams.target = targetName; break;
+          case 'spy_eye': msgKey = 'srv.pw.spy_eye'; msgParams.target = targetName; break;
+          case 'skip': msgKey = 'srv.pw.skip'; break;
+          case 'draw_penalty': msgKey = 'srv.pw.draw_penalty'; msgParams.target = targetName; break;
+          case 'reverse': msgKey = 'srv.pw.reverse'; break;
+          case 'trade': msgKey = 'srv.pw.trade'; break;
+          case 'shield': msgKey = 'srv.pw.shield'; break;
+          case 'freeze': msgKey = targetId === 'left' ? 'srv.pw.freezeLeft' : 'srv.pw.freezeRight'; break;
+          case 'destiny_steal': msgKey = 'srv.pw.destiny_steal'; msgParams.target = targetName; break;
+          case 'mind_swap': msgKey = 'srv.pw.mind_swap'; msgParams.target = targetName; break;
+          case 'tile_demolition': msgKey = targetId === 'left' ? 'srv.pw.demolishLeft' : 'srv.pw.demolishRight'; break;
+          case 'wildcard': msgKey = 'srv.pw.wildcard'; break;
+          case 'boneyard_reset': msgKey = 'srv.pw.boneyard_reset'; break;
+          case 'magnetic_pull': msgKey = 'srv.pw.magnetic_pull'; msgParams.target = targetName; break;
+          case 'russian_roulette': msgKey = 'srv.pw.russian_roulette'; break;
+          default: msgKey = 'srv.pw.default';
         }
       }
 
       // Propagar mensaje al chat rápido para que aparezca como toast flotante
       io.to(roomId).emit('receive_quick_message', {
         playerName: 'SISTEMA',
-        text: messageText,
+        key: msgKey,
+        params: msgParams,
         type: 'phrase'
       });
 
@@ -709,7 +690,7 @@ io.on('connection', (socket) => {
       advanceRoom(roomId);
       broadcastGameState(roomId);
     } else {
-      socket.emit('error_msg', result.error);
+      socket.emit('error_msg', { key: result.error });
     }
   });
 
@@ -790,7 +771,7 @@ io.on('connection', (socket) => {
 
   socket.on('voice_join', () => {
     const ctx = findMe();
-    if (!ctx) return socket.emit('error_msg', 'No estás en ninguna sala');
+    if (!ctx) return socket.emit('error_msg', { key: 'srv.err.notInRoom' });
 
     ctx.player.inVoice = true;
     ctx.player.camOn = false;

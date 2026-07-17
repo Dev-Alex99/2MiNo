@@ -1,0 +1,8 @@
+# robots.txt — Dominó Online
+# Se permite el rastreo completo del sitio.
+User-agent: *
+Allow: /
+
+# Sin áreas privadas que ocultar: es una SPA pública de una sola ruta.
+
+Sitemap: https://www.2mino.lat/sitemap.xml

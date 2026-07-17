@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Volume2, VolumeX, LogOut, Layers, Timer } from 'lucide-react';
 import { toggleMute, getMuteState } from '../audio';
 import VoiceChat from './VoiceChat';
+import LanguageSwitcher from './LanguageSwitcher';
+import { useT } from '../i18n/LanguageContext';
 
 /**
  * Barra única de la partida, en móvil y en escritorio.
@@ -17,6 +19,7 @@ export default function GameBar({
   players, playerId, roundNumber, teamsEnabled, teamScores, maxScore, onLeave,
   currentPlayerId, turnEndsAt, turnSecondsRemaining, turnDurationSeconds = 30
 }) {
+  const { t } = useT();
   const [muted, setMuted] = useState(getMuteState());
   const [confirmLeave, setConfirmLeave] = useState(false);
 
@@ -65,7 +68,7 @@ export default function GameBar({
       {active && (
         <span className={`game-bar-turn ${isMyTurn ? 'mine' : ''} ${urgent ? 'urgent' : ''}`}>
           <span className="turn-pulse-dot" />
-          <span className="game-bar-turn-name">{isMyTurn ? 'Tu turno' : active.name}</span>
+          <span className="game-bar-turn-name">{isMyTurn ? t('game.turn') : active.name}</span>
           {showTimer && (
             <span className="game-bar-timer">
               <Timer size={10} />
@@ -76,12 +79,13 @@ export default function GameBar({
       )}
 
       <div className="game-bar-actions">
+        <LanguageSwitcher compact />
         <VoiceChat playerId={playerId} players={players} />
 
         <button
           onClick={() => setMuted(toggleMute())}
           className={`mute-btn ${muted ? 'active' : ''}`}
-          title={muted ? 'Activar sonido' : 'Silenciar sonido'}
+          title={muted ? t('game.soundOn') : t('game.soundOff')}
         >
           {muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
         </button>
@@ -89,8 +93,8 @@ export default function GameBar({
         <button
           onClick={() => setConfirmLeave(v => !v)}
           className={`mute-btn ${confirmLeave ? 'active' : ''}`}
-          title="Salir de la sala"
-          aria-label="Salir de la sala"
+          title={t('wait.leave')}
+          aria-label={t('wait.leave')}
         >
           <LogOut size={14} />
         </button>
@@ -99,11 +103,11 @@ export default function GameBar({
       {confirmLeave && (
         <div className="leave-confirm bar-leave">
           <span className="leave-confirm-text">
-            ¿Abandonar? Un bot ocupará tu sitio y los demás seguirán jugando.
+            {t('game.leaveConfirm')}
           </span>
           <div className="leave-confirm-actions">
-            <button onClick={onLeave} className="leave-confirm-yes">Salir</button>
-            <button onClick={() => setConfirmLeave(false)} className="leave-confirm-no">Cancelar</button>
+            <button onClick={onLeave} className="leave-confirm-yes">{t('game.leaveShort')}</button>
+            <button onClick={() => setConfirmLeave(false)} className="leave-confirm-no">{t('common.cancel')}</button>
           </div>
         </div>
       )}

@@ -202,7 +202,7 @@ function runTests() {
 
     const drew = g.drawTile('p1');
     assert(drew.success === false, 'Sin pozo: robar se rechaza aunque queden fichas');
-    assert(/no se roba/i.test(drew.error), `El error lo explica: "${drew.error}"`);
+    assert(drew.error === 'srv.err.drawDisabled', `El error lo explica (clave i18n): "${drew.error}"`);
 
     const passed = g.passTurn('p1');
     assert(passed.success === true, 'Sin pozo: se puede pasar aunque queden fichas en el pozo');

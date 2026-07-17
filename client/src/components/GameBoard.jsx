@@ -1,6 +1,7 @@
 import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react';
 import { ZoomIn, ZoomOut, Maximize2, Move } from 'lucide-react';
 import DominoTile from './DominoTile';
+import { useT } from '../i18n/LanguageContext';
 
 // Dimensiones reales de una ficha en el tablero (coinciden con el CSS fijado en .board-tile-wrap).
 const TILE_LONG = 96;   // largo de la ficha (dimensión mayor)
@@ -162,6 +163,7 @@ export default function GameBoard({
   // para que la serpiente no acabe pintada por debajo de ellos.
   seatsPadding = 0
 }) {
+  const { t } = useT();
   const containerRef = useRef(null);
   const boardRef = useRef(null);
   const dragRef = useRef({ active: false, sx: 0, sy: 0 });
@@ -293,15 +295,15 @@ export default function GameBoard({
 
       {/* Controles de Vista flotantes */}
       <div className="zoom-controls">
-        <button onClick={zoomIn} className="zoom-btn" title="Acercar">
+        <button onClick={zoomIn} className="zoom-btn" title="+">
           <ZoomIn size={18} />
         </button>
-        <button onClick={zoomOut} className="zoom-btn" title="Alejar">
+        <button onClick={zoomOut} className="zoom-btn" title="−">
           <ZoomOut size={18} />
         </button>
-        <button onClick={resetView} className="zoom-btn" title="Centrar Tablero">
+        <button onClick={resetView} className="zoom-btn" title={t('board.center')}>
           <Maximize2 size={16} />
-          <span className="zoom-btn-text">Centrar</span>
+          <span className="zoom-btn-text">{t('board.center')}</span>
         </button>
       </div>
 
@@ -328,8 +330,8 @@ export default function GameBoard({
           ) : (
             <div className="empty-board-msg">
               <Move size={36} className="animate-bounce" />
-              <span className="empty-board-msg-title">Tablero Vacío</span>
-              <span className="empty-board-msg-text">El primer jugador puede colocar cualquier ficha en el centro</span>
+              <span className="empty-board-msg-title">{t('board.empty')}</span>
+              <span className="empty-board-msg-text">{t('board.emptyHint')}</span>
             </div>
           )
         ) : (

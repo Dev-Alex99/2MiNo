@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { socket, serverUrl } from '../socket';
+import { useT } from '../i18n/LanguageContext';
 
 /**
  * Chat de voz en malla (P2P) sobre la señalización de Socket.IO que ya existe.
@@ -114,6 +115,10 @@ async function tuneVideoSender(sender) {
 }
 
 export default function useVoiceChat({ roomId, playerId }) {
+  // Ref al traductor para no invalidar los useCallback al cambiar de idioma.
+  const { t } = useT();
+  const tRef = useRef(t);
+  tRef.current = t;
   const [joined, setJoined] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [muted, setMuted] = useState(false);
@@ -469,12 +474,13 @@ export default function useVoiceChat({ roomId, playerId }) {
 
       socket.emit('voice_join', { roomId, playerId });
     } catch (e) {
+      const T = tRef.current;
       const map = {
-        NotAllowedError: 'Has bloqueado el micrófono. Permítelo desde el candado de la barra de direcciones.',
-        NotFoundError: 'No se ha encontrado ningún micrófono conectado.',
-        NotReadableError: 'Otra aplicación está usando el micrófono.'
+        NotAllowedError: T('voice.errMic'),
+        NotFoundError: T('voice.errNoMic'),
+        NotReadableError: T('voice.errBusyMic')
       };
-      setError(map[e.name] || 'No se pudo acceder al micrófono.');
+      setError(map[e.name] || T('voice.errGenericMic'));
       joinedRef.current = false;
       setJoined(false);
     } finally {
@@ -521,8 +527,8 @@ export default function useVoiceChat({ roomId, playerId }) {
       refreshDevices();
     } catch (e) {
       setError(e.name === 'OverconstrainedError'
-        ? 'Ese micrófono ya no está disponible.'
-        : 'No se pudo cambiar de micrófono.');
+        ? tRef.current('voice.errMicGone')
+        : tRef.current('voice.errMicSwitch'));
     } finally {
       setSwitching(false);
     }
@@ -558,8 +564,8 @@ export default function useVoiceChat({ roomId, playerId }) {
       refreshDevices();
     } catch (e) {
       setError(e.name === 'OverconstrainedError'
-        ? 'Esa cámara ya no está disponible.'
-        : 'No se pudo cambiar de cámara.');
+        ? tRef.current('voice.errCamGone')
+        : tRef.current('voice.errCamSwitch'));
     } finally {
       setSwitching(false);
     }
@@ -629,12 +635,13 @@ export default function useVoiceChat({ roomId, playerId }) {
 
       socket.emit('voice_cam', { on: true });
     } catch (e) {
+      const T = tRef.current;
       const map = {
-        NotAllowedError: 'Has bloqueado la cámara. Permítela desde el candado de la barra de direcciones.',
-        NotFoundError: 'No se ha encontrado ninguna cámara.',
-        NotReadableError: 'Otra aplicación está usando la cámara.'
+        NotAllowedError: T('voice.errCam'),
+        NotFoundError: T('voice.errNoCam'),
+        NotReadableError: T('voice.errBusyCam')
       };
-      setError(map[e.name] || 'No se pudo acceder a la cámara.');
+      setError(map[e.name] || T('voice.errGenericCam'));
       setCamOn(false);
     } finally {
       setCamBusy(false);

@@ -1,21 +1,13 @@
 import React, { useState } from 'react';
 import { MessageSquare, Smile, MessageCircle } from 'lucide-react';
 import { socket } from '../socket';
-
-const QUICK_PHRASES = [
-  '¡Capicúa!',
-  '¡Paso!',
-  '¡Juego cerrado!',
-  '¡Toma tu doble seis!',
-  '¡Buena jugada!',
-  '¡El que sabe, sabe!',
-  '¡Suerte para la próxima!',
-  '¡Pensando la jugada...'
-];
+import { useT } from '../i18n/LanguageContext';
 
 const QUICK_EMOJIS = ['😂', '😎', '😮', '🤫', '😠', '👑', '🔥', '👏'];
 
 export default function Chat({ roomId, playerId }) {
+  const { t } = useT();
+  const QUICK_PHRASES = ['chat.p0', 'chat.p1', 'chat.p2', 'chat.p3', 'chat.p4', 'chat.p5', 'chat.p6', 'chat.p7'];
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('emojis'); // 'emojis' | 'phrases'
 
@@ -57,13 +49,13 @@ export default function Chat({ roomId, playerId }) {
               onClick={() => setActiveTab('emojis')}
               className={`chat-tab-btn ${activeTab === 'emojis' ? 'active' : ''}`}
             >
-              <Smile size={14} /> Emojis
+              <Smile size={14} /> {t('chat.emojis')}
             </button>
             <button
               onClick={() => setActiveTab('phrases')}
               className={`chat-tab-btn ${activeTab === 'phrases' ? 'active' : ''}`}
             >
-              <MessageCircle size={14} /> Frases
+              <MessageCircle size={14} /> {t('chat.phrases')}
             </button>
           </div>
 
@@ -83,13 +75,13 @@ export default function Chat({ roomId, playerId }) {
               </div>
             ) : (
               <div className="phrases-list">
-                {QUICK_PHRASES.map((phrase) => (
+                {QUICK_PHRASES.map((key) => (
                   <button
-                    key={phrase}
-                    onClick={() => sendPhrase(phrase)}
+                    key={key}
+                    onClick={() => sendPhrase(t(key))}
                     className="phrase-btn"
                   >
-                    {phrase}
+                    {t(key)}
                   </button>
                 ))}
               </div>

@@ -1,11 +1,13 @@
 import React, { useEffect, useRef } from 'react';
 import { MicOff } from 'lucide-react';
+import { useT } from '../i18n/LanguageContext';
 
 /**
  * Miniatura de vídeo de un jugador. El <video> se alimenta por srcObject (no por
  * estado de React) para que un cambio de stream no fuerce a recrear el elemento.
  */
 export default function VideoTile({ stream, name, isMe, talking, muted }) {
+  const { t } = useT();
   const ref = useRef(null);
 
   useEffect(() => {
@@ -29,7 +31,7 @@ export default function VideoTile({ stream, name, isMe, talking, muted }) {
       />
       <span className="video-tile-name">
         {muted && <MicOff size={9} />}
-        {isMe ? 'Tú' : name}
+        {isMe ? t('common.you') : name}
       </span>
     </div>
   );

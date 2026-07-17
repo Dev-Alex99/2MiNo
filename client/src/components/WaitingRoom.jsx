@@ -2,14 +2,16 @@ import React, { useState } from 'react';
 import { Copy, Check, Users, Sparkles, LogOut, CheckCircle2, Zap, Layers, Medal, Bot, X, Download, ArrowLeftRight, Crown, UserX } from 'lucide-react';
 import { socket } from '../socket';
 import VoiceChat from './VoiceChat';
-
-const BOT_LEVELS = [
-  { id: 'facil', label: 'Fácil' },
-  { id: 'normal', label: 'Normal' },
-  { id: 'dificil', label: 'Difícil' }
-];
+import LanguageSwitcher from './LanguageSwitcher';
+import { useT } from '../i18n/LanguageContext';
 
 export default function WaitingRoom({ gameState, playerId, onLeave }) {
+  const { t } = useT();
+  const BOT_LEVELS = [
+    { id: 'facil', label: t('wait.difEasy') },
+    { id: 'normal', label: t('wait.difNormal') },
+    { id: 'dificil', label: t('wait.difHard') }
+  ];
   const [copied, setCopied] = useState(false);
   const [botLevel, setBotLevel] = useState('normal');
   const [swapFrom, setSwapFrom] = useState(null);
@@ -77,57 +79,60 @@ export default function WaitingRoom({ gameState, playerId, onLeave }) {
         <div className="waiting-room-header-row">
           <div>
             <span className="waiting-room-header-subtitle">
-              <Sparkles size={12} /> Sala Privada Activa
+              <Sparkles size={12} /> {t('wait.subtitle')}
             </span>
-            <h2 className="waiting-room-header-title">Sala de Espera</h2>
+            <h2 className="waiting-room-header-title">{t('wait.title')}</h2>
 
             {/* Modalidad fijada por el anfitrión al crear la sala */}
             <div className="room-mode-tags">
               <span className="room-mode-tag">
                 <Layers size={11} />
-                Doble {gameState.maxPip ?? 6}
+                {t('opt.double', { n: gameState.maxPip ?? 6 })}
               </span>
               {gameState.teamsEnabled && (
                 <span className="room-mode-tag teams">
                   <Users size={11} />
-                  Parejas 2v2
+                  {t('rooms.teams')} 2v2
                 </span>
               )}
               {gameState.drawEnabled === false && (
                 <span className="room-mode-tag">
                   <Download size={11} />
-                  Sin pozo
+                  {t('rooms.noDraw')}
                 </span>
               )}
               <span className={`room-mode-tag ${gameState.powersEnabled === false ? '' : 'accent'}`}>
                 <Zap size={11} />
-                {gameState.powersEnabled === false ? 'Clásico, sin poderes' : 'Con poderes'}
+                {gameState.powersEnabled === false ? t('mode.classic') : t('mode.withPowers')}
               </span>
               <span className="room-mode-tag">
                 <Medal size={11} />
-                {gameState.maxScore ?? 100} pts
+                {gameState.maxScore ?? 100} {t('common.points')}
               </span>
             </div>
           </div>
-          <button 
-            onClick={onLeave}
-            className="waiting-room-leave-btn"
-            title="Salir de la sala"
-          >
-            <LogOut size={20} />
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <LanguageSwitcher compact />
+            <button
+              onClick={onLeave}
+              className="waiting-room-leave-btn"
+              title={t('wait.leave')}
+            >
+              <LogOut size={20} />
+            </button>
+          </div>
         </div>
 
         {/* Panel del código de sala */}
         <div className="code-box">
-          <span className="code-box-header">Código para unirse</span>
+          <span className="code-box-header">{t('wait.codeHeader')}</span>
           <div className="code-box-row">
             <span className="code-box-value">{gameState.roomId}</span>
             <button onClick={copyCode} className="code-box-copy-btn">
               {copied ? <Check size={18} style={{ color: '#10b981' }} /> : <Copy size={18} />}
             </button>
           </div>
-          {copied && <span className="code-box-copy-toast">¡Código copiado al portapapeles!</span>}
+          {copied && <span className="code-box-copy-toast">{t('wait.copied')}</span>}
         </div>
 
         {/* Chat de voz: disponible ya desde aquí, para coordinaros antes de
@@ -139,25 +144,25 @@ export default function WaitingRoom({ gameState, playerId, onLeave }) {
         <div className="waiting-players-section">
           <div className="waiting-players-header">
             <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Users size={14} /> Jugadores ({totalPlayers}/4)
+              <Users size={14} /> {t('wait.players', { n: totalPlayers })}
             </span>
-            <span>Estado</span>
+            <span>{t('wait.status')}</span>
           </div>
 
           {/* Pista del intercambio en curso */}
           {swapFrom && (
             <div className="swap-hint">
               <ArrowLeftRight size={13} />
-              <span>Elige con quién intercambiar a <strong>{swapFromName}</strong></span>
+              <span>{t('wait.swapHint', { name: swapFromName })}</span>
               <button onClick={() => setSwapFrom(null)} className="select-hint-cancel">
-                Cancelar
+                {t('common.cancel')}
               </button>
             </div>
           )}
 
           {gameState.teamsEnabled && !swapFrom && (
             <div className="swap-tip">
-              Cambia de sitio con ⇄ para elegir compañero: los asientos alternos forman pareja
+              {t('wait.swapTip')}
             </div>
           )}
 
@@ -181,19 +186,19 @@ export default function WaitingRoom({ gameState, playerId, onLeave }) {
                         <Crown size={12} className="host-crown" aria-label="Administrador" />
                       )}
                       {player.id === playerId && (
-                        <span className="player-badge-me">Tú</span>
+                        <span className="player-badge-me">{t('common.you')}</span>
                       )}
-                      {player.isBot && <span className="player-badge-bot">Bot</span>}
+                      {player.isBot && <span className="player-badge-bot">{t('wait.bot')}</span>}
                     </span>
                     <span className="player-row-role">
                       {gameState.teamsEnabled && (
                         <span className={`team-chip team-${player.team}`}>
-                          {(gameState.teamNames || ['Equipo A', 'Equipo B'])[player.team]}
+                          {player.team === 0 ? t('team.a') : t('team.b')}
                         </span>
                       )}
                       {player.isBot
-                        ? (BOT_LEVELS.find(l => l.id === player.difficulty)?.label || 'Normal')
-                        : 'Jugador'}
+                        ? (BOT_LEVELS.find(l => l.id === player.difficulty)?.label || t('wait.difNormal'))
+                        : t('wait.player')}
                     </span>
                   </div>
                 </div>
@@ -201,9 +206,9 @@ export default function WaitingRoom({ gameState, playerId, onLeave }) {
                 {/* Estado Ready / cambiar sitio / quitar bot */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   {player.ready ? (
-                    <span className="badge-ready">Listo</span>
+                    <span className="badge-ready">{t('wait.ready')}</span>
                   ) : (
-                    <span className="badge-waiting">Esperando</span>
+                    <span className="badge-waiting">{t('wait.waiting')}</span>
                   )}
 
                   {totalPlayers > 1 && (
@@ -212,12 +217,10 @@ export default function WaitingRoom({ gameState, playerId, onLeave }) {
                       className={`seat-swap-btn ${swapFrom === player.id ? 'active' : ''} ${swapFrom && swapFrom !== player.id ? 'target' : ''}`}
                       title={
                         swapFrom === player.id
-                          ? 'Cancelar'
-                          : swapFrom
-                            ? `Intercambiar ${swapFromName} con ${player.name}`
-                            : `Cambiar de sitio a ${player.name}`
+                          ? t('common.cancel')
+                          : t('wait.swapHint', { name: player.name })
                       }
-                      aria-label={`Cambiar de sitio a ${player.name}`}
+                      aria-label={t('wait.swapHint', { name: player.name })}
                     >
                       <ArrowLeftRight size={13} />
                     </button>
@@ -227,8 +230,8 @@ export default function WaitingRoom({ gameState, playerId, onLeave }) {
                     <button
                       onClick={() => removeBot(player.id)}
                       className="bot-remove-btn"
-                      title={`Quitar a ${player.name}`}
-                      aria-label={`Quitar a ${player.name}`}
+                      title={t('wait.removeBot', { name: player.name })}
+                      aria-label={t('wait.removeBot', { name: player.name })}
                     >
                       <X size={14} />
                     </button>
@@ -239,8 +242,8 @@ export default function WaitingRoom({ gameState, playerId, onLeave }) {
                     <button
                       onClick={() => kickPlayer(player.id)}
                       className="bot-remove-btn"
-                      title={`Expulsar a ${player.name}`}
-                      aria-label={`Expulsar a ${player.name}`}
+                      title={t('wait.kick', { name: player.name })}
+                      aria-label={t('wait.kick', { name: player.name })}
                     >
                       <UserX size={14} />
                     </button>
@@ -253,7 +256,7 @@ export default function WaitingRoom({ gameState, playerId, onLeave }) {
             {Array.from({ length: 4 - totalPlayers }).map((_, idx) => (
               <div key={`empty-${idx}`} className="player-row-empty">
                 <div className="empty-avatar">?</div>
-                <span>Esperando jugador...</span>
+                <span>{t('wait.emptySlot')}</span>
               </div>
             ))}
           </div>
@@ -262,7 +265,7 @@ export default function WaitingRoom({ gameState, playerId, onLeave }) {
           <div className="bot-add-box">
             <span className="bot-add-label">
               <Bot size={13} />
-              Añadir un bot
+              {t('wait.addBot')}
             </span>
             <div className="bot-add-controls">
               <div className="bot-level-group" role="group" aria-label="Dificultad del bot">
@@ -282,10 +285,10 @@ export default function WaitingRoom({ gameState, playerId, onLeave }) {
                 onClick={addBot}
                 disabled={isFull}
                 className="btn-premium btn-secondary bot-add-btn"
-                title={isFull ? 'La sala está llena' : 'Añadir bot a la mesa'}
+                title={isFull ? t('wait.tableFull') : t('wait.addBot')}
               >
                 <Bot size={15} />
-                {isFull ? 'Mesa llena' : 'Añadir'}
+                {isFull ? t('wait.tableFull') : t('wait.add')}
               </button>
             </div>
           </div>
@@ -298,15 +301,15 @@ export default function WaitingRoom({ gameState, playerId, onLeave }) {
             className={`btn-premium ${me?.ready ? 'btn-secondary' : 'btn-primary'}`}
             style={{ width: '100%', padding: '16px', fontSize: '1.05rem' }}
           >
-            {me?.ready ? 'Cancelar Listo' : 'Marcar que estoy Listo'}
+            {me?.ready ? t('wait.cancelReady') : t('wait.markReady')}
           </button>
-          
+
           <div className="waiting-footer-desc">
             {gameState.teamsEnabled && totalPlayers < 4
-              ? `Las parejas se juegan 2 contra 2: faltan ${4 - totalPlayers} jugador${4 - totalPlayers > 1 ? 'es' : ''} (puedes añadir bots)`
+              ? t('wait.teamsNeed', { n: 4 - totalPlayers })
               : totalPlayers < 2
-                ? 'Se necesitan al menos 2 jugadores para iniciar la partida'
-                : 'El juego comenzará automáticamente cuando todos estén Listos'
+                ? t('wait.needPlayers')
+                : t('wait.willStart')
             }
           </div>
         </div>

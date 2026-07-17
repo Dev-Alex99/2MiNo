@@ -2839,6 +2839,72 @@ body {
   transform: translateX(18px);
 }
 
+/* --- SELECTOR DE IDIOMA --- */
+.lobby-lang {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 20;
+}
+
+.lang-switcher { position: relative; }
+
+.lang-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-main);
+  font-family: var(--font-family);
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.lang-btn:hover { background: rgba(255, 255, 255, 0.09); }
+.lang-switcher.compact .lang-btn { padding: 6px; }
+
+.lang-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 60;
+  list-style: none;
+  margin: 0;
+  padding: 5px;
+  min-width: 150px;
+  border-radius: 12px;
+  background: #141a2a;
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  animation: fade-in 0.15s ease-out;
+}
+
+.lang-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-main);
+  font-family: var(--font-family);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.lang-option:hover { background: rgba(255, 255, 255, 0.06); }
+.lang-option.active { color: var(--primary); }
+
 /* --- CONTADOR DE JUGADORES EN LÍNEA --- */
 .online-badge {
   display: inline-flex;

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Bot, Mic, Shield, Zap } from 'lucide-react';
 import { useVoice } from '../voice/VoiceContext';
+import { useT } from '../i18n/LanguageContext';
 
 /**
  * Los rivales colocados alrededor del tablero, como en una mesa real.
@@ -42,6 +43,7 @@ const Seat = React.memo(function Seat({
   stream, shieldActive, inVoice, handCount, powersCount, showPowers,
   targeting, onSelect
 }) {
+  const { t } = useT();
   return (
     <div
       className={`seat seat-${pos} ${isActive ? 'active' : ''} ${teamClass} ${
@@ -64,14 +66,14 @@ const Seat = React.memo(function Seat({
 
       {/* Las fichas en la mano, como barritas: se ve de un vistazo quién está a
           punto de cerrar, sin tener que leer un número. */}
-      <div className="seat-tiles" title={`${handCount} fichas`}>
+      <div className="seat-tiles" title={t('seat.tiles', { n: handCount })}>
         {Array.from({ length: Math.min(handCount, 10) }).map((_, i) => (
           <i key={i} />
         ))}
         <span className="seat-count">{handCount}</span>
 
         {showPowers && powersCount > 0 && (
-          <span className="seat-powers" title={`${powersCount} cartas de poder`}>
+          <span className="seat-powers" title={t('seat.powers', { n: powersCount })}>
             <Zap size={8} />
             {powersCount}
           </span>

@@ -498,20 +498,20 @@ class DominoGame {
   // Ejecuta una jugada: tileIndex de la mano del jugador en un lado ('left' o 'right')
   playTile(playerId, tileIndex, side) {
     const player = this.players[this.currentPlayerIndex];
-    if (!player || player.id !== playerId) return { success: false, error: 'No es tu turno' };
-    if (this.status !== 'playing') return { success: false, error: 'El juego no está activo' };
+    if (!player || player.id !== playerId) return { success: false, error: 'srv.err.notYourTurn' };
+    if (this.status !== 'playing') return { success: false, error: 'srv.err.gameNotActive' };
 
     const tile = player.hand[tileIndex];
-    if (!tile) return { success: false, error: 'Ficha no encontrada en la mano' };
+    if (!tile) return { success: false, error: 'srv.err.tileNotInHand' };
 
     const isLeftFrozenForMe = this.activeEffects.frozenEnd === 'left' && this.activeEffects.frozenEndOwnerId !== playerId;
     const isRightFrozenForMe = this.activeEffects.frozenEnd === 'right' && this.activeEffects.frozenEndOwnerId !== playerId;
 
     if (side === 'left' && isLeftFrozenForMe) {
-      return { success: false, error: 'El extremo izquierdo está congelado por un poder enemigo' };
+      return { success: false, error: 'srv.err.leftFrozen' };
     }
     if (side === 'right' && isRightFrozenForMe) {
-      return { success: false, error: 'El extremo derecho está congelado por un poder enemigo' };
+      return { success: false, error: 'srv.err.rightFrozen' };
     }
 
     if (this.board.length === 0) {
@@ -577,7 +577,7 @@ class DominoGame {
     }
 
     if (!isValid) {
-      return { success: false, error: 'Movimiento inválido para ese lado' };
+      return { success: false, error: 'srv.err.invalidMove' };
     }
 
     // Remover ficha de la mano del jugador
@@ -600,10 +600,10 @@ class DominoGame {
   // Robar del pozo
   drawTile(playerId) {
     const player = this.players[this.currentPlayerIndex];
-    if (!player || player.id !== playerId) return { success: false, error: 'No es tu turno' };
-    if (!this.drawEnabled) return { success: false, error: 'En esta sala no se roba del pozo: si no tienes jugada, pasa' };
-    if (this.boneyard.length === 0) return { success: false, error: 'El pozo está vacío' };
-    if (this.hasValidMove(playerId)) return { success: false, error: 'Tienes jugadas disponibles, no puedes robar' };
+    if (!player || player.id !== playerId) return { success: false, error: 'srv.err.notYourTurn' };
+    if (!this.drawEnabled) return { success: false, error: 'srv.err.drawDisabled' };
+    if (this.boneyard.length === 0) return { success: false, error: 'srv.err.boneyardEmpty' };
+    if (this.hasValidMove(playerId)) return { success: false, error: 'srv.err.hasMovesNoDraw' };
 
     const drawnTile = this.boneyard.pop();
     player.hand.push(drawnTile);
@@ -615,12 +615,12 @@ class DominoGame {
   // Pasar turno
   passTurn(playerId) {
     const player = this.players[this.currentPlayerIndex];
-    if (!player || player.id !== playerId) return { success: false, error: 'No es tu turno' };
+    if (!player || player.id !== playerId) return { success: false, error: 'srv.err.notYourTurn' };
     // Solo estás obligado a robar si la sala permite robar.
     if (this.drawEnabled && this.boneyard.length > 0) {
-      return { success: false, error: 'Quedan fichas en el pozo, debes robar' };
+      return { success: false, error: 'srv.err.mustDraw' };
     }
-    if (this.hasValidMove(playerId)) return { success: false, error: 'Tienes jugadas disponibles, no puedes pasar' };
+    if (this.hasValidMove(playerId)) return { success: false, error: 'srv.err.hasMovesNoPass' };
 
     // Un pase es información pública: revela que ese jugador no tiene NINGUNO
     // de los dos extremos. Lo guardamos para que los bots difíciles bloqueen.
@@ -809,30 +809,30 @@ class DominoGame {
   // Ejecuta el uso de una carta de poder
   usePowerCard(playerId, cardId, targetId, tileIndex) {
     if (!this.powersEnabled) {
-      return { success: false, error: 'Esta sala juega en modo clásico, sin cartas de poder' };
+      return { success: false, error: 'srv.err.classicNoPowers' };
     }
 
     const player = this.players.find(p => p.id === playerId);
-    if (!player) return { success: false, error: 'Jugador no encontrado' };
+    if (!player) return { success: false, error: 'srv.err.playerNotFound' };
 
     const activePlayer = this.players[this.currentPlayerIndex];
     if (!activePlayer || activePlayer.id !== playerId) {
-      return { success: false, error: 'Solo puedes usar cartas de poder en tu turno' };
+      return { success: false, error: 'srv.err.powerOnlyYourTurn' };
     }
     if (this.status !== 'playing') {
-      return { success: false, error: 'El juego no está en curso' };
+      return { success: false, error: 'srv.err.gameNotInProgress' };
     }
 
     // Encontrar la carta en la mano de poderes del jugador
     const cardIdx = player.powers.findIndex(c => c.id === cardId);
-    if (cardIdx === -1) return { success: false, error: 'No posees esta carta de poder' };
+    if (cardIdx === -1) return { success: false, error: 'srv.err.dontOwnCard' };
 
     // Si el objetivo es otro jugador, verificar escudo
     let targetPlayer = null;
     if (targetId && targetId !== 'left' && targetId !== 'right') {
       targetPlayer = this.players.find(p => p.id === targetId);
       if (targetPlayer && targetPlayer.id === playerId) {
-        return { success: false, error: 'No puedes seleccionarte a ti mismo como objetivo' };
+        return { success: false, error: 'srv.err.cantTargetSelf' };
       }
       if (targetPlayer && targetPlayer.shieldActive && cardId !== 'destiny_steal') {
         // Consumimos el poder pero el escudo lo anula
@@ -849,11 +849,11 @@ class DominoGame {
 
       case 'smuggle':
         if (tileIndex === undefined || tileIndex === null) {
-          return { success: false, error: 'Debes seleccionar una ficha para regalar' };
+          return { success: false, error: 'srv.err.selectTileToGift' };
         }
-        if (!targetPlayer) return { success: false, error: 'Debes seleccionar un oponente' };
+        if (!targetPlayer) return { success: false, error: 'srv.err.selectOpponent' };
         const smuggleTile = player.hand[tileIndex];
-        if (!smuggleTile) return { success: false, error: 'Ficha no encontrada en tu mano' };
+        if (!smuggleTile) return { success: false, error: 'srv.err.tileNotInHand' };
 
         // Transferir ficha
         player.hand.splice(tileIndex, 1);
@@ -861,7 +861,7 @@ class DominoGame {
         break;
 
       case 'spy_eye':
-        if (!targetPlayer) return { success: false, error: 'Debes seleccionar un oponente' };
+        if (!targetPlayer) return { success: false, error: 'srv.err.selectOpponent' };
         this.activeEffects.spyEyeTargetId = targetPlayer.id;
         this.activeEffects.spyEyeOwnerId = playerId;
         this.activeEffects.spyEyeEndTime = Date.now() + 10000; // 10 segundos de revelación
@@ -872,9 +872,9 @@ class DominoGame {
         break;
 
       case 'draw_penalty':
-        if (!targetPlayer) return { success: false, error: 'Debes seleccionar un oponente' };
+        if (!targetPlayer) return { success: false, error: 'srv.err.selectOpponent' };
         if (this.boneyard.length === 0) {
-          return { success: false, error: 'El pozo de fichas está vacío' };
+          return { success: false, error: 'srv.err.boneyardEmpty' };
         }
         // El oponente roba 1 ficha
         const penaltyTile = this.boneyard.pop();
@@ -887,13 +887,13 @@ class DominoGame {
 
       case 'trade':
         if (tileIndex === undefined || tileIndex === null) {
-          return { success: false, error: 'Debes seleccionar una ficha para cambiar' };
+          return { success: false, error: 'srv.err.selectTileToTrade' };
         }
         if (this.boneyard.length === 0) {
-          return { success: false, error: 'El pozo de fichas está vacío' };
+          return { success: false, error: 'srv.err.boneyardEmpty' };
         }
         const tradeTile = player.hand[tileIndex];
-        if (!tradeTile) return { success: false, error: 'Ficha no encontrada en tu mano' };
+        if (!tradeTile) return { success: false, error: 'srv.err.tileNotInHand' };
 
         // Intercambiar
         const boneyardTile = this.boneyard.pop();
@@ -908,16 +908,16 @@ class DominoGame {
 
       case 'freeze':
         if (targetId !== 'left' && targetId !== 'right') {
-          return { success: false, error: 'Debes seleccionar qué extremo congelar' };
+          return { success: false, error: 'srv.err.selectEndToFreeze' };
         }
         this.activeEffects.frozenEnd = targetId;
         this.activeEffects.frozenEndOwnerId = playerId;
         break;
 
       case 'destiny_steal':
-        if (!targetPlayer) return { success: false, error: 'Debes seleccionar un oponente' };
+        if (!targetPlayer) return { success: false, error: 'srv.err.selectOpponent' };
         if (!targetPlayer.powers || targetPlayer.powers.length === 0) {
-          return { success: false, error: 'El oponente no tiene cartas de poder' };
+          return { success: false, error: 'srv.err.opponentNoPowers' };
         }
         // Robar carta al azar
         const stolenIdx = Math.floor(Math.random() * targetPlayer.powers.length);
@@ -928,7 +928,7 @@ class DominoGame {
         break;
 
       case 'mind_swap':
-        if (!targetPlayer) return { success: false, error: 'Debes seleccionar un oponente' };
+        if (!targetPlayer) return { success: false, error: 'srv.err.selectOpponent' };
         const tempHand = player.hand;
         player.hand = targetPlayer.hand;
         targetPlayer.hand = tempHand;
@@ -936,10 +936,10 @@ class DominoGame {
 
       case 'tile_demolition':
         if (targetId !== 'left' && targetId !== 'right') {
-          return { success: false, error: 'Debes seleccionar qué extremo demoler' };
+          return { success: false, error: 'srv.err.selectEndToDemolish' };
         }
         if (this.board.length === 0) {
-          return { success: false, error: 'El tablero está vacío' };
+          return { success: false, error: 'srv.err.boardEmpty' };
         }
         if (targetId === 'left') {
           this.board.shift();
@@ -955,7 +955,7 @@ class DominoGame {
 
       case 'boneyard_reset':
         const handCount = player.hand.length;
-        if (handCount === 0) return { success: false, error: 'No tienes fichas en tu mano' };
+        if (handCount === 0) return { success: false, error: 'srv.err.noTilesInHand' };
         this.boneyard.push(...player.hand);
         player.hand = [];
         this.shuffle(this.boneyard);
@@ -966,7 +966,7 @@ class DominoGame {
         break;
 
       case 'magnetic_pull':
-        if (!targetPlayer) return { success: false, error: 'Debes seleccionar un oponente' };
+        if (!targetPlayer) return { success: false, error: 'srv.err.selectOpponent' };
         let pulls = 0;
         while (pulls < 3 && this.boneyard.length > 0 && !this.hasValidMove(targetPlayer.id)) {
           targetPlayer.hand.push(this.boneyard.pop());
@@ -976,7 +976,7 @@ class DominoGame {
 
       case 'russian_roulette':
         const numPlayers = this.players.length;
-        if (numPlayers < 2) return { success: false, error: 'Se necesitan al menos 2 jugadores' };
+        if (numPlayers < 2) return { success: false, error: 'srv.err.needTwoPlayers' };
         const passedTiles = this.players.map(p => {
           if (p.hand.length === 0) return null;
           const idx = Math.floor(Math.random() * p.hand.length);
@@ -994,7 +994,7 @@ class DominoGame {
         break;
 
       default:
-        return { success: false, error: 'Poder no reconocido' };
+        return { success: false, error: 'srv.err.powerNotRecognized' };
     }
 
     // Quitar la carta usada de la mano del jugador

@@ -1,11 +1,15 @@
 import React from 'react';
 import { Trophy, RefreshCw, ChevronRight, Award, AwardIcon } from 'lucide-react';
 import { socket } from '../socket';
+import { useT } from '../i18n/LanguageContext';
 
 export default function EndGameModal({ gameState, playerId }) {
+  const { t } = useT();
+  // Nombres de equipo traducidos en cliente (el servidor ya no manda el texto).
+  const teamLabel = (i) => (i === 0 ? t('team.a') : t('team.b'));
   const {
     status, roundWinner, gameWinner, players,
-    teamsEnabled, teamNames = ['Equipo A', 'Equipo B'],
+    teamsEnabled,
     roundWinnerTeam, gameWinnerTeam
   } = gameState;
 
@@ -24,7 +28,7 @@ export default function EndGameModal({ gameState, playerId }) {
     : winner?.id === playerId;
 
   // Cómo se llama el ganador en pantalla
-  const winnerLabel = isTeamWin ? teamNames[winningTeam] : winner?.name;
+  const winnerLabel = isTeamWin ? teamLabel(winningTeam) : winner?.name;
 
   const handleNextAction = () => {
     if (isGameEnd) {
@@ -57,15 +61,15 @@ export default function EndGameModal({ gameState, playerId }) {
 
             <div className="modal-title-box">
               <span className="modal-meta-label">
-                ¡Partida Completada!
+                {t('end.gameDone')}
               </span>
               <h2 className="modal-title">
-                {isMeWinner ? '¡Felicidades, Ganaste!' : `Ganador: ${winnerLabel}`}
+                {isMeWinner ? t('end.congrats') : t('end.winner', { name: winnerLabel })}
               </h2>
             </div>
 
             <p style={{ color: '#9ca3af', fontSize: '0.85rem' }}>
-              Has alcanzado el límite de {gameState.maxScore} puntos y has conquistado la mesa de dominó.
+              {t('end.reached', { n: gameState.maxScore })}
             </p>
           </>
         ) : (
@@ -77,18 +81,18 @@ export default function EndGameModal({ gameState, playerId }) {
 
             <div className="modal-title-box">
               <span className="modal-meta-label">
-                Fin de la Ronda
+                {t('end.roundEnd')}
               </span>
               <h2 className="modal-title" style={{ fontSize: '1.4rem' }}>
                 {roundWinner === 'tie'
-                  ? '¡Ronda Empatada (Tranca)!'
-                  : (isMeWinner ? '¡Ganaste la Ronda!' : `Ronda para: ${winnerLabel}`)}
+                  ? t('end.roundTie')
+                  : (isMeWinner ? t('end.roundWon') : t('end.roundFor', { name: winnerLabel }))}
               </h2>
             </div>
 
             {roundWinner !== 'tie' && (
               <div className="modal-desc-box">
-                Suma de manos enemigas añadida al marcador global.
+                {t('end.roundDesc')}
               </div>
             )}
           </>
@@ -97,19 +101,19 @@ export default function EndGameModal({ gameState, playerId }) {
         {/* Tabla de Puntuaciones al finalizar. En parejas puntúa el equipo,
             así que el marcador individual no significa nada aquí. */}
         <div className="modal-table">
-          <span className="modal-table-title">Marcador General</span>
+          <span className="modal-table-title">{t('end.scoreboard')}</span>
 
           {teamsEnabled
-            ? [0, 1].map(t => (
-                <div key={t} className={`modal-table-row ${t === winningTeam ? 'highlight' : ''}`}>
+            ? [0, 1].map(tm => (
+                <div key={tm} className={`modal-table-row ${tm === winningTeam ? 'highlight' : ''}`}>
                   <span className="modal-row-name">
-                    {t === winningTeam && <Award size={14} style={{ color: '#f59e0b' }} />}
-                    {teamNames[t]} {t === me?.team && '(Tú)'}
+                    {tm === winningTeam && <Award size={14} style={{ color: '#f59e0b' }} />}
+                    {teamLabel(tm)} {tm === me?.team && `(${t('common.you')})`}
                     <span className="modal-row-members">
-                      {players.filter(p => p.team === t).map(p => p.name).join(' · ')}
+                      {players.filter(p => p.team === tm).map(p => p.name).join(' · ')}
                     </span>
                   </span>
-                  <span className="modal-row-score">{gameState.teamScores?.[t] ?? 0} pts</span>
+                  <span className="modal-row-score">{gameState.teamScores?.[tm] ?? 0} {t('common.points')}</span>
                 </div>
               ))
             : players.map(p => {
@@ -121,7 +125,7 @@ export default function EndGameModal({ gameState, playerId }) {
                   >
                     <span className="modal-row-name">
                       {isWinner && <Award size={14} style={{ color: '#f59e0b' }} />}
-                      {p.name} {p.id === playerId && '(Tú)'}
+                      {p.name} {p.id === playerId && `(${t('common.you')})`}
                     </span>
                     <span className="modal-row-score">{p.score} pts</span>
                   </div>
@@ -138,11 +142,11 @@ export default function EndGameModal({ gameState, playerId }) {
           {isGameEnd ? (
             <>
               <RefreshCw size={18} />
-              Jugar de Nuevo
+              {t('end.playAgain')}
             </>
           ) : (
             <>
-              Siguiente Ronda
+              {t('end.nextRound')}
               <ChevronRight size={18} />
             </>
           )}

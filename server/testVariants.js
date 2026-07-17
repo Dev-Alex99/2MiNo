@@ -73,7 +73,7 @@ function runTests() {
 
   const denied = classic.usePowerCard('p1', 'shield', null, null);
   assert(denied.success === false, 'usePowerCard se rechaza en modo clásico');
-  assert(/clásico/i.test(denied.error), `El error explica el motivo: "${denied.error}"`);
+  assert(denied.error === 'srv.err.classicNoPowers', `El error explica el motivo (clave i18n): "${denied.error}"`);
 
   // El estado enviado al cliente refleja la configuración
   const state = classic.getGameStateForPlayer('p1');

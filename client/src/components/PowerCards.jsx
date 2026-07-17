@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useT } from '../i18n/LanguageContext';
 
 // Renderiza un icono SVG personalizado vectorizado para cada carta de poder
 const PowerCardIcon = ({ id }) => {
@@ -141,15 +142,6 @@ const PowerCardIcon = ({ id }) => {
   }
 };
 
-const getPowerTypeLabel = (type) => {
-  switch (type) {
-    case 'buff': return 'Beneficio';
-    case 'attack': return 'Ataque';
-    case 'defense': return 'Defensa';
-    case 'caos': return 'Caos';
-    default: return 'Poder';
-  }
-};
 
 export default function PowerCards({ 
   powers = [], 
@@ -160,6 +152,7 @@ export default function PowerCards({
   pendingTargetType,
   setPendingTargetType
 }) {
+  const { t } = useT();
   const [hoveredCard, setHoveredCard] = useState(null);
 
   const handleCardClick = (card) => {
@@ -196,7 +189,7 @@ export default function PowerCards({
       {/* En móvil esta cabecera se oculta: las cartas se explican solas y ahí
           cada píxel se lo quita al tablero. */}
       <div className="power-cards-title">
-        Cartas de Poder ({powers.length})
+        {t('powers.title')} ({powers.length})
       </div>
 
       <div className="power-cards-container">
@@ -211,13 +204,13 @@ export default function PowerCards({
               onClick={() => handleCardClick(card)}
               onMouseEnter={() => setHoveredCard(card)}
               onMouseLeave={() => setHoveredCard(null)}
-              title={card.desc}
+              title={t(`pw.${card.id}.d`)}
             >
               <span className="power-card-icon">
                 <PowerCardIcon id={card.id} />
               </span>
-              <span className="power-card-title">{card.name}</span>
-              <span className="power-card-type-label">{getPowerTypeLabel(card.type)}</span>
+              <span className="power-card-title">{t(`pw.${card.id}.n`)}</span>
+              <span className="power-card-type-label">{t(`ptype.${card.type || 'buff'}`)}</span>
             </div>
           );
         })}
@@ -238,10 +231,10 @@ export default function PowerCards({
           backdropFilter: 'blur(4px)',
           boxShadow: '0 4px 12px rgba(0,0,0,0.5)'
         }}>
-          <strong>{(hoveredCard || selectedPower).name}:</strong> {(hoveredCard || selectedPower).desc}
-          {isSelectedPrompt(selectedPower, pendingTargetType) && (
+          <strong>{t(`pw.${(hoveredCard || selectedPower).id}.n`)}:</strong> {t(`pw.${(hoveredCard || selectedPower).id}.d`)}
+          {selectedPower && promptKey(pendingTargetType) && (
             <div style={{ color: '#34d399', fontWeight: 700, marginTop: '4px', animation: 'pulse-glow 1.5s infinite' }}>
-              {isSelectedPrompt(selectedPower, pendingTargetType)}
+              {t(promptKey(pendingTargetType))}
             </div>
           )}
         </div>
@@ -250,20 +243,13 @@ export default function PowerCards({
   );
 }
 
-function isSelectedPrompt(card, pendingType) {
-  if (!card) return null;
+function promptKey(pendingType) {
   switch (pendingType) {
-    case 'smuggle_select_tile':
-      return '➔ Primero selecciona la ficha de tu mano que regalarás.';
-    case 'smuggle_select_player':
-      return '➔ Ahora haz clic sobre el oponente que la recibirá.';
-    case 'player_target':
-      return '➔ Haz clic sobre un oponente para lanzar el poder.';
-    case 'end_target':
-      return '➔ Haz clic en uno de los círculos extremos del tablero.';
-    case 'hand_tile_target':
-      return '➔ Selecciona una ficha de tu mano para cambiarla.';
-    default:
-      return null;
+    case 'smuggle_select_tile': return 'prompt.smuggleTile';
+    case 'smuggle_select_player': return 'prompt.smugglePlayer';
+    case 'player_target': return 'prompt.player';
+    case 'end_target': return 'prompt.end';
+    case 'hand_tile_target': return 'prompt.handTile';
+    default: return null;
   }
 }

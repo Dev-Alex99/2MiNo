@@ -2,14 +2,15 @@ import React, { useState } from 'react';
 import { Play, Plus, ArrowRight, User, Zap, Layers, Settings2, Users, Download, Medal, ChevronDown, Zap as Bolt, Globe, Lock } from 'lucide-react';
 import { socket } from '../socket';
 import RoomList from './RoomList';
-
-// Debe coincidir con VARIANTS en server/gameLogic.js
-const VARIANT_INFO = {
-  6: { label: 'Doble 6', desc: '28 fichas · 7 en mano · 100 pts' },
-  9: { label: 'Doble 9', desc: '55 fichas · 10 en mano · 200 pts' }
-};
+import LanguageSwitcher from './LanguageSwitcher';
+import { useT } from '../i18n/LanguageContext';
 
 export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuickPlay, publicRooms = [], roomsLoading, stats }) {
+  const { t } = useT();
+  const VARIANT_INFO = {
+    6: { label: t('opt.double', { n: 6 }), desc: t('opt.d6desc') },
+    9: { label: t('opt.double', { n: 9 }), desc: t('opt.d9desc') }
+  };
   const [roomCode, setRoomCode] = useState('');
   const [error, setError] = useState('');
   // Opciones de sala (solo aplican al CREAR; al unirse manda la config del anfitrión)
@@ -22,7 +23,7 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
   const [isPublic, setIsPublic] = useState(true);
 
   const requireName = () => {
-    if (!name.trim()) { setError('Por favor, ingresa tu nombre.'); return false; }
+    if (!name.trim()) { setError(t('lobby.nameRequired')); return false; }
     setError('');
     return true;
   };
@@ -40,10 +41,10 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
 
   const optionsSummary = [
     VARIANT_INFO[maxPip].label,
-    teamsEnabled ? 'Parejas' : 'Individual',
-    powersEnabled ? 'Poderes' : 'Clásico',
-    drawEnabled ? null : 'Sin pozo',
-    `${maxScore ?? (maxPip === 9 ? 200 : 100)} pts`
+    teamsEnabled ? t('mode.teams') : t('mode.individual'),
+    powersEnabled ? t('rooms.powers') : t('mode.classic'),
+    drawEnabled ? null : t('rooms.noDraw'),
+    `${maxScore ?? (maxPip === 9 ? 200 : 100)} ${t('common.points')}`
   ].filter(Boolean).join(' · ');
 
   const handleCreate = (e) => {
@@ -59,11 +60,11 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
   const handleJoin = (e) => {
     e.preventDefault();
     if (!name.trim()) {
-      setError('Por favor, ingresa tu nombre.');
+      setError(t('lobby.nameRequired'));
       return;
     }
     if (roomCode.trim().length !== 4) {
-      setError('El código de sala debe ser de 4 letras.');
+      setError(t('lobby.codeInvalid'));
       return;
     }
     setError('');
@@ -75,23 +76,26 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
       {/* Elementos decorativos de fondo flotando */}
       <div className="lobby-glow-1"></div>
       <div className="lobby-glow-2"></div>
-      
+
+      {/* Selector de idioma, esquina superior */}
+      <div className="lobby-lang"><LanguageSwitcher /></div>
+
       {/* Título animado flotante */}
       <div className="lobby-header">
         <h1 className="lobby-title">
           DOMINÓ ONLINE
         </h1>
         <p className="lobby-subtitle">
-          Juega al instante o crea tu sala con amigos
+          {t('lobby.subtitle')}
         </p>
 
         {stats && stats.online > 0 && (
-          <div className="online-badge" title="Jugadores conectados ahora mismo">
+          <div className="online-badge">
             <span className="online-dot" />
             <strong>{stats.online}</strong>
-            {stats.online === 1 ? ' en línea' : ' en línea'}
+            {' '}{t('lobby.online')}
             {stats.playing > 0 && (
-              <span className="online-playing"> · {stats.playing} jugando</span>
+              <span className="online-playing"> · {t('lobby.playing', { n: stats.playing })}</span>
             )}
           </div>
         )}
@@ -105,11 +109,11 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
           <div className="lobby-form-field">
             <label className="lobby-form-label">
               <User size={14} />
-              Tu Nombre / Apodo
+              {t('lobby.name')}
             </label>
             <input
               type="text"
-              placeholder="Ej. Alejandro, ElReyDelPaso..."
+              placeholder={t('lobby.namePlaceholder')}
               value={name}
               onChange={(e) => setName(e.target.value.substring(0, 16))}
               className="input-premium"
@@ -130,14 +134,14 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
             className="btn-premium btn-primary quick-play-btn"
           >
             <Bolt size={18} fill="currentColor" />
-            Jugar Ahora
+            {t('lobby.playNow')}
           </button>
 
           {/* Salas públicas abiertas, en vivo */}
           <div className="lobby-form-field">
             <label className="lobby-form-label">
               <Globe size={14} />
-              Salas abiertas
+              {t('lobby.openRooms')}
             </label>
             <RoomList rooms={publicRooms} loading={roomsLoading} onJoin={handleJoinFromList} />
           </div>
@@ -155,7 +159,7 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
               <span className="options-summary-main">
                 <span className="options-summary-title">
                   <Settings2 size={14} />
-                  Opciones de la sala
+                  {t('opt.title')}
                 </span>
                 <span className="options-summary-value">{optionsSummary}</span>
               </span>
@@ -166,7 +170,7 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
               <div className="options-panel">
 
             {/* Variante del dominó */}
-            <div className="segmented" role="group" aria-label="Variante del dominó">
+            <div className="segmented" role="group" aria-label={t('opt.variant')}>
               {[6, 9].map((pip) => (
                 <button
                   key={pip}
@@ -185,7 +189,7 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
             </div>
 
             {/* Límite de puntos */}
-            <div className="segmented" role="group" aria-label="Límite de puntos">
+            <div className="segmented" role="group" aria-label={t('opt.score')}>
               {[null, 100, 200, 300].map((pts) => (
                 <button
                   key={pts ?? 'auto'}
@@ -196,10 +200,10 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
                 >
                   <span className="segmented-title">
                     {pts === null ? <Medal size={13} /> : null}
-                    {pts === null ? 'Auto' : pts}
+                    {pts === null ? t('opt.scoreAuto') : pts}
                   </span>
                   <span className="segmented-sub">
-                    {pts === null ? `${maxPip === 9 ? 200 : 100} pts` : 'puntos'}
+                    {pts === null ? `${maxPip === 9 ? 200 : 100} ${t('common.points')}` : t('common.points')}
                   </span>
                 </button>
               ))}
@@ -215,12 +219,10 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
               <span className="option-toggle-text">
                 <span className="option-toggle-title">
                   <Zap size={14} />
-                  Cartas de Poder
+                  {t('opt.powers')}
                 </span>
                 <span className="option-toggle-desc">
-                  {powersEnabled
-                    ? 'Poderes especiales activados'
-                    : 'Dominó clásico, sin poderes'}
+                  {powersEnabled ? t('opt.powersOn') : t('opt.powersOff')}
                 </span>
               </span>
               <span className="switch" aria-hidden="true">
@@ -238,12 +240,10 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
               <span className="option-toggle-text">
                 <span className="option-toggle-title">
                   <Users size={14} />
-                  Jugar en Parejas
+                  {t('opt.teams')}
                 </span>
                 <span className="option-toggle-desc">
-                  {teamsEnabled
-                    ? '2 contra 2 · requiere 4 jugadores'
-                    : 'Cada uno a lo suyo'}
+                  {teamsEnabled ? t('opt.teamsOn') : t('opt.teamsOff')}
                 </span>
               </span>
               <span className="switch" aria-hidden="true">
@@ -261,12 +261,10 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
               <span className="option-toggle-text">
                 <span className="option-toggle-title">
                   <Download size={14} />
-                  Robar del Pozo
+                  {t('opt.draw')}
                 </span>
                 <span className="option-toggle-desc">
-                  {drawEnabled
-                    ? 'Sin jugada, robas del pozo'
-                    : 'Sin jugada, pasas turno'}
+                  {drawEnabled ? t('opt.drawOn') : t('opt.drawOff')}
                 </span>
               </span>
               <span className="switch" aria-hidden="true">
@@ -284,12 +282,10 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
               <span className="option-toggle-text">
                 <span className="option-toggle-title">
                   {isPublic ? <Globe size={14} /> : <Lock size={14} />}
-                  {isPublic ? 'Sala Pública' : 'Sala Privada'}
+                  {isPublic ? t('opt.public') : t('opt.private')}
                 </span>
                 <span className="option-toggle-desc">
-                  {isPublic
-                    ? 'Cualquiera puede verla y entrar'
-                    : 'Solo se entra con el código'}
+                  {isPublic ? t('opt.publicDesc') : t('opt.privateDesc')}
                 </span>
               </span>
               <span className="switch" aria-hidden="true">
@@ -309,12 +305,12 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
               className="btn-premium btn-primary"
             >
               <Plus size={18} />
-              Crear Nueva Sala
+              {t('lobby.createRoom')}
             </button>
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', margin: '4px 0' }}>
               <span className="separator" style={{ flexGrow: 1 }}></span>
-              <span className="lobby-form-label" style={{ margin: 0 }}>o únete a una</span>
+              <span className="lobby-form-label" style={{ margin: 0 }}>{t('lobby.or')}</span>
               <span className="separator" style={{ flexGrow: 1 }}></span>
             </div>
 
@@ -322,7 +318,7 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
             <div className="lobby-join-group">
               <input
                 type="text"
-                placeholder="Código (Ej. ABCD)"
+                placeholder={t('lobby.codePlaceholder')}
                 value={roomCode}
                 onChange={(e) => setRoomCode(e.target.value.toUpperCase().substring(0, 4))}
                 className="input-premium"
@@ -344,8 +340,10 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
 
       {/* Footer minimalista */}
       <div className="waiting-footer-desc" style={{ position: 'absolute', bottom: '16px' }}>
-        Dominó {VARIANT_INFO[maxPip].label} · {teamsEnabled ? 'Parejas' : 'Individual'}
-        {' · '}{powersEnabled ? 'Con Poderes' : 'Clásico'}{!drawEnabled && ' · Sin Pozo'} · Creado con ❤️
+        {t('lobby.footer', {
+          variant: VARIANT_INFO[maxPip].label,
+          mode: `${teamsEnabled ? t('mode.teams') : t('mode.individual')} · ${powersEnabled ? t('mode.withPowers') : t('mode.classic')}${!drawEnabled ? ' · ' + t('rooms.noDraw') : ''}`
+        })}
       </div>
     </div>
   );

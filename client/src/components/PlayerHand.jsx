@@ -1,6 +1,7 @@
 import React from 'react';
 import { Download, ArrowLeftRight, HelpCircle } from 'lucide-react';
 import DominoTile from './DominoTile';
+import { useT } from '../i18n/LanguageContext';
 
 export default function PlayerHand({
   hand,
@@ -18,7 +19,8 @@ export default function PlayerHand({
   wildcardActive = false,
   drawEnabled = true
 }) {
-  
+  const { t } = useT();
+
   // Verifica si una ficha es jugable en el tablero actual
   const getPlayableSides = (tile) => {
     if (!isMyTurn) return { left: false, right: false };
@@ -71,7 +73,7 @@ export default function PlayerHand({
                 style={{ padding: '8px 20px', fontSize: '0.8rem' }}
               >
                 <Download size={16} />
-                No tienes jugadas. Robar del Pozo ({boneyardCount})
+                {t('hand.drawFromBoneyard', { n: boneyardCount })}
               </button>
             ) : (
               <button
@@ -80,30 +82,28 @@ export default function PlayerHand({
                 style={{ padding: '8px 20px', fontSize: '0.8rem', color: '#f59e0b' }}
               >
                 <ArrowLeftRight size={16} />
-                {drawEnabled
-                  ? 'No tienes jugadas ni pozo. Pasar Turno'
-                  : 'No tienes jugadas. Pasar Turno'}
+                {drawEnabled ? t('hand.passNoDraw') : t('hand.passNoPlay')}
               </button>
             )
           ) : selectedTileIndex !== null ? (
             <div className="select-hint-box">
-              <span>Selecciona un extremo del tablero para colocar la ficha</span>
-              <button 
+              <span>{t('hand.selectEnd')}</span>
+              <button
                 onClick={() => setSelectedTileIndex(null)}
                 className="select-hint-cancel"
               >
-                Cancelar
+                {t('common.cancel')}
               </button>
             </div>
           ) : (
             <div className="turn-notification">
               <span className="turn-notification-ping"></span>
-              Es tu turno - Selecciona una ficha
+              {t('hand.yourTurnSelect')}
             </div>
           )
         ) : (
           <div className="waiting-turn-msg">
-            Esperando tu turno...
+            {t('hand.waiting')}
           </div>
         )}
       </div>
@@ -137,7 +137,7 @@ export default function PlayerHand({
               {/* Indicador visual rápido de que la ficha puede jugarse en ambos lados */}
               {isMyTurn && left && right && !isSelected && (
                 <span className="tile-double-badge">
-                  Ambos
+                  {t('hand.both')}
                 </span>
               )}
             </div>

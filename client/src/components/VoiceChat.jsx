@@ -1,21 +1,23 @@
 import React, { useState } from 'react';
 import { Mic, MicOff, PhoneOff, Loader2, AlertCircle, Radio, Video, VideoOff, Settings2, X } from 'lucide-react';
 import { useVoice } from '../voice/VoiceContext';
+import { useT } from '../i18n/LanguageContext';
 import DeviceSelector from './DeviceSelector';
 
 // Estado de la malla resumido para el usuario: no le interesa "ICE failed",
 // le interesa si se le oye.
-function connectionLabel(peerStates, players, playerId) {
+function connectionLabel(peerStates, players, playerId, t) {
   const others = players.filter(p => p.inVoice && p.id !== playerId);
-  if (others.length === 0) return 'Nadie más en la voz';
+  if (others.length === 0) return t('voice.nobody');
   const connected = others.filter(p => peerStates[p.id] === 'connected').length;
   const failed = others.filter(p => peerStates[p.id] === 'failed').length;
-  if (failed > 0 && connected === 0) return 'Sin conexión con los demás';
-  if (connected < others.length) return `Conectando… (${connected}/${others.length})`;
-  return `Hablando con ${connected}`;
+  if (failed > 0 && connected === 0) return t('voice.noConn');
+  if (connected < others.length) return t('voice.connectingN', { a: connected, b: others.length });
+  return t('voice.talkingWith', { n: connected });
 }
 
 export default function VoiceChat({ playerId, players, nudge = false }) {
+  const { t } = useT();
   // El estado vive en el provider (App) para que la llamada sobreviva al paso
   // de la sala de espera al tablero.
   const [showDevices, setShowDevices] = useState(false);
@@ -42,13 +44,13 @@ export default function VoiceChat({ playerId, players, nudge = false }) {
               <span className="voice-nudge-icon">🎙️</span>
               <span>
                 {inVoice.length > 0
-                  ? `¡${inVoice.length} ${inVoice.length === 1 ? 'jugador está' : 'jugadores están'} en la voz! Únete y habla con la mesa`
-                  : 'Activa tu micro y habla con la mesa en tiempo real'}
+                  ? t('voice.nudgeSome', { n: inVoice.length })
+                  : t('voice.nudge')}
               </span>
               <button
                 className="voice-nudge-close"
                 onClick={() => setNudgeDismissed(true)}
-                aria-label="Ocultar aviso"
+                aria-label={t('common.cancel')}
               >
                 <X size={12} />
               </button>
@@ -58,12 +60,12 @@ export default function VoiceChat({ playerId, players, nudge = false }) {
             onClick={join}
             disabled={connecting}
             className={`voice-join-btn ${showNudge ? 'inviting' : ''}`}
-            title="Entrar al chat de voz de la sala"
+            title={t('voice.join')}
           >
             {connecting ? <Loader2 size={15} className="voice-spin" /> : <Mic size={15} />}
             {/* Etiqueta completa donde hay sitio (sala de espera, nudge=true);
                 corta en la barra de partida. */}
-            <span>{connecting ? 'Conectando…' : (nudge ? 'Entrar a la voz' : 'Voz')}</span>
+            <span>{connecting ? t('voice.connecting') : (nudge ? t('voice.join') : t('voice.short'))}</span>
             {inVoice.length > 0 && (
               <span className="voice-count">{inVoice.length}</span>
             )}
@@ -74,7 +76,7 @@ export default function VoiceChat({ playerId, players, nudge = false }) {
           <button
             onClick={toggleMute}
             className={`voice-mic-btn ${muted ? 'muted' : ''} ${speaking[playerId] ? 'speaking' : ''}`}
-            title={muted ? 'Activar micrófono' : 'Silenciar micrófono'}
+            title={muted ? t('voice.unmute') : t('voice.mute')}
             aria-pressed={muted}
           >
             {muted ? <MicOff size={16} /> : <Mic size={16} />}
@@ -83,7 +85,7 @@ export default function VoiceChat({ playerId, players, nudge = false }) {
           <div className="voice-info">
             <span className="voice-status">
               <Radio size={10} />
-              {connectionLabel(peerStates, players, playerId)}
+              {connectionLabel(peerStates, players, playerId, t)}
             </span>
             <div className="voice-peers">
               {inVoice.map(p => (
@@ -94,9 +96,9 @@ export default function VoiceChat({ playerId, players, nudge = false }) {
                   }`}
                   title={
                     p.id === playerId
-                      ? 'Tú'
+                      ? t('common.you')
                       : peerStates[p.id] === 'failed'
-                        ? `Sin conexión con ${p.name}`
+                        ? t('voice.noConn')
                         : p.name
                   }
                 >
@@ -110,7 +112,7 @@ export default function VoiceChat({ playerId, players, nudge = false }) {
             onClick={toggleCam}
             disabled={camBusy}
             className={`voice-cam-btn ${camOn ? 'on' : ''}`}
-            title={camOn ? 'Apagar cámara' : 'Encender cámara'}
+            title={camOn ? t('voice.camOff') : t('voice.camOn')}
             aria-pressed={camOn}
           >
             {camBusy ? <Loader2 size={14} className="voice-spin" />
@@ -120,13 +122,13 @@ export default function VoiceChat({ playerId, players, nudge = false }) {
           <button
             onClick={() => setShowDevices(v => !v)}
             className={`voice-cam-btn ${showDevices ? 'on' : ''}`}
-            title="Elegir micrófono, cámara o altavoz"
+            title={t('voice.settings')}
             aria-expanded={showDevices}
           >
             <Settings2 size={14} />
           </button>
 
-          <button onClick={leave} className="voice-leave-btn" title="Salir del chat de voz">
+          <button onClick={leave} className="voice-leave-btn" title={t('voice.leave')}>
             <PhoneOff size={14} />
           </button>
         </div>

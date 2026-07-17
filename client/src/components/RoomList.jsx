@@ -1,5 +1,6 @@
 import React from 'react';
 import { Users, Bot, Zap, Layers, RefreshCw, Globe } from 'lucide-react';
+import { useT } from '../i18n/LanguageContext';
 
 /**
  * Salas públicas esperando gente. Llega en vivo por socket (el servidor la
@@ -7,11 +8,12 @@ import { Users, Bot, Zap, Layers, RefreshCw, Globe } from 'lucide-react';
  * hace falta sondear ni un botón de refrescar.
  */
 export default function RoomList({ rooms, onJoin, loading }) {
+  const { t } = useT();
   if (loading) {
     return (
       <div className="room-list-empty">
         <RefreshCw size={13} className="voice-spin" />
-        Buscando salas…
+        {t('rooms.searching')}
       </div>
     );
   }
@@ -20,7 +22,7 @@ export default function RoomList({ rooms, onJoin, loading }) {
     return (
       <div className="room-list-empty">
         <Globe size={13} />
-        No hay salas abiertas ahora mismo. Crea una y aparecerás aquí.
+        {t('rooms.empty')}
       </div>
     );
   }
@@ -34,16 +36,16 @@ export default function RoomList({ rooms, onJoin, loading }) {
             <span className="room-row-tags">
               <span className="room-tag">
                 <Layers size={9} />
-                Doble {r.maxPip}
+                {t('opt.double', { n: r.maxPip })}
               </span>
-              {r.teamsEnabled && <span className="room-tag">Parejas</span>}
+              {r.teamsEnabled && <span className="room-tag">{t('rooms.teams')}</span>}
               {r.powersEnabled && (
                 <span className="room-tag accent">
                   <Zap size={9} />
-                  Poderes
+                  {t('rooms.powers')}
                 </span>
               )}
-              {!r.drawEnabled && <span className="room-tag">Sin pozo</span>}
+              {!r.drawEnabled && <span className="room-tag">{t('rooms.noDraw')}</span>}
               {r.bots > 0 && (
                 <span className="room-tag">
                   <Bot size={9} />

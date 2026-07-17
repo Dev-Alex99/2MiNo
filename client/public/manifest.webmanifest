@@ -1,0 +1,40 @@
+{
+  "name": "Dominó Online — Juega con amigos",
+  "short_name": "Dominó",
+  "description": "Dominó multijugador en tiempo real: salas privadas o públicas, cartas de poder, chat de voz y vídeo, bots y partidas por equipos. Clásico y doble-9.",
+  "lang": "es",
+  "dir": "ltr",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#02040a",
+  "theme_color": "#0a0f1d",
+  "categories": ["games", "entertainment", "social"],
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "maskable"
+    }
+  ]
+}

@@ -10,13 +10,29 @@ import Chat from './components/Chat';
 import EndGameModal from './components/EndGameModal';
 import PowerCards from './components/PowerCards';
 import { VoiceProvider } from './voice/VoiceContext';
+import { useT } from './i18n/LanguageContext';
 import VideoGrid from './components/VideoGrid';
 import PlayerSeats from './components/PlayerSeats';
 import useIsMobile from './hooks/useIsMobile';
 import { Wifi, AlertCircle } from 'lucide-react';
 
 export default function App() {
+  const { t } = useT();
   const isMobile = useIsMobile();
+
+  // Traduce un mensaje que el servidor envía como { key, params }. El servidor
+  // no conoce el idioma de cada jugador (una sala puede ser mixta), así que
+  // manda claves y cada cliente las resuelve aquí. '@opponent' es un centinela
+  // para "un oponente" cuando el poder no apuntó a nadie concreto.
+  const tMsg = (key, params) => {
+    if (!params) return t(key);
+    const p = { ...params };
+    for (const k in p) if (p[k] === '@opponent') p[k] = t('srv.opponent');
+    return t(key, p);
+  };
+  // El error puede ser un string (fijado en cliente) o { key, params } (servidor).
+  const renderError = (e) =>
+    typeof e === 'string' ? e : (e && e.key ? tMsg(e.key, e.params) : '');
   const [name, setName] = useState(localStorage.getItem('domino_username') || '');
   const [playerId, setPlayerId] = useState(sessionStorage.getItem('domino_player_id') || '');
   const [roomId, setRoomId] = useState(sessionStorage.getItem('domino_room_id') || '');
@@ -109,7 +125,11 @@ export default function App() {
       const newNotification = {
         id,
         playerName: msg.playerName,
+        // Los toasts del sistema llegan como clave i18n; los mensajes de
+        // jugador llegan como texto literal (ya en su idioma).
         text: msg.text,
+        msgKey: msg.key,
+        params: msg.params,
         type: msg.type,
         // Posicionamiento horizontal aleatorio para los emojis flotantes
         xOffset: Math.floor(Math.random() * 60) - 30 // -30px a +30px
@@ -123,8 +143,10 @@ export default function App() {
       }, msg.type === 'emoji' ? 2500 : 3500);
     }
 
-    function onErrorMsg(message) {
-      setError(message);
+    function onErrorMsg(payload) {
+      // El servidor manda { key, params }; conservamos el objeto y traducimos
+      // al renderizar (así el idioma correcto se aplica aunque cambie después).
+      setError(payload);
       // Ocultar error después de 5 segundos
       setTimeout(() => setError(''), 5000);
     }
@@ -145,7 +167,7 @@ export default function App() {
       setRoomId('');
       setGameState(null);
       prevGameStatusRef.current = null;
-      setError(`${by || 'El administrador'} te expulsó de la sala.`);
+      setError(t('end.kicked', { name: by || '—' }));
       setTimeout(() => setError(''), 6000);
     }
 
@@ -338,7 +360,7 @@ export default function App() {
       {/* Banner flotante de Tu Turno */}
       {showTurnBanner && (
         <div className="turn-splash-overlay">
-          <h2 className="turn-splash-text">¡TU TURNO!</h2>
+          <h2 className="turn-splash-text">{t('game.yourTurn')}</h2>
         </div>
       )}
 
@@ -346,7 +368,7 @@ export default function App() {
       {!isConnected && (
         <div className="network-alert">
           <Wifi size={12} />
-          Conexión perdida. Reconectando…
+          {t('net.lost')}
         </div>
       )}
 
@@ -354,7 +376,7 @@ export default function App() {
       {error && (
         <div className="error-toast">
           <AlertCircle size={12} />
-          {error}
+          {renderError(error)}
         </div>
       )}
 
@@ -380,8 +402,12 @@ export default function App() {
             // Una sola línea: nombre discreto + mensaje. Antes iba en dos
             // líneas, en negrita y a 1rem, y tapaba media mesa.
             <div key={notif.id} className="floating-toast">
-              <span className="floating-toast-sender">{notif.playerName}</span>
-              <span className="floating-toast-text">{notif.text}</span>
+              <span className="floating-toast-sender">
+                {notif.playerName === 'SISTEMA' ? t('game.system') : notif.playerName}
+              </span>
+              <span className="floating-toast-text">
+                {notif.msgKey ? tMsg(notif.msgKey, notif.params) : notif.text}
+              </span>
             </div>
           );
         }

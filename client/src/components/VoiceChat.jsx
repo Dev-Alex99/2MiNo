@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Mic, MicOff, PhoneOff, Loader2, AlertCircle, Radio, Video, VideoOff, Settings2 } from 'lucide-react';
 import { useVoice } from '../voice/VoiceContext';
-import VideoTile from './VideoTile';
 import DeviceSelector from './DeviceSelector';
 
 // Estado de la malla resumido para el usuario: no le interesa "ICE failed",
@@ -24,25 +23,11 @@ export default function VoiceChat({ playerId, players }) {
   if (!voice) return null;
   const {
     joined, connecting, muted, error, peerStates, speaking, join, leave, toggleMute,
-    camOn, camBusy, localVideo, remoteVideos, toggleCam,
+    camOn, camBusy, toggleCam,
     devices, selected, switching, selectMic, selectCam, selectSpeaker, canPickSpeaker
   } = voice;
 
   const inVoice = players.filter(p => p.inVoice);
-
-  // Quién sale en vídeo lo manda el estado del jugador (camOn), no el track:
-  // al apagar la cámara el track remoto NO se marca como "muted" y se quedaría
-  // el último fotograma congelado.
-  const tiles = [];
-  if (camOn && localVideo) {
-    tiles.push({ key: playerId, stream: localVideo, name: 'Tú', isMe: true, talking: speaking[playerId], muted });
-  }
-  players.forEach(p => {
-    if (p.id === playerId || !p.camOn) return;
-    const stream = remoteVideos[p.id];
-    if (!stream) return;
-    tiles.push({ key: p.id, stream, name: p.name, isMe: false, talking: speaking[p.id], muted: false });
-  });
 
   return (
     <div className="voice-panel">
@@ -54,7 +39,7 @@ export default function VoiceChat({ playerId, players }) {
           title="Entrar al chat de voz"
         >
           {connecting ? <Loader2 size={15} className="voice-spin" /> : <Mic size={15} />}
-          <span>{connecting ? 'Conectando…' : 'Entrar a la voz'}</span>
+          <span>{connecting ? 'Conectando…' : 'Chat'}</span>
           {inVoice.length > 0 && (
             <span className="voice-count">{inVoice.length}</span>
           )}
@@ -135,21 +120,8 @@ export default function VoiceChat({ playerId, players }) {
         />
       )}
 
-      {/* Miniaturas: solo de quien tiene la cámara encendida */}
-      {tiles.length > 0 && (
-        <div className="video-grid">
-          {tiles.map(t => (
-            <VideoTile
-              key={t.key}
-              stream={t.stream}
-              name={t.name}
-              isMe={t.isMe}
-              talking={t.talking}
-              muted={t.muted}
-            />
-          ))}
-        </div>
-      )}
+      {/* Las miniaturas NO van aquí: flotan sobre el tablero (VideoGrid), para
+          no robarle altura en móvil. */}
 
       {error && (
         <div className="voice-error">

@@ -223,12 +223,13 @@ body {
   justify-content: center;
 }
 
+/* Sigue siendo un aviso, no un cartel: se reduce pero mantiene el gesto. */
 .turn-splash-text {
-  font-size: 4rem;
-  font-weight: 950;
-  letter-spacing: 0.1em;
+  font-size: 2.2rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
   color: #fff;
-  text-shadow: 0 0 20px var(--primary-glow), 0 0 40px var(--primary);
+  text-shadow: 0 0 12px var(--primary-glow);
   animation: splash-in-out 1.4s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
   background: linear-gradient(90deg, #10b981 0%, #34d399 50%, #10b981 100%);
   -webkit-background-clip: text;
@@ -360,7 +361,9 @@ body {
 /* --- LAYOUT GENERAL --- */
 .app-container {
   display: flex;
-  flex-direction: row;
+  /* Columna SIEMPRE: era "row" cuando había barra lateral. Con la barra arriba,
+     en row se estiraba a 800px de alto y se colocaba al costado. */
+  flex-direction: column;
   height: 100vh;
   height: 100dvh;
   width: 100%;
@@ -371,82 +374,100 @@ body {
 
 .network-alert {
   position: absolute;
-  top: 16px;
-  left: 50%;
-  transform: translateX(-50%);
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  margin: 0 auto;
+  width: fit-content;
   z-index: 100;
-  background: rgba(220, 38, 38, 0.9);
+  max-width: calc(100% - 24px);
+  background: rgba(153, 27, 27, 0.92);
   backdrop-filter: blur(8px);
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  color: white;
-  padding: 10px 20px;
-  border-radius: 16px;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #fecaca;
+  padding: 5px 10px;
+  border-radius: 9px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+  gap: 6px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
   font-weight: 600;
-  font-size: 0.9rem;
-  animation: scale-up 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  font-size: 0.68rem;
+  animation: fade-in 0.2s ease-out forwards;
 }
+.network-alert svg { flex-shrink: 0; }
 
 .error-toast {
   position: absolute;
   top: 70px;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 12px;
+  right: 12px;
+  margin: 0 auto;
+  width: fit-content;
   z-index: 100;
-  background: rgba(217, 119, 6, 0.9);
+  max-width: min(360px, calc(100% - 24px));
+  background: rgba(120, 53, 15, 0.92);
   backdrop-filter: blur(8px);
   border: 1px solid rgba(245, 158, 11, 0.3);
-  color: white;
-  padding: 8px 16px;
-  border-radius: 12px;
+  color: #fde68a;
+  padding: 5px 10px;
+  border-radius: 9px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  box-shadow: 0 8px 20px rgba(0,0,0,0.4);
-  font-size: 0.8rem;
+  gap: 6px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  font-size: 0.68rem;
   font-weight: 600;
-  animation: scale-up 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  line-height: 1.35;
+  animation: fade-in 0.2s ease-out forwards;
 }
+.error-toast svg { flex-shrink: 0; }
 
+/* Avisos discretos: se leen de reojo y se van. No compiten con la mesa.
+   Centrado con márgenes y NO con left:50%+translateX(-50%): con aquello el
+   ancho disponible se calculaba desde el 50%, así que el aviso nunca podía
+   pasar de media pantalla y el texto largo se partía en 4 líneas. */
 .floating-toast {
   position: absolute;
   top: 80px;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 12px;
+  right: 12px;
+  margin: 0 auto;
+  width: fit-content;
   z-index: 90;
-  background: rgba(30, 41, 59, 0.85);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(99, 102, 241, 0.25);
-  color: white;
-  padding: 10px 20px;
-  border-radius: 16px;
-  box-shadow: 0 12px 30px rgba(0,0,0,0.5);
+  max-width: min(400px, calc(100% - 24px));
+  background: rgba(13, 18, 30, 0.92);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(99, 102, 241, 0.22);
+  color: var(--text-main);
+  padding: 5px 10px;
+  border-radius: 9px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  animation: scale-up 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 6px;
+  animation: fade-in 0.2s ease-out forwards;
 }
 
 .floating-toast-sender {
-  font-size: 0.65rem;
+  font-size: 0.55rem;
   color: #818cf8;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
 }
 
 .floating-toast-text {
-  font-size: 1rem;
-  font-weight: 700;
+  font-size: 0.7rem;
+  font-weight: 500;
+  line-height: 1.35;
 }
 
 .floating-emoji {
   position: absolute;
-  font-size: 3.5rem;
+  font-size: 2.4rem;
   pointer-events: none;
   z-index: 95;
   animation: emoji-float 2.2s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
@@ -707,6 +728,289 @@ body {
   border-radius: 4px;
 }
 
+/* --- BARRA DE PARTIDA (sustituye a la barra lateral, móvil y escritorio) --- */
+.game-bar {
+  position: relative;
+  z-index: 30;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px calc(7px + env(safe-area-inset-top, 0px));
+  background: rgba(8, 12, 24, 0.9);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.game-bar-round {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.game-bar-score {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+.game-bar-score b.team-0 { color: #10b981; }
+.game-bar-score b.team-1 { color: #f43f5e; }
+.game-bar-sep { color: var(--text-muted); font-weight: 600; font-size: 0.62rem; }
+
+/* Turno + reloj. Antes flotaba sobre el tablero y tapaba a los jugadores. */
+.game-bar-turn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--glass-border);
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: var(--text-muted);
+  min-width: 0;
+  transition: all 0.25s;
+}
+.game-bar-turn.mine {
+  background: rgba(16, 185, 129, 0.14);
+  border-color: rgba(16, 185, 129, 0.4);
+  color: var(--primary);
+}
+.game-bar-turn.urgent {
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #f87171;
+}
+.game-bar-turn-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.game-bar-timer {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.game-bar-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.game-bar-actions .mute-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+}
+
+.leave-confirm.bar-leave {
+  position: absolute;
+  top: 100%;
+  right: 8px;
+  z-index: 45;
+  width: 250px;
+  margin-top: 4px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+  background: #141a2a;
+}
+
+.mobile-bar-round {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.62rem;
+  font-weight: 800;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.mobile-bar-score {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+.mobile-bar-score b.team-0 { color: #10b981; }
+.mobile-bar-score b.team-1 { color: #f43f5e; }
+.mobile-bar-vs { color: var(--text-muted); font-weight: 600; font-size: 0.6rem; }
+
+.mobile-bar-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.mobile-bar-actions .mute-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+
+.leave-confirm.mobile-leave {
+  position: absolute;
+  top: 100%;
+  right: 6px;
+  z-index: 45;
+  width: 230px;
+  margin-top: 4px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+  background: #141a2a;
+}
+
+/* --- ASIENTOS ALREDEDOR DEL TABLERO (móvil) ---
+   Van flotando: no le quitan ni un píxel al tablero, que es justo el problema
+   que tenía la barra lateral. */
+.seat {
+  position: absolute;
+  z-index: 14;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 9px;
+  background: rgba(4, 10, 8, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  backdrop-filter: blur(6px);
+  width: 108px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  pointer-events: none; /* no roba el arrastre del tablero */
+}
+.seat.targetable {
+  pointer-events: auto;
+  cursor: pointer;
+  border-color: #818cf8;
+  border-style: dashed;
+  animation: pulse-glow 1.5s infinite;
+}
+
+.seat-top   { top: 6px;  left: 50%; transform: translateX(-50%); }
+.seat-left  { left: 6px;  top: 50%; transform: translateY(-50%); }
+.seat-right { right: 6px; top: 50%; transform: translateY(-50%); }
+
+/* Turno activo: el borde verde es la señal más barata de leer. */
+.seat.active {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary), 0 0 12px var(--primary-glow);
+}
+.seat.talking .seat-face { box-shadow: 0 0 0 2px var(--primary); }
+
+.seat.team-0 { border-left: 2px solid #10b981; }
+.seat.team-1 { border-left: 2px solid #f43f5e; }
+
+.seat-face {
+  position: relative;
+  width: 92px;
+  height: 69px;
+  border-radius: 7px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: box-shadow 0.15s;
+}
+
+.seat-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+
+.seat-avatar {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--text-muted);
+}
+
+.seat-shield { position: absolute; top: 2px; right: 2px; color: #818cf8; }
+.seat-mic { position: absolute; bottom: 2px; right: 2px; color: var(--primary); }
+
+.seat-name {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #fff;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Las fichas como fichas de verdad, no barritas: se ve de un vistazo quién está
+   a punto de cerrar sin tener que leer un número. */
+.seat-tiles {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  flex-wrap: nowrap;
+}
+.seat-tiles i {
+  width: 4px;
+  height: 11px;
+  border-radius: 1px;
+  background: linear-gradient(to bottom, #fff 0%, #fff 45%, rgba(0,0,0,.35) 47%, #fff 49%, #fff 100%);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  flex-shrink: 0;
+}
+.seat-count {
+  font-size: 0.6rem;
+  font-weight: 800;
+  color: #fff;
+  margin-left: 4px;
+  font-variant-numeric: tabular-nums;
+}
+/* Última ficha: aviso de que va a cerrar. */
+.seat-tiles:has(i:only-of-type) .seat-count { color: #fbbf24; }
+
+/* Cartas de poder que le quedan */
+.seat-powers {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  margin-left: 4px;
+  padding: 0 3px;
+  border-radius: 4px;
+  background: rgba(245, 158, 11, 0.18);
+  color: #fbbf24;
+  font-size: 0.55rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+/* Quedan pocas fichas: aviso. */
+.seat-tiles i:only-of-type,
+.seat.active .seat-tiles i { background: #fff; }
+
+.seat-target {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  background: rgba(99, 102, 241, 0.25);
+  border-radius: 9px;
+}
+
 /* --- CHAT DE VOZ --- */
 .voice-panel {
   display: flex;
@@ -917,15 +1221,30 @@ body {
   color: var(--text-muted);
 }
 
-/* --- MINIATURAS DE VÍDEO --- */
-.video-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+/* --- MINIATURAS DE VÍDEO (flotando sobre el tablero) ---
+   Van en absoluto y NO en el flujo: dentro de la barra lateral le robaban al
+   tablero toda su altura en móvil. Y con ancho FIJO, nunca 1fr: con 1fr una
+   sola cámara se estiraba a los 320px del sidebar (240px de alto). */
+/* Tu propia cámara, abajo al centro. Es la única franja libre: zoom a la
+   izquierda, chat a la derecha y los asientos en los costados. */
+.video-float {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 10px;
+  z-index: 15;
+  display: flex;
+  flex-wrap: wrap-reverse;
   gap: 5px;
+  max-width: calc(100% - 200px);
+  /* Que no robe el arrastre del tablero: son decorativas, no se tocan. */
+  pointer-events: none;
 }
 
 .video-tile {
   position: relative;
+  width: 116px;
+  flex: 0 0 auto;
   aspect-ratio: 4 / 3;
   border-radius: 9px;
   overflow: hidden;
@@ -966,9 +1285,97 @@ body {
 }
 
 @media (max-width: 1024px) {
-  .video-grid {
-    grid-template-columns: repeat(auto-fit, minmax(58px, 1fr));
+  .video-float {
+    bottom: 8px;
+    gap: 4px;
+    max-width: calc(100% - 190px);
   }
+  .video-tile {
+    width: 84px;
+    border-radius: 7px;
+  }
+  .video-tile-name {
+    font-size: 0.5rem;
+    padding: 1px 4px;
+  }
+  /* Asientos: más chicos que en escritorio, pero se tienen que leer las fichas. */
+  .seat {
+    width: 82px;
+    padding: 3px;
+  }
+  .seat-face {
+    width: 70px;
+    height: 53px;
+  }
+  .seat-name { font-size: 0.58rem; }
+  .seat-avatar { font-size: 0.72rem; }
+  .seat-tiles i { width: 3px; height: 9px; }
+  .seat-count { font-size: 0.55rem; margin-left: 3px; }
+  .seat-top { top: 4px; }
+  .seat-left { left: 4px; }
+  .seat-right { right: 4px; }
+
+  /* Los avisos, por debajo de la fila de asientos: arriba los tapaban. */
+  /* Sin la etiqueta "Centrar" los controles ocupan la mitad y dejan sitio
+     abajo para tu propia cámara. El icono se entiende igual. */
+  .zoom-btn-text { display: none; }
+  .zoom-controls { gap: 4px; bottom: 8px; left: 8px; }
+  .zoom-btn { padding: 7px; }
+
+  .network-alert { top: 8px; }
+  .error-toast { top: 152px; font-size: 0.64rem; }
+  .floating-toast { top: 152px; max-width: calc(100% - 20px); }
+  .floating-toast-text { font-size: 0.64rem; }
+  .floating-emoji { font-size: 1.9rem; }
+  .turn-splash-text { font-size: 1.5rem; }
+
+  /* El panel de voz también ocupa altura del sidebar: en móvil se queda en
+     botones y punto. Quién está en la voz ya se ve por el icono de micro en
+     cada jugador. */
+  .voice-status,
+  .voice-peers {
+    display: none;
+  }
+  .voice-active {
+    padding: 5px;
+    gap: 5px;
+  }
+  .voice-join-btn {
+    padding: 6px 10px;
+    font-size: 0.7rem;
+  }
+  .voice-mic-btn {
+    width: 30px;
+    height: 30px;
+  }
+  .voice-info {
+    display: none;
+  }
+  /* El panel del engranaje cuelga de la barra, sin empujar nada. */
+  .voice-panel { position: static; }
+  .voice-active { border: none; background: none; padding: 0; }
+  .voice-join-btn { width: auto; }
+  .device-panel {
+    position: absolute;
+    top: 100%;
+    right: 6px;
+    z-index: 45;
+    width: 220px;
+    margin-top: 4px;
+    background: #141a2a;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+  }
+  .voice-error {
+    position: absolute;
+    top: 100%;
+    right: 6px;
+    z-index: 45;
+    width: 230px;
+    margin-top: 4px;
+    background: #2a1416;
+  }
+  /* Tu propia cámara en móvil: mínima y fuera del paso. */
+  .video-float { max-width: 60px; }
 }
 
 .voice-leave-btn {
@@ -1407,12 +1814,14 @@ body {
   min-width: 0;
 }
 
+/* Abajo, no arriba: arriba chocaban con el asiento del jugador de enfrente y
+   con los avisos del sistema. */
 .zoom-controls {
   position: absolute;
-  top: 16px;
-  left: 16px;
+  bottom: 10px;
+  left: 10px;
   display: flex;
-  gap: 8px;
+  gap: 6px;
   z-index: 20;
 }
 
@@ -2620,16 +3029,26 @@ body {
   .app-container {
     flex-direction: column;
   }
+  /* En móvil cada píxel del sidebar se lo quita al tablero, que ya va justo.
+     Todo lo prescindible se recorta aquí. */
   .sidebar {
     width: 100%;
     height: auto;
     border-right: none;
     border-bottom: 1px solid var(--glass-border);
-    padding: 12px;
+    padding: 8px 10px;
     flex-shrink: 0; /* la cabecera manda su altura; el tablero se adapta */
   }
   .sidebar-top {
-    gap: 8px;
+    gap: 5px;
+  }
+  /* "Clasificación" / "En la mesa": la lista de debajo ya se explica sola. */
+  .sidebar-section-title {
+    display: none;
+  }
+  /* Los separadores solo decoran, y aquí cuestan altura real. */
+  .sidebar .separator {
+    display: none;
   }
   .sidebar-header {
     flex-direction: row;
@@ -2805,81 +3224,7 @@ body {
   }
 }
 
-/* --- MÓVIL EN HORIZONTAL (landscape) ---
-   Apilar en columna deja ~200px de alto para tablero + mano: el tablero se
-   quedaba en 0px y la mano salía fuera de pantalla. En horizontal sobra ANCHO,
-   así que volvemos a la barra lateral y recuperamos toda la altura. */
-@media (max-width: 1024px) and (orientation: landscape) {
-  .app-container {
-    flex-direction: row;
-  }
-  .sidebar {
-    width: 190px;
-    height: 100%;
-    border-right: 1px solid var(--glass-border);
-    border-bottom: none;
-    padding: 10px;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-  }
-  .players-list {
-    flex-direction: column;
-    overflow-x: visible;
-    gap: 6px;
-  }
-  .player-card {
-    width: 100%;
-  }
-  .player-score-row {
-    justify-content: space-between;
-  }
-  .power-cards-container {
-    gap: 6px;
-    padding: 2px;
-  }
-  .power-card-item {
-    width: 58px;
-    height: 82px;
-    padding: 4px;
-  }
-  .power-card-title {
-    font-size: 0.52rem;
-  }
-  .power-card-type-label {
-    display: none;
-  }
-  .player-hand-container {
-    padding: 4px 12px calc(8px + env(safe-area-inset-bottom, 0px)) 12px;
-    gap: 4px;
-  }
-  .hand-status-row {
-    min-height: 30px;
-  }
-  .hand-tiles-row {
-    min-height: 84px;
-    padding: 18px 10px 2px 10px;
-  }
-  .domino-tile.selected {
-    transform: translateY(-10px) scale(1.04);
-  }
-  .domino-tile {
-    width: 30px;
-    height: 58px;
-    padding: 3px;
-  }
-  .domino-tile.horizontal {
-    width: 58px;
-    height: 30px;
-    padding: 3px;
-  }
-  .pip-grid {
-    height: 18px;
-  }
-  .pip {
-    width: 3px;
-    height: 3px;
-  }
-}
+
 
 /* --- CARTAS DE PODERES --- */
 .power-cards-container {
@@ -3097,4 +3442,76 @@ body {
 
 .hand-tile-wrapper {
   animation: slide-up-fade 0.45s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
+}
+
+/* --- PANTALLAS BAJAS (móvil en horizontal, ventanas anchas y bajas) ---
+   Antes aquí se volvía a "flex-direction: row" para recuperar altura, porque la
+   barra lateral costaba 174px. Ya no existe: la barra de arriba son 45px y en
+   columna sobra sitio. Mantener aquel "row" ponía la barra DE LADO, comiéndose
+   380px de ancho en cualquier ventana <=1024px más ancha que alta. */
+@media (max-width: 1024px) and (orientation: landscape) {
+  /* Con poca altura, los asientos se recogen para no comerse el tablero. */
+  .seat { width: 68px; padding: 2px; }
+  .seat-face { width: 58px; height: 42px; }
+  .seat-name { font-size: 0.52rem; }
+  .seat-tiles i { height: 7px; }
+
+  /* Con 375px de alto, cartas y mano se comían 249px y dejaban el tablero en
+     62px. Aquí van al mínimo legible. */
+  .power-cards-container {
+    gap: 5px;
+    padding: 1px;
+    margin-top: 0;
+  }
+  .power-card-item {
+    width: 46px;
+    height: 62px;
+    padding: 3px;
+    border-radius: 8px;
+  }
+  .power-card-icon {
+    margin-top: 0;
+  }
+  .power-card-svg-icon {
+    width: 16px;
+    height: 16px;
+  }
+  .power-card-title {
+    font-size: 0.42rem;
+    line-height: 1;
+  }
+  .power-card-type-label {
+    display: none;
+  }
+  .player-hand-container {
+    padding: 2px 10px calc(4px + env(safe-area-inset-bottom, 0px)) 10px;
+    gap: 2px;
+  }
+  .hand-status-row {
+    min-height: 24px;
+  }
+  .hand-tiles-row {
+    min-height: 72px;
+    padding: 12px 10px 2px 10px;
+  }
+  .domino-tile.selected {
+    transform: translateY(-7px) scale(1.03);
+  }
+  .domino-tile {
+    width: 30px;
+    height: 58px;
+    padding: 3px;
+  }
+  .domino-tile.horizontal {
+    width: 58px;
+    height: 30px;
+    padding: 3px;
+  }
+  .pip-grid {
+    height: 18px;
+  }
+  .pip {
+    width: 3px;
+    height: 3px;
+  }
 }

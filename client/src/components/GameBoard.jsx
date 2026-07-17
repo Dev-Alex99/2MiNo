@@ -158,9 +158,9 @@ export default function GameBoard({
   onSelectEndTarget,
   activeEffects,
   lastPlay,
-  turnEndsAt,
-  turnSecondsRemaining,
-  turnDurationSeconds = 30
+  // Ancho que ocupan los asientos a los lados: se descuenta del auto-encaje
+  // para que la serpiente no acabe pintada por debajo de ellos.
+  seatsPadding = 0
 }) {
   const containerRef = useRef(null);
   const boardRef = useRef(null);
@@ -190,10 +190,11 @@ export default function GameBoard({
   const fitScale = useMemo(() => {
     if (!width || !height || !containerSize.w || !containerSize.h) return 1;
     const padding = 96;
-    const sx = (containerSize.w - padding) / width;
+    const usableW = Math.max(120, containerSize.w - padding - seatsPadding);
+    const sx = usableW / width;
     const sy = (containerSize.h - padding) / height;
     return Math.max(0.35, Math.min(1.05, Math.min(sx, sy)));
-  }, [width, height, containerSize.w, containerSize.h]);
+  }, [width, height, containerSize.w, containerSize.h, seatsPadding]);
 
   // Observar el tamaño del contenedor para el auto-encaje responsivo.
   useEffect(() => {
@@ -271,31 +272,6 @@ export default function GameBoard({
     }
   }, []);
 
-  const activePlayer = players.find((p) => p.id === currentPlayerId);
-
-  // Cuenta atrás del turno. El servidor manda los segundos ya calculados y
-  // turnEndsAt cambia en cada rearme, así que basta con resincronizar ahí y
-  // descontar en local: sin depender de que los relojes coincidan.
-  const [secondsLeft, setSecondsLeft] = useState(turnSecondsRemaining);
-
-  useEffect(() => {
-    setSecondsLeft(turnSecondsRemaining);
-  }, [turnSecondsRemaining, turnEndsAt, currentPlayerId]);
-
-  useEffect(() => {
-    if (turnSecondsRemaining == null) return undefined;
-    const id = setInterval(() => {
-      setSecondsLeft((s) => (s == null ? s : Math.max(0, s - 1)));
-    }, 1000);
-    return () => clearInterval(id);
-  }, [turnSecondsRemaining, turnEndsAt, currentPlayerId]);
-
-  const showTimer = secondsLeft != null;
-  const timerUrgent = showTimer && secondsLeft <= 10;
-  const timerPct = showTimer
-    ? Math.max(0, Math.min(100, (secondsLeft / turnDurationSeconds) * 100))
-    : 0;
-
   // Resaltar la última ficha colocada: ayuda a seguir el hilo, sobre todo en
   // doble 9 donde el tablero puede llegar a 55 fichas.
   const lastKey = lastPlay && lastPlay.tile ? tileKey(lastPlay.tile) : null;
@@ -329,24 +305,8 @@ export default function GameBoard({
         </button>
       </div>
 
-      {/* Indicador de Turno Flotante + reloj */}
-      {activePlayer && (
-        <div className={`turn-banner ${timerUrgent ? 'urgent' : ''}`}>
-          <div className="turn-banner-row">
-            <span className="turn-pulse-dot" />
-            <span className="turn-banner-label">Turno de:</span>
-            <span className="turn-banner-name">{activePlayer.name}</span>
-            {showTimer && (
-              <span className="turn-timer-value">{secondsLeft}s</span>
-            )}
-          </div>
-          {showTimer && (
-            <div className="turn-timer-track">
-              <div className="turn-timer-fill" style={{ width: `${timerPct}%` }} />
-            </div>
-          )}
-        </div>
-      )}
+      {/* El indicador de turno y el reloj viven en la barra superior: aquí
+          flotaban sobre el tablero y solapaban con los asientos. */}
 
       {/* Contenedor del Tablero (Afectado por Paneo y Zoom) */}
       <div

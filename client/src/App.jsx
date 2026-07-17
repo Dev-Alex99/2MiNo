@@ -5,14 +5,18 @@ import Lobby from './components/Lobby';
 import WaitingRoom from './components/WaitingRoom';
 import GameBoard from './components/GameBoard';
 import PlayerHand from './components/PlayerHand';
-import ScoreBoard from './components/ScoreBoard';
+import GameBar from './components/GameBar';
 import Chat from './components/Chat';
 import EndGameModal from './components/EndGameModal';
 import PowerCards from './components/PowerCards';
 import { VoiceProvider } from './voice/VoiceContext';
+import VideoGrid from './components/VideoGrid';
+import PlayerSeats from './components/PlayerSeats';
+import useIsMobile from './hooks/useIsMobile';
 import { Wifi, AlertCircle } from 'lucide-react';
 
 export default function App() {
+  const isMobile = useIsMobile();
   const [name, setName] = useState(localStorage.getItem('domino_username') || '');
   const [playerId, setPlayerId] = useState(sessionStorage.getItem('domino_player_id') || '');
   const [roomId, setRoomId] = useState(sessionStorage.getItem('domino_room_id') || '');
@@ -292,15 +296,15 @@ export default function App() {
       {/* Indicador de Desconexión de Red */}
       {!isConnected && (
         <div className="network-alert">
-          <Wifi size={18} className="animate-bounce" />
-          Conexión perdida. Intentando reconectar...
+          <Wifi size={12} />
+          Conexión perdida. Reconectando…
         </div>
       )}
 
       {/* Banner de error temporal */}
       {error && (
         <div className="error-toast">
-          <AlertCircle size={16} />
+          <AlertCircle size={12} />
           {error}
         </div>
       )}
@@ -324,35 +328,30 @@ export default function App() {
           );
         } else {
           return (
-            <div 
-              key={notif.id}
-              className="floating-toast"
-            >
-              <span className="floating-toast-sender">{notif.playerName} dice:</span>
-              <span className="floating-toast-text">"{notif.text}"</span>
+            // Una sola línea: nombre discreto + mensaje. Antes iba en dos
+            // líneas, en negrita y a 1rem, y tapaba media mesa.
+            <div key={notif.id} className="floating-toast">
+              <span className="floating-toast-sender">{notif.playerName}</span>
+              <span className="floating-toast-text">{notif.text}</span>
             </div>
           );
         }
       })}
 
-      {/* Barra lateral de puntuación */}
-      <ScoreBoard
+      {/* Una sola barra, en móvil y escritorio. La lateral de 320px repetía lo
+          que ya dicen los asientos alrededor del tablero. */}
+      <GameBar
         players={gameState.players}
-        currentPlayerId={gameState.currentPlayerId}
         playerId={playerId}
-        roomId={gameState.roomId}
         roundNumber={gameState.roundNumber}
-        boneyardCount={gameState.boneyardCount}
-        pendingTargetType={pendingTargetType}
-        onSelectPlayerTarget={handlePlayerTargetSelected}
-        maxScore={gameState.maxScore}
-        maxPip={gameState.maxPip}
-        powersEnabled={gameState.powersEnabled}
         teamsEnabled={gameState.teamsEnabled}
-        teamScores={gameState.teamScores}
-        teamNames={gameState.teamNames}
-        drawEnabled={gameState.drawEnabled !== false}
+        teamScores={gameState.teamScores || [0, 0]}
+        maxScore={gameState.maxScore}
         onLeave={handleLeaveRoom}
+        currentPlayerId={gameState.currentPlayerId}
+        turnEndsAt={gameState.turnEndsAt}
+        turnSecondsRemaining={gameState.turnSecondsRemaining}
+        turnDurationSeconds={gameState.turnDurationSeconds}
       />
 
       {/* Área de Juego Principal */}
@@ -372,13 +371,28 @@ export default function App() {
             onSelectEndTarget={handleEndTargetSelected}
             activeEffects={gameState.activeEffects}
             lastPlay={gameState.lastPlay}
-            turnEndsAt={gameState.turnEndsAt}
-            turnSecondsRemaining={gameState.turnSecondsRemaining}
-            turnDurationSeconds={gameState.turnDurationSeconds}
+            seatsPadding={isMobile ? 170 : 240}
           />
 
           {/* Chat rápido de Emojis y Frases */}
           <Chat roomId={roomId} playerId={playerId} />
+
+          {/* Miniaturas de cámara flotando sobre el tablero: aquí no le quitan
+              altura, cosa que en móvil dejaba el tablero sin espacio.
+              En móvil solo se muestra la tuya: los rivales salen en su asiento. */}
+          {/* Tu propia cámara: los rivales salen en su asiento, no aquí. */}
+          <VideoGrid players={gameState.players} playerId={playerId} selfOnly />
+
+          {/* Los rivales alrededor de la mesa, en su sitio según el turno */}
+          <PlayerSeats
+            players={gameState.players}
+            playerId={playerId}
+            currentPlayerId={gameState.currentPlayerId}
+            teamsEnabled={gameState.teamsEnabled}
+            powersEnabled={gameState.powersEnabled}
+            pendingTargetType={pendingTargetType}
+            onSelectPlayerTarget={handlePlayerTargetSelected}
+          />
         </div>
 
         {/* Cartas de Poderes del Jugador (ocultas en modo clásico) */}

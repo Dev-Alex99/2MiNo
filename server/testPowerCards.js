@@ -1,5 +1,16 @@
 // Script de prueba para validar la lógica del sistema de Cartas de Poderes.
 const DominoGame = require('./gameLogic');
+const { POWER_CATALOG, RARITY_COPIES, INTENSITY_RARITIES } = DominoGame;
+
+// Tamaño esperado del mazo para una intensidad dada.
+function deckSizeFor(intensity) {
+  const allowed = INTENSITY_RARITIES[intensity];
+  let total = 0;
+  Object.values(POWER_CATALOG).forEach(c => {
+    if (allowed.includes(c.rarity)) total += RARITY_COPIES[c.rarity];
+  });
+  return total;
+}
 
 function assert(condition, message) {
   if (!condition) {
@@ -27,8 +38,11 @@ function runPowerTests() {
   assert(p1.powers.length === 2 && p2.powers.length === 2 && p3.powers.length === 2, 
     'Cada jugador recibe exactamente 2 cartas de poder al iniciar la ronda');
 
-  // Asegurar que el mazo de poderes tiene las cartas restantes
-  assert(game.powerDeck.length === 26, 'El mazo de poderes contiene las 26 cartas restantes (32 - 3*2)');
+  // Asegurar que el mazo de poderes tiene las cartas restantes (intensidad
+  // normal por defecto): total del mazo menos las 6 repartidas (3 jugadores × 2).
+  const expectedRemaining = deckSizeFor('normal') - 6;
+  assert(game.powerDeck.length === expectedRemaining,
+    `El mazo de poderes (normal) contiene las ${expectedRemaining} cartas restantes`);
 
   // 3. Probar uso de poder fuera de turno
   const activeIdx = game.currentPlayerIndex;
@@ -204,8 +218,180 @@ function runPowerTests() {
   console.log("=== PRUEBAS DE PODERES COMPLETADAS CON ÉXITO ===");
 }
 
+// --- Pruebas de arreglos y poderes nuevos (V2) ---
+function freshGame(opts) {
+  const g = new DominoGame('V2', 100, opts || {});
+  g.addPlayer('p1', 'A', 's1');
+  g.addPlayer('p2', 'B', 's2');
+  g.addPlayer('p3', 'C', 's3');
+  g.toggleReady('s1'); g.toggleReady('s2'); g.toggleReady('s3');
+  g.startNewGame();
+  return g;
+}
+
+function runPowerV2Tests() {
+  console.log("\n=== PRUEBAS V2: ARREGLOS Y PODERES NUEVOS ===");
+
+  // A. Doble Tiro ya no se filtra al rival tras pasar.
+  {
+    const g = freshGame();
+    g.currentPlayerIndex = 0;
+    const [a] = g.players;
+    g.board = [[3, 3]]; g.boneyard = [];
+    a.hand = [[1, 2]]; a.powers = [{ id: 'double_shot' }];
+    assert(g.usePowerCard(a.id, 'double_shot').success === true, 'V2: se usa Doble Tiro');
+    assert(g.activeEffects.doubleTurnActive === true, 'V2: doble turno queda activo');
+    assert(g.passTurn(a.id).success === true, 'V2: el lanzador pasa (no tenía jugada)');
+    assert(g.activeEffects.doubleTurnActive === false, 'V2: Doble Tiro NO se filtra al rival tras pasar');
+  }
+
+  // B. El Escudo bloquea también Robo del Destino.
+  {
+    const g = freshGame();
+    g.currentPlayerIndex = 0;
+    const [a, b] = g.players;
+    a.powers = [{ id: 'destiny_steal' }];
+    b.powers = [{ id: 'shield' }, { id: 'reverse' }];
+    b.shieldActive = true;
+    const r = g.usePowerCard(a.id, 'destiny_steal', b.id);
+    assert(r.success === true && r.shielded === true, 'V2: el Escudo bloquea Robo del Destino');
+    assert(b.powers.length === 2, 'V2: no se robó ninguna carta al escudado');
+  }
+
+  // C. El Escudo del jugador saltado NO se apaga.
+  {
+    const g = freshGame();
+    g.currentPlayerIndex = 0;
+    const [a, b] = g.players;
+    b.shieldActive = true;
+    g.board = [[3, 3]]; g.boneyard = []; a.hand = [[1, 2]]; a.powers = [{ id: 'skip' }];
+    g.usePowerCard(a.id, 'skip');
+    g.passTurn(a.id);
+    assert(b.shieldActive === true, 'V2: el escudo del jugador saltado sigue activo');
+    assert(g.currentPlayerIndex === 2, 'V2: el turno saltó al siguiente jugador');
+  }
+
+  // D. Bloqueo Total congela ambos extremos.
+  {
+    const g = freshGame();
+    g.currentPlayerIndex = 0;
+    const [a, b] = g.players;
+    g.board = [[3, 4]]; a.powers = [{ id: 'block_both' }];
+    g.usePowerCard(a.id, 'block_both');
+    assert(g.activeEffects.frozenEnd === 'both', 'V2: Bloqueo Total marca ambos extremos');
+    const bl = g.endsBlockedFor(b.id);
+    assert(bl.leftBlocked && bl.rightBlocked, 'V2: el oponente no puede jugar en ningún extremo');
+    const own = g.endsBlockedFor(a.id);
+    assert(!own.leftBlocked && !own.rightBlocked, 'V2: el dueño del bloqueo sí puede jugar');
+  }
+
+  // E. Tormenta: todos los oponentes roban 1.
+  {
+    const g = freshGame();
+    g.currentPlayerIndex = 0;
+    const [a, b, c] = g.players;
+    g.boneyard = [[0, 0], [1, 1], [2, 2], [3, 3]];
+    const bBefore = b.hand.length, cBefore = c.hand.length, aBefore = a.hand.length;
+    a.powers = [{ id: 'storm' }];
+    assert(g.usePowerCard(a.id, 'storm').success === true, 'V2: se usa Tormenta');
+    assert(b.hand.length === bBefore + 1 && c.hand.length === cBefore + 1, 'V2: cada oponente roba 1');
+    assert(a.hand.length === aBefore, 'V2: el lanzador de Tormenta no roba');
+  }
+
+  // F. Segunda Oportunidad: robas hasta tener jugada.
+  {
+    const g = freshGame();
+    g.currentPlayerIndex = 0;
+    const [a] = g.players;
+    g.board = [[3, 3]]; a.hand = [[1, 2]]; g.boneyard = [[0, 0], [0, 0], [3, 6]];
+    a.powers = [{ id: 'second_wind' }];
+    assert(g.usePowerCard(a.id, 'second_wind').success === true, 'V2: se usa Segunda Oportunidad');
+    assert(a.hand.length === 2, 'V2: robó justo hasta tener jugada');
+    assert(g.hasValidMove(a.id) === true, 'V2: ahora tiene jugada');
+  }
+
+  // G. Ojo Total: revela todas las manos al dueño, a nadie más.
+  {
+    const g = freshGame();
+    g.currentPlayerIndex = 0;
+    const [a, b, c] = g.players;
+    a.powers = [{ id: 'spy_all' }];
+    g.usePowerCard(a.id, 'spy_all');
+    const stA = g.getGameStateForPlayer(a.id);
+    const bInA = stA.players.find(p => p.id === b.id);
+    assert(bInA.hand.length > 0, 'V2: Ojo Total revela la mano de los oponentes al dueño');
+    const stC = g.getGameStateForPlayer(c.id);
+    const aInC = stC.players.find(p => p.id === a.id);
+    assert(aInC.hand.length === 0, 'V2: Ojo Total no revela nada a los demás');
+  }
+
+  // G2. Ojo Soplón: revela SOLO la mano del objetivo, y solo al dueño.
+  {
+    const g = freshGame();
+    g.currentPlayerIndex = 0;
+    const [a, b, c] = g.players;
+    a.powers = [{ id: 'spy_eye' }];
+    g.usePowerCard(a.id, 'spy_eye', b.id);
+    const stA = g.getGameStateForPlayer(a.id);
+    assert(stA.players.find(p => p.id === b.id).hand.length > 0, 'V2: Ojo Soplón revela la mano del objetivo al dueño');
+    assert(stA.players.find(p => p.id === c.id).hand.length === 0, 'V2: Ojo Soplón no revela a otros oponentes');
+    const stC = g.getGameStateForPlayer(c.id);
+    assert(stC.players.find(p => p.id === b.id).hand.length === 0, 'V2: Ojo Soplón no revela la mano a quien no lo lanzó');
+  }
+
+  // H. Maldición: restringe a un extremo y expira tras el turno del maldito.
+  {
+    const g = freshGame();
+    g.currentPlayerIndex = 0;
+    const [a, b] = g.players;
+    g.board = [[1, 6]]; a.powers = [{ id: 'curse' }];
+    g.usePowerCard(a.id, 'curse', b.id);
+    assert(g.activeEffects.cursedPlayerId === b.id, 'V2: la maldición se aplica al objetivo');
+    g.activeEffects.cursedSide = 'right'; // fijamos el lado para un test determinista
+    const bl = g.endsBlockedFor(b.id);
+    assert(bl.leftBlocked === true && bl.rightBlocked === false, 'V2: el maldito solo juega en un extremo');
+    b.hand = [[1, 1], [6, 2]];
+    const moves = g.getValidMoves(b.id);
+    assert(moves.length > 0 && moves.every(m => m.side === 'right'), 'V2: sin soft-lock, solo jugadas en el lado permitido');
+    g.currentPlayerIndex = 1;
+    g.nextTurn();
+    assert(g.activeEffects.cursedPlayerId === null, 'V2: la maldición expira tras el turno del maldito');
+  }
+
+  // I. Un poder por turno.
+  {
+    const g = freshGame({ onePowerPerTurn: true });
+    g.currentPlayerIndex = 0;
+    const [a] = g.players;
+    a.powers = [{ id: 'shield' }, { id: 'reverse' }];
+    assert(g.usePowerCard(a.id, 'shield').success === true, 'V2: primer poder del turno OK');
+    const second = g.usePowerCard(a.id, 'reverse');
+    assert(second.success === false && second.error === 'srv.err.onePowerPerTurn', 'V2: segundo poder bloqueado');
+  }
+
+  // J. Intensidad: filtra rarezas del mazo.
+  {
+    const gl = new DominoGame('LIGHT', 100, { powerIntensity: 'light' });
+    gl.addPlayer('p1', 'A', 's1'); gl.addPlayer('p2', 'B', 's2');
+    gl.toggleReady('s1'); gl.toggleReady('s2'); gl.startNewGame();
+    const allLight = [...gl.powerDeck, ...gl.players.flatMap(p => p.powers)];
+    assert(allLight.every(c => c.rarity === 'common'), 'V2: intensidad ligera solo reparte comunes');
+    assert(gl.powerDeck.length + 4 === deckSizeFor('light'), 'V2: tamaño del mazo ligero correcto');
+
+    const gc = new DominoGame('CHAOS', 100, { powerIntensity: 'chaos' });
+    gc.addPlayer('p1', 'A', 's1'); gc.addPlayer('p2', 'B', 's2');
+    gc.toggleReady('s1'); gc.toggleReady('s2'); gc.startNewGame();
+    const allChaos = [...gc.powerDeck, ...gc.players.flatMap(p => p.powers)];
+    assert(allChaos.some(c => c.rarity === 'legendary'), 'V2: intensidad caos incluye legendarios');
+    assert(gc.powerDeck.length + 4 === deckSizeFor('chaos'), 'V2: tamaño del mazo caos correcto');
+  }
+
+  console.log("=== PRUEBAS V2 COMPLETADAS CON ÉXITO ===");
+}
+
 try {
   runPowerTests();
+  runPowerV2Tests();
 } catch (error) {
   console.error("❌ ERROR EN LAS PRUEBAS:", error.stack);
   process.exit(1);

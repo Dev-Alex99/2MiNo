@@ -15,6 +15,26 @@ import VideoGrid from './components/VideoGrid';
 import PlayerSeats from './components/PlayerSeats';
 import useIsMobile from './hooks/useIsMobile';
 import { Wifi, AlertCircle } from 'lucide-react';
+import ProfileModal from './components/ProfileModal';
+import SpectatorView from './components/SpectatorView';
+import ThemeModal from './components/ThemeModal';
+import SpyReveal from './components/SpyReveal';
+import { recordGame, recordRoundWin } from './stats';
+import { initTheme } from './theme';
+
+// Lee un código de sala de la URL de invitación: www.2mino.lat/ABCD (o
+// ?room=ABCD / ?code=ABCD como respaldo). Los códigos son 4 letras A-Z.
+function readInviteCode() {
+  try {
+    const path = window.location.pathname.replace(/^\/+/, '').trim();
+    const params = new URLSearchParams(window.location.search);
+    const raw = path || params.get('room') || params.get('code') || '';
+    const code = raw.toUpperCase();
+    return /^[A-Z]{4}$/.test(code) ? code : '';
+  } catch {
+    return '';
+  }
+}
 
 export default function App() {
   const { t } = useT();
@@ -53,6 +73,29 @@ export default function App() {
    
   const prevGameStatusRef = useRef(null);
   const prevIsMyTurnRef = useRef(false);
+
+  // Invitación por enlace: código leído de la URL al cargar. Sirve para
+  // pre-rellenar el lobby y para auto-unirse si ya hay nombre guardado.
+  const [invitedCode, setInvitedCode] = useState(() => readInviteCode());
+  const invitedCodeRef = useRef(invitedCode);
+  invitedCodeRef.current = invitedCode;
+  const autoJoinedRef = useRef(false);
+
+  // Perfil / estadísticas (locales). Refs para leer valores frescos dentro del
+  // handler de socket, que se registra una sola vez (deps []).
+  const [showProfile, setShowProfile] = useState(false);
+  const [showTheme, setShowTheme] = useState(false);
+  const playerIdRef = useRef(playerId);
+  playerIdRef.current = playerId;
+  const tRef = useRef(t);
+  tRef.current = t;
+
+  // Modo espectador: sala que se está viendo (o null) y lista de partidas en
+  // vivo del lobby.
+  const [spectating, setSpectating] = useState(null);
+  const [liveGames, setLiveGames] = useState([]);
+  const spectatingRef = useRef(spectating);
+  spectatingRef.current = spectating;
  
    useEffect(() => {
      if (name) {
@@ -60,12 +103,38 @@ export default function App() {
      }
    }, [name]);
 
+  // Aplica el tema de mesa / skin de fichas guardado, al cargar la app.
+  useEffect(() => { initTheme(); }, []);
+
+  // Al cargar con un enlace de invitación, limpiamos la URL a "/" para que un
+  // refresh no vuelva a disparar el auto-join y la barra de direcciones quede
+  // limpia. El código ya se capturó en el estado `invitedCode`.
+  useEffect(() => {
+    if (window.location.pathname !== '/' || window.location.search) {
+      try { window.history.replaceState({}, '', '/'); } catch { /* noop */ }
+    }
+  }, []);
+
+  // Auto-unirse a la sala invitada en cuanto haya conexión, pero solo si ya
+  // tenemos nombre. Si no, el Lobby muestra el banner con el código listo para
+  // que el jugador escriba su nombre y entre.
+  useEffect(() => {
+    if (!isConnected || !invitedCode || roomId || autoJoinedRef.current) return;
+    if (name && name.trim()) {
+      autoJoinedRef.current = true;
+      socket.emit('join_room', { roomId: invitedCode, name: name.trim() });
+    }
+  }, [isConnected, invitedCode, roomId, name]);
+
   useEffect(() => {
     socket.connect();
 
     function onConnect() {
       setIsConnected(true);
       setError('');
+      // Si venimos de un enlace de invitación, ese destino manda: dejamos que
+      // el efecto de invitación decida, en vez de reconectar a la sala vieja.
+      if (invitedCodeRef.current) return;
       // Si el cliente se desconectó temporalmente y tiene datos guardados, re-unirse automáticamente
       const savedRoom = sessionStorage.getItem('domino_room_id');
       const savedPlayer = sessionStorage.getItem('domino_player_id');
@@ -93,6 +162,7 @@ export default function App() {
       sessionStorage.setItem('domino_room_id', roomId);
       sessionStorage.setItem('domino_player_id', playerId);
       setError('');
+      setInvitedCode(''); // invitación consumida
     }
 
     function onGameState(state) {
@@ -109,8 +179,27 @@ export default function App() {
           } else {
             playGameSound('win_round');
           }
+          // Estadística local: rondas ganadas (los espectadores no cuentan).
+          if (!state.isSpectator) recordRoundWin(state, playerIdRef.current);
         } else if (currentStatus === 'game_ended') {
           playGameSound('win_game');
+          // Estadística local: W/L, rachas y logros. Se registra una sola vez
+          // gracias a que esto solo corre en la transición de estado. Un
+          // espectador no juega, así que no registra nada.
+          const unlocked = state.isSpectator ? [] : recordGame(state, playerIdRef.current);
+          for (const id of unlocked) {
+            const nid = `ach_${id}_${Date.now()}`;
+            setQuickNotifications(prev => [...prev, {
+              id: nid,
+              playerName: '',
+              text: tRef.current('profile.unlocked', { name: tRef.current(`ach.${id}.n`) }),
+              type: 'phrase',
+              xOffset: 0
+            }]);
+            setTimeout(() => {
+              setQuickNotifications(prev => prev.filter(n => n.id !== nid));
+            }, 4000);
+          }
         }
       }
       prevGameStatusRef.current = currentStatus;
@@ -156,6 +245,27 @@ export default function App() {
       setRoomsLoading(false);
     }
 
+    function onLiveGames(list) {
+      setLiveGames(Array.isArray(list) ? list : []);
+    }
+
+    // Confirmación de que empezamos a espectar una sala.
+    function onSpectating({ roomId }) {
+      setSpectating(roomId);
+      setError('');
+    }
+
+    // La sala que veíamos (o jugábamos) se cerró: volvemos al lobby.
+    function onRoomClosed() {
+      if (spectatingRef.current) {
+        setSpectating(null);
+        setGameState(null);
+        prevGameStatusRef.current = null;
+        setError(tRef.current('spec.closed'));
+        setTimeout(() => setError(''), 4000);
+      }
+    }
+
     function onLobbyStats(stats) {
       setLobbyStats(stats);
     }
@@ -180,8 +290,11 @@ export default function App() {
     socket.on('receive_quick_message', onReceiveQuickMessage);
     socket.on('error_msg', onErrorMsg);
     socket.on('rooms_list', onRoomsList);
+    socket.on('live_games', onLiveGames);
     socket.on('lobby_stats', onLobbyStats);
     socket.on('kicked', onKicked);
+    socket.on('spectating', onSpectating);
+    socket.on('room_closed', onRoomClosed);
 
     return () => {
       socket.off('connect', onConnect);
@@ -193,13 +306,16 @@ export default function App() {
       socket.off('receive_quick_message', onReceiveQuickMessage);
       socket.off('error_msg', onErrorMsg);
       socket.off('rooms_list', onRoomsList);
+      socket.off('live_games', onLiveGames);
       socket.off('lobby_stats', onLobbyStats);
       socket.off('kicked', onKicked);
+      socket.off('spectating', onSpectating);
+      socket.off('room_closed', onRoomClosed);
     };
   }, []);
 
   // Suscripción a la lista de salas: solo mientras se está en el lobby.
-  const inLobby = !gameState || !roomId;
+  const inLobby = !spectating && (!gameState || !roomId);
   useEffect(() => {
     if (!isConnected || !inLobby) return undefined;
     setRoomsLoading(true);
@@ -214,10 +330,13 @@ export default function App() {
       teamsEnabled = false,
       drawEnabled = true,
       maxScore = null,
-      isPublic = true
+      isPublic = true,
+      powerIntensity = 'normal',
+      onePowerPerTurn = false
     } = options;
     socket.emit('create_room', {
-      name, powersEnabled, maxPip, teamsEnabled, drawEnabled, maxScore, isPublic
+      name, powersEnabled, maxPip, teamsEnabled, drawEnabled, maxScore, isPublic,
+      powerIntensity, onePowerPerTurn
     });
   };
 
@@ -227,6 +346,18 @@ export default function App() {
 
   const handleJoinRoom = (code) => {
     socket.emit('join_room', { roomId: code, name });
+  };
+
+  const handleSpectate = (code) => {
+    socket.emit('spectate_room', { roomId: code });
+  };
+
+  const handleLeaveSpectate = () => {
+    socket.emit('leave_spectate', { roomId: spectating });
+    setSpectating(null);
+    setGameState(null);
+    prevGameStatusRef.current = null;
+    setError('');
   };
 
   const handleLeaveRoom = () => {
@@ -328,18 +459,38 @@ export default function App() {
   };
 
   // Renderizado del contenido principal
+  // Modo espectador: tiene prioridad y va fuera del VoiceProvider (no hay voz).
+  if (spectating) {
+    return gameState
+      ? <SpectatorView gameState={gameState} onLeave={handleLeaveSpectate} />
+      : (
+        <div className="app-container spectator spec-loading">
+          <span>{t('spec.badge')}…</span>
+        </div>
+      );
+  }
+
   if (!gameState || !roomId) {
     return (
-      <Lobby
-        name={name}
-        setName={setName}
-        onCreateRoom={handleCreateRoom}
-        onJoinRoom={handleJoinRoom}
-        onQuickPlay={handleQuickPlay}
-        publicRooms={publicRooms}
-        roomsLoading={roomsLoading}
-        stats={lobbyStats}
-      />
+      <>
+        <Lobby
+          name={name}
+          setName={setName}
+          onCreateRoom={handleCreateRoom}
+          onJoinRoom={handleJoinRoom}
+          onQuickPlay={handleQuickPlay}
+          publicRooms={publicRooms}
+          roomsLoading={roomsLoading}
+          stats={lobbyStats}
+          invitedCode={invitedCode}
+          onOpenProfile={() => setShowProfile(true)}
+          onOpenTheme={() => setShowTheme(true)}
+          liveGames={liveGames}
+          onSpectate={handleSpectate}
+        />
+        {showProfile && <ProfileModal name={name} onClose={() => setShowProfile(false)} />}
+        {showTheme && <ThemeModal onClose={() => setShowTheme(false)} />}
+      </>
     );
   }
 
@@ -363,6 +514,9 @@ export default function App() {
           <h2 className="turn-splash-text">{t('game.yourTurn')}</h2>
         </div>
       )}
+
+      {/* Ojo Soplón / Ojo Total: manos reveladas al espía, temporalmente */}
+      <SpyReveal gameState={gameState} playerId={playerId} />
 
       {/* Indicador de Desconexión de Red */}
       {!isConnected && (

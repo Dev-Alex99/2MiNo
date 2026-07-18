@@ -42,10 +42,17 @@ function runTests() {
   assert(d6.boneyard.length === 28 - 21, 'Doble 6 con 3 jugadores deja 7 en el pozo');
   assert(allTiles(d6).every(t => t[0] <= 6 && t[1] <= 6), 'Doble 6 no contiene puntos > 6');
 
-  // Doble 6 con 4 jugadores reparte el mazo entero
-  const d6full = new DominoGame('D6FULL', null, { maxPip: 6 });
+  // Doble 6 con 4 jugadores EN MODO CLÁSICO reparte el mazo entero (pozo vacío).
+  const d6full = new DominoGame('D6FULL', null, { maxPip: 6, powersEnabled: false });
   seat(d6full, 4);
-  assert(d6full.boneyard.length === 0, 'Doble 6 con 4 jugadores deja el pozo vacío (28 = 4×7)');
+  assert(d6full.boneyard.length === 0, 'Doble 6 con 4 jugadores (clásico) deja el pozo vacío (28 = 4×7)');
+
+  // Con poderes activados se garantiza un pozo mínimo, aunque baje la mano:
+  // varias cartas no tienen sentido sin pozo (Multa, Trueque, Tormenta...).
+  const d6pow = new DominoGame('D6POW', null, { maxPip: 6, powersEnabled: true });
+  seat(d6pow, 4);
+  assert(d6pow.boneyard.length >= 4, 'Doble 6 con 4 jugadores y poderes garantiza pozo (>= 4)');
+  assert(d6pow.players[0].hand.length === 6, 'Con poderes en 4p d6 la mano baja a 6 para dejar pozo');
 
   // --- 3. Doble 9 ---
   const d9 = new DominoGame('D9', null, { maxPip: 9 });

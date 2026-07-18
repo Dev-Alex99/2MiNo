@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Copy, Check, Users, Sparkles, LogOut, CheckCircle2, Zap, Layers, Medal, Bot, X, Download, ArrowLeftRight, Crown, UserX } from 'lucide-react';
+import { Copy, Check, Users, Sparkles, LogOut, CheckCircle2, Zap, Layers, Medal, Bot, X, Download, ArrowLeftRight, Crown, UserX, Share2 } from 'lucide-react';
 import { socket } from '../socket';
 import VoiceChat from './VoiceChat';
 import LanguageSwitcher from './LanguageSwitcher';
@@ -13,6 +13,7 @@ export default function WaitingRoom({ gameState, playerId, onLeave }) {
     { id: 'dificil', label: t('wait.difHard') }
   ];
   const [copied, setCopied] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
   const [botLevel, setBotLevel] = useState('normal');
   const [swapFrom, setSwapFrom] = useState(null);
   const me = gameState.players.find(p => p.id === playerId);
@@ -50,6 +51,30 @@ export default function WaitingRoom({ gameState, playerId, onLeave }) {
     navigator.clipboard.writeText(gameState.roomId);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  // Enlace de invitación directo: al abrirlo, el amigo entra a esta sala sin
+  // teclear el código. En móvil usa el menú nativo de compartir si existe.
+  const inviteLink = `${window.location.origin}/${gameState.roomId}`;
+  const shareLink = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Dominó Online',
+          text: t('wait.shareText', { code: gameState.roomId }),
+          url: inviteLink
+        });
+        return;
+      } catch (e) {
+        if (e && e.name === 'AbortError') return; // el usuario canceló
+        // cualquier otro fallo: caemos a copiar al portapapeles
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(inviteLink);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    } catch { /* portapapeles bloqueado */ }
   };
 
   const handleToggleReady = () => {
@@ -128,10 +153,14 @@ export default function WaitingRoom({ gameState, playerId, onLeave }) {
           <span className="code-box-header">{t('wait.codeHeader')}</span>
           <div className="code-box-row">
             <span className="code-box-value">{gameState.roomId}</span>
-            <button onClick={copyCode} className="code-box-copy-btn">
+            <button onClick={copyCode} className="code-box-copy-btn" title={t('wait.copied')}>
               {copied ? <Check size={18} style={{ color: '#10b981' }} /> : <Copy size={18} />}
             </button>
           </div>
+          <button onClick={shareLink} className="code-box-share-btn">
+            {linkCopied ? <Check size={15} /> : <Share2 size={15} />}
+            {linkCopied ? t('wait.linkCopied') : t('wait.shareLink')}
+          </button>
           {copied && <span className="code-box-copy-toast">{t('wait.copied')}</span>}
         </div>
 

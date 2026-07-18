@@ -2847,6 +2847,394 @@ body {
   z-index: 20;
 }
 
+/* Barra superior del lobby: perfil + idioma */
+.lobby-topbar {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lobby-profile-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-main);
+  font-family: var(--font-family);
+  font-weight: 600;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+.lobby-profile-btn:hover {
+  background: rgba(16, 185, 129, 0.14);
+  border-color: rgba(16, 185, 129, 0.4);
+  color: #34d399;
+}
+
+/* ---------- MODAL DE PERFIL / ESTADÍSTICAS ---------- */
+.profile-card {
+  position: relative;
+  max-width: 420px;
+  width: 100%;
+  text-align: left;
+}
+.profile-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+  border-radius: 10px;
+  padding: 6px;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+.profile-close:hover { background: rgba(255, 255, 255, 0.1); color: white; }
+
+.profile-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+.profile-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 1.3rem;
+  color: white;
+  background: linear-gradient(135deg, var(--primary) 0%, #059669 100%);
+  flex-shrink: 0;
+}
+.profile-name { font-size: 1.2rem; font-weight: 800; color: white; }
+.profile-sub {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--text-muted);
+}
+
+.profile-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 22px;
+}
+.profile-stat {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 14px;
+  padding: 12px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.profile-stat-num {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: white;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.profile-stat-label {
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.profile-ach-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+}
+.profile-ach-count {
+  margin-left: auto;
+  color: var(--primary);
+  font-weight: 800;
+}
+.profile-ach-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+.profile-ach {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 4px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+}
+.profile-ach.unlocked {
+  background: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.28);
+}
+.profile-ach.locked { opacity: 0.4; filter: grayscale(1); }
+.profile-ach-icon { font-size: 1.5rem; line-height: 1; }
+.profile-ach-name {
+  font-size: 0.55rem;
+  font-weight: 600;
+  text-align: center;
+  color: var(--text-main);
+  line-height: 1.1;
+}
+
+.profile-reset {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 18px auto 0;
+  padding: 6px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-family);
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s;
+}
+.profile-reset:hover { color: #f87171; border-color: rgba(248, 113, 113, 0.4); }
+
+@media (max-width: 480px) {
+  .profile-ach-grid { grid-template-columns: repeat(4, 1fr); }
+  .profile-stats-grid { gap: 8px; }
+}
+
+/* ---------- MODO ESPECTADOR ---------- */
+.room-row-count.watch { color: var(--primary); font-weight: 700; }
+
+.spec-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.spec-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--glass-border);
+  background: rgba(0, 0, 0, 0.25);
+}
+.spec-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 800;
+  color: #34d399;
+  font-size: 0.85rem;
+}
+.spec-room {
+  font-family: monospace;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.05em;
+}
+.spec-bar-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.spec-leave {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(248, 113, 113, 0.3);
+  background: rgba(248, 113, 113, 0.12);
+  color: #fca5a5;
+  font-family: var(--font-family);
+  font-weight: 700;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.spec-leave:hover { background: rgba(248, 113, 113, 0.2); }
+
+.spec-players {
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px;
+  overflow-x: auto;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.spec-player {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  min-width: 150px;
+}
+.spec-player.active {
+  border-color: rgba(16, 185, 129, 0.55);
+  background: rgba(16, 185, 129, 0.1);
+  box-shadow: 0 0 14px rgba(16, 185, 129, 0.18);
+}
+.spec-player.team-0 { border-left: 3px solid #10b981; }
+.spec-player.team-1 { border-left: 3px solid #6366f1; }
+.spec-avatar {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 0.8rem;
+  color: white;
+  background: linear-gradient(135deg, var(--primary) 0%, #059669 100%);
+  flex-shrink: 0;
+}
+.spec-shield { position: absolute; bottom: -3px; right: -3px; color: #60a5fa; }
+.spec-pname { font-weight: 700; font-size: 0.85rem; color: white; }
+.spec-pmeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+.spec-tiles {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.spec-tiles i {
+  width: 3px;
+  height: 12px;
+  border-radius: 1px;
+  background: rgba(255, 255, 255, 0.35);
+}
+.spec-tiles b {
+  margin-left: 4px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+.spec-score { font-size: 0.72rem; font-weight: 700; color: var(--accent); white-space: nowrap; }
+.spec-powers {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 0.72rem;
+  color: #a78bfa;
+}
+.spec-board { flex: 1; min-height: 0; }
+
+@media (max-width: 640px) {
+  .spec-player { min-width: 0; padding: 6px 8px; gap: 5px; }
+  .spec-pname { max-width: 70px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+
+/* ---------- APARIENCIA (temas de mesa / skins de ficha) ---------- */
+/* Con dos botones + idioma arriba, en móvil ocultamos el texto y dejamos icono. */
+@media (max-width: 420px) {
+  .lobby-btn-label { display: none; }
+  .lobby-profile-btn { padding: 6px 9px; }
+}
+
+.theme-card { max-width: 440px; width: 100%; text-align: left; }
+
+.theme-section-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
+  margin: 14px 0 10px;
+}
+
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.theme-swatch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 14px;
+  border: 2px solid transparent;
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.theme-swatch:hover { background: rgba(255, 255, 255, 0.06); }
+.theme-swatch.sel { border-color: var(--primary); background: rgba(16, 185, 129, 0.1); }
+
+.theme-felt {
+  width: 100%;
+  height: 46px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08), inset 0 2px 10px rgba(0, 0, 0, 0.4);
+}
+
+.theme-tile-preview {
+  width: 34px;
+  height: 46px;
+  border-radius: 7px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+  padding: 8px;
+  align-content: center;
+  justify-items: center;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+.theme-tile-preview i { width: 6px; height: 6px; border-radius: 50%; }
+
+.theme-name {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+@media (max-width: 480px) {
+  .theme-grid { gap: 8px; }
+}
+
 .lang-switcher { position: relative; }
 
 .lang-btn {
@@ -3185,6 +3573,46 @@ body {
   font-size: 0.65rem;
   font-weight: 600;
   margin-top: 6px;
+}
+
+/* Botón principal para compartir el enlace de invitación. Es la acción que más
+   gente trae, así que va destacado en esmeralda. */
+.code-box-share-btn {
+  margin-top: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 18px;
+  border-radius: 12px;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  background: rgba(16, 185, 129, 0.12);
+  color: #34d399;
+  font-family: var(--font-family);
+  font-weight: 700;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, transform 0.1s;
+}
+.code-box-share-btn:hover {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: rgba(16, 185, 129, 0.55);
+}
+.code-box-share-btn:active {
+  transform: scale(0.97);
+}
+
+/* Banner de bienvenida cuando entras por un enlace de invitación. */
+.lobby-invite-banner {
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: #6ee7b7;
+  border-radius: 14px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: center;
+  line-height: 1.4;
 }
 
 .waiting-players-section {
@@ -3538,9 +3966,10 @@ body {
   justify-content: safe center;
   gap: 12px;
   width: 100%;
-  padding: 8px;
+  /* Espacio arriba para que la carta elevada en hover/selección no se recorte
+     (el contenedor scrollea en X, y eso fuerza overflow-y a recortar). */
+  padding: 20px 8px 8px;
   box-sizing: border-box;
-  margin-top: 4px;
   /* El nº de cartas puede crecer (p. ej. Robo del Destino): que scrollee
      en vez de comprimirse o salirse de pantalla. */
   overflow-x: auto;
@@ -3548,6 +3977,15 @@ body {
   overscroll-behavior-x: contain;
   touch-action: pan-x;
   flex-shrink: 0;
+}
+
+/* Contenedor de detección: fijo, no se transforma → el hover no parpadea. */
+.power-card-slot {
+  width: 78px;
+  height: 106px;
+  flex-shrink: 0;
+  position: relative;
+  cursor: pointer;
 }
 
 .power-card-item {
@@ -3569,19 +4007,95 @@ body {
   background: rgba(13, 18, 30, 0.85);
   backdrop-filter: blur(8px);
 }
-.power-card-item:hover {
+/* El hover se detecta sobre el slot (estable): la carta se eleva sin que el
+   cursor "pierda" el elemento, evitando el parpadeo. */
+.power-card-slot:hover .power-card-item {
   transform: translateY(-10px) scale(1.05);
   box-shadow: 0 10px 20px rgba(0,0,0,0.4);
 }
-.power-card-item.selected {
+.power-card-item.selected,
+.power-card-slot:hover .power-card-item.selected {
   transform: translateY(-15px) scale(1.08);
   border-color: var(--primary);
   box-shadow: 0 10px 25px rgba(16, 185, 129, 0.25), 0 0 12px var(--primary);
 }
 .power-card-item.disabled {
   filter: brightness(0.4) saturate(0.5);
-  cursor: not-allowed;
-  pointer-events: none;
+}
+/* Acento de rareza: punto en la esquina (común = sin punto). */
+.power-card-item.rarity-rare::after,
+.power-card-item.rarity-legendary::after {
+  content: '';
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+.power-card-item.rarity-rare::after { background: #818cf8; box-shadow: 0 0 6px #6366f1; }
+.power-card-item.rarity-legendary::after { background: #fbbf24; box-shadow: 0 0 8px #f59e0b; }
+
+/* --- REVELACIÓN DE ESPÍA (Ojo Soplón / Ojo Total) --- */
+.spy-overlay {
+  position: fixed;
+  top: 11%;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  pointer-events: none; /* informativo: no bloquea el juego */
+  z-index: 60;
+  padding: 0 12px;
+}
+.spy-panel {
+  max-width: min(92vw, 380px);
+  max-height: 62vh;
+  overflow-y: auto;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(10, 15, 29, 0.94);
+  border: 1px solid rgba(16, 185, 129, 0.45);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.55), 0 0 20px rgba(16,185,129,0.15);
+}
+.spy-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #34d399;
+  font-weight: 800;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 10px;
+}
+.spy-timer {
+  margin-left: auto;
+  background: rgba(16, 185, 129, 0.15);
+  border-radius: 8px;
+  padding: 2px 8px;
+  font-variant-numeric: tabular-nums;
+}
+.spy-player { margin-bottom: 6px; }
+.spy-player:last-child { margin-bottom: 0; }
+.spy-player-name {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+.spy-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+}
+/* Fichas a ~60% con márgenes negativos para que el layout quede compacto. */
+.spy-tile {
+  transform: scale(0.6);
+  transform-origin: center;
+  margin: -19px -10px;
 }
 .power-card-item.buff {
   background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(13, 18, 30, 0.85) 100%);
@@ -3608,7 +4122,7 @@ body {
   transition: all 0.25s ease;
   filter: drop-shadow(0 0 4px currentColor);
 }
-.power-card-item:hover .power-card-svg-icon {
+.power-card-slot:hover .power-card-svg-icon {
   transform: scale(1.12);
   filter: drop-shadow(0 0 8px currentColor);
 }

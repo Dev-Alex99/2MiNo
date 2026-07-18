@@ -1,21 +1,25 @@
 import React, { useState } from 'react';
-import { Play, Plus, ArrowRight, User, Zap, Layers, Settings2, Users, Download, Medal, ChevronDown, Zap as Bolt, Globe, Lock } from 'lucide-react';
+import { Play, Plus, ArrowRight, User, Zap, Layers, Settings2, Users, Download, Medal, ChevronDown, Zap as Bolt, Globe, Lock, Eye, Palette } from 'lucide-react';
 import { socket } from '../socket';
 import RoomList from './RoomList';
+import LiveGames from './LiveGames';
 import LanguageSwitcher from './LanguageSwitcher';
 import { useT } from '../i18n/LanguageContext';
 
-export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuickPlay, publicRooms = [], roomsLoading, stats }) {
+export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuickPlay, publicRooms = [], roomsLoading, stats, invitedCode = '', onOpenProfile, onOpenTheme, liveGames = [], onSpectate }) {
   const { t } = useT();
   const VARIANT_INFO = {
     6: { label: t('opt.double', { n: 6 }), desc: t('opt.d6desc') },
     9: { label: t('opt.double', { n: 9 }), desc: t('opt.d9desc') }
   };
-  const [roomCode, setRoomCode] = useState('');
+  // Si llegamos por un enlace de invitación, el código ya viene relleno.
+  const [roomCode, setRoomCode] = useState(invitedCode || '');
   const [error, setError] = useState('');
   // Opciones de sala (solo aplican al CREAR; al unirse manda la config del anfitrión)
   // Poderes OFF por defecto: dominó clásico de entrada, se activan si se quieren.
   const [powersEnabled, setPowersEnabled] = useState(false);
+  const [powerIntensity, setPowerIntensity] = useState('normal'); // light | normal | chaos
+  const [onePowerPerTurn, setOnePowerPerTurn] = useState(false);
   const [maxPip, setMaxPip] = useState(6);
   const [teamsEnabled, setTeamsEnabled] = useState(false);
   const [drawEnabled, setDrawEnabled] = useState(true);
@@ -50,11 +54,11 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
   const handleCreate = (e) => {
     e.preventDefault();
     if (!name.trim()) {
-      setError('Por favor, ingresa tu nombre.');
+      setError(t('lobby.nameRequired'));
       return;
     }
     setError('');
-    onCreateRoom({ powersEnabled, maxPip, teamsEnabled, drawEnabled, maxScore, isPublic });
+    onCreateRoom({ powersEnabled, maxPip, teamsEnabled, drawEnabled, maxScore, isPublic, powerIntensity, onePowerPerTurn });
   };
 
   const handleJoin = (e) => {
@@ -77,8 +81,22 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
       <div className="lobby-glow-1"></div>
       <div className="lobby-glow-2"></div>
 
-      {/* Selector de idioma, esquina superior */}
-      <div className="lobby-lang"><LanguageSwitcher /></div>
+      {/* Perfil + selector de idioma, esquina superior */}
+      <div className="lobby-topbar">
+        {onOpenTheme && (
+          <button type="button" className="lobby-profile-btn" onClick={onOpenTheme} title={t('theme.title')}>
+            <Palette size={16} />
+            <span className="lobby-btn-label">{t('theme.button')}</span>
+          </button>
+        )}
+        {onOpenProfile && (
+          <button type="button" className="lobby-profile-btn" onClick={onOpenProfile} title={t('profile.title')}>
+            <Medal size={16} />
+            <span className="lobby-btn-label">{t('profile.button')}</span>
+          </button>
+        )}
+        <LanguageSwitcher />
+      </div>
 
       {/* Título animado flotante */}
       <div className="lobby-header">
@@ -103,6 +121,11 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
 
       {/* Tarjeta principal con glassmorphism */}
       <div className="lobby-card glass-panel animate-scale-up">
+        {invitedCode && (
+          <div className="lobby-invite-banner">
+            {t('lobby.invited', { code: invitedCode })}
+          </div>
+        )}
         <form onSubmit={(e) => e.preventDefault()} className="lobby-form">
 
           {/* Campo de Nombre */}
@@ -145,6 +168,17 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
             </label>
             <RoomList rooms={publicRooms} loading={roomsLoading} onJoin={handleJoinFromList} />
           </div>
+
+          {/* Partidas en curso que se pueden ver (solo si hay alguna) */}
+          {liveGames.length > 0 && onSpectate && (
+            <div className="lobby-form-field">
+              <label className="lobby-form-label">
+                <Eye size={14} />
+                {t('live.title')}
+              </label>
+              <LiveGames games={liveGames} onWatch={onSpectate} />
+            </div>
+          )}
 
           <div className="separator"></div>
 
@@ -229,6 +263,49 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
                 <span className="switch-knob" />
               </span>
             </button>
+
+            {/* Ajustes de poderes: solo si están activados */}
+            {powersEnabled && (
+              <>
+                <div className="segmented" role="group" aria-label={t('opt.intensity')}>
+                  {['light', 'normal', 'chaos'].map((lvl) => (
+                    <button
+                      key={lvl}
+                      type="button"
+                      onClick={() => setPowerIntensity(lvl)}
+                      aria-pressed={powerIntensity === lvl}
+                      className={`segmented-btn ${powerIntensity === lvl ? 'active' : ''}`}
+                    >
+                      <span className="segmented-title">
+                        <Zap size={12} />
+                        {t(`opt.int_${lvl}`)}
+                      </span>
+                      <span className="segmented-sub">{t(`opt.int_${lvl}_desc`)}</span>
+                    </button>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setOnePowerPerTurn((v) => !v)}
+                  aria-pressed={onePowerPerTurn}
+                  className={`option-toggle ${onePowerPerTurn ? 'on' : ''}`}
+                >
+                  <span className="option-toggle-text">
+                    <span className="option-toggle-title">
+                      <Zap size={14} />
+                      {t('opt.onePower')}
+                    </span>
+                    <span className="option-toggle-desc">
+                      {onePowerPerTurn ? t('opt.onePowerOn') : t('opt.onePowerOff')}
+                    </span>
+                  </span>
+                  <span className="switch" aria-hidden="true">
+                    <span className="switch-knob" />
+                  </span>
+                </button>
+              </>
+            )}
 
             {/* Parejas 2v2 */}
             <button

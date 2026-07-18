@@ -131,6 +131,43 @@ const PowerCardIcon = ({ id }) => {
           <circle cx="18" cy="12" r="1.5" />
         </svg>
       );
+    case 'block_both':
+      return (
+        <svg {...props}>
+          <rect x="5" y="11" width="14" height="9" rx="2" />
+          <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+          <line x1="9" y1="15.5" x2="15" y2="15.5" />
+        </svg>
+      );
+    case 'storm':
+      return (
+        <svg {...props}>
+          <path d="M5 13a4 4 0 0 1 1-7.9 5 5 0 0 1 9.6-1.1A3.5 3.5 0 0 1 18 11" />
+          <path d="M13 11l-3 5h4l-3 5" />
+        </svg>
+      );
+    case 'second_wind':
+      return (
+        <svg {...props}>
+          <path d="M12 3v11" />
+          <path d="M8 10l4 4 4-4" />
+          <path d="M4 21h16" />
+        </svg>
+      );
+    case 'spy_all':
+      return (
+        <svg {...props}>
+          <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z" />
+          <circle cx="12" cy="12" r="2.6" />
+          <path d="M12 2.5v1.6M4 5l1.2 1.2M20 5l-1.2 1.2" />
+        </svg>
+      );
+    case 'curse':
+      return (
+        <svg {...props}>
+          <path d="M12 3a9 9 0 1 0 0 18 6 6 0 1 1 0-12 3 3 0 1 0 0 6" />
+        </svg>
+      );
     default:
       return (
         <svg {...props}>
@@ -168,7 +205,7 @@ export default function PowerCards({
 
     if (card.id === 'smuggle') {
       setPendingTargetType('smuggle_select_tile'); 
-    } else if (['spy_eye', 'draw_penalty', 'destiny_steal', 'mind_swap', 'magnetic_pull'].includes(card.id)) {
+    } else if (['spy_eye', 'draw_penalty', 'destiny_steal', 'mind_swap', 'magnetic_pull', 'curse'].includes(card.id)) {
       setPendingTargetType('player_target');
     } else if (['freeze', 'tile_demolition'].includes(card.id)) {
       setPendingTargetType('end_target');
@@ -198,19 +235,25 @@ export default function PowerCards({
           const isDisabled = !isMyTurn;
           
           return (
-            <div 
+            // El "slot" es el área de detección ESTABLE: no se mueve, así el
+            // hover no parpadea. La carta interna se eleva sin salirse del cursor.
+            <div
               key={`${card.id}-${idx}`}
-              className={`power-card-item ${card.type || 'buff'} ${isSelected ? 'selected' : ''} ${isDisabled ? 'disabled' : ''}`}
+              className="power-card-slot"
               onClick={() => handleCardClick(card)}
               onMouseEnter={() => setHoveredCard(card)}
               onMouseLeave={() => setHoveredCard(null)}
               title={t(`pw.${card.id}.d`)}
             >
-              <span className="power-card-icon">
-                <PowerCardIcon id={card.id} />
-              </span>
-              <span className="power-card-title">{t(`pw.${card.id}.n`)}</span>
-              <span className="power-card-type-label">{t(`ptype.${card.type || 'buff'}`)}</span>
+              <div
+                className={`power-card-item ${card.type || 'buff'} rarity-${card.rarity || 'common'} ${isSelected ? 'selected' : ''} ${isDisabled ? 'disabled' : ''}`}
+              >
+                <span className="power-card-icon">
+                  <PowerCardIcon id={card.id} />
+                </span>
+                <span className="power-card-title">{t(`pw.${card.id}.n`)}</span>
+                <span className="power-card-type-label">{t(`ptype.${card.type || 'buff'}`)}</span>
+              </div>
             </div>
           );
         })}

@@ -60,6 +60,39 @@ const io = new Server(server, {
 // Almacén de salas activas: roomId -> DominoGame
 const rooms = new Map();
 
+// Espectadores por sala: roomId -> Set<socketId>. No forman parte de
+// game.players (no ocupan silla ni afectan al juego); solo reciben el estado.
+const spectators = new Map();
+
+function spectatorsOf(roomId) {
+  return spectators.get(roomId) || null;
+}
+function spectatorCount(roomId) {
+  const set = spectators.get(roomId);
+  return set ? set.size : 0;
+}
+function addSpectator(roomId, socketId) {
+  if (!spectators.has(roomId)) spectators.set(roomId, new Set());
+  spectators.get(roomId).add(socketId);
+}
+// Quita un socket de cualquier sala que esté viendo. Devuelve true si lo estaba.
+function removeSpectatorEverywhere(socketId) {
+  let removed = false;
+  for (const set of spectators.values()) {
+    if (set.delete(socketId)) removed = true;
+  }
+  return removed;
+}
+
+// Elimina una sala por completo y avisa a quien esté dentro (jugadores y
+// espectadores comparten la sala de Socket.IO), para que vuelvan al lobby.
+function destroyRoom(roomId) {
+  io.to(roomId).emit('room_closed');
+  rooms.delete(roomId);
+  spectators.delete(roomId);
+  clearRoomTimers(roomId);
+}
+
 // Conectados. Contador propio en vez de io.engine.clientsCount: ese no ha
 // decrementado todavía cuando se dispara el evento 'disconnect', y el número
 // salía desfasado.
@@ -101,6 +134,13 @@ function broadcastGameState(roomId) {
       io.to(player.socketId).emit('game_state', game.getGameStateForPlayer(player.id, shared));
     }
   });
+
+  // Espectadores: una sola vista común, sin manos ni poderes de nadie.
+  const specs = spectatorsOf(roomId);
+  if (specs && specs.size) {
+    const specView = game.getSpectatorState(shared);
+    for (const sid of specs) io.to(sid).emit('game_state', specView);
+  }
 }
 
 // --- LISTA DE SALAS PÚBLICAS ---
@@ -127,6 +167,27 @@ function publicRoomsList() {
   return list.sort((a, b) => b.players - a.players);
 }
 
+// --- PARTIDAS EN VIVO (para espectar) ---
+// Públicas y en curso: no se pueden jugar (llenas/empezadas) pero sí ver.
+function spectatableRoomsList() {
+  const list = [];
+  for (const [roomId, game] of rooms.entries()) {
+    if (!game.isPublic || game.status !== 'playing') continue;
+    list.push({
+      roomId,
+      players: game.players.map(p => p.name),
+      spectators: spectatorCount(roomId),
+      maxPip: game.maxPip,
+      maxScore: game.maxScore,
+      powersEnabled: game.powersEnabled,
+      teamsEnabled: game.teamsEnabled,
+      roundNumber: game.roundNumber
+    });
+  }
+  // Primero las más vistas.
+  return list.sort((a, b) => b.spectators - a.spectators);
+}
+
 // Cifras para el lobby. online = sockets conectados (interpretación honesta de
 // "en línea"); playing = humanos en salas que ya están jugando.
 function lobbyStats() {
@@ -149,6 +210,7 @@ function broadcastStats() {
 // llamada 'lobby' para recibir la lista en vivo, sin sondear.
 function broadcastLobby() {
   io.to('lobby').emit('rooms_list', publicRoomsList());
+  io.to('lobby').emit('live_games', spectatableRoomsList());
   broadcastStats(); // una sala que cambia también cambia "salas abiertas"
 }
 
@@ -288,6 +350,8 @@ io.on('connection', (socket) => {
     const safeDraw = opts.drawEnabled !== false;
     const safePublic = opts.isPublic !== false;
     const safeScore = [100, 150, 200, 300].includes(opts.maxScore) ? opts.maxScore : null;
+    const safeIntensity = ['light', 'normal', 'chaos'].includes(opts.powerIntensity) ? opts.powerIntensity : 'normal';
+    const safeOnePerTurn = opts.onePowerPerTurn === true;
 
     const roomId = generateRoomId();
     const game = new DominoGame(roomId, safeScore, {
@@ -295,7 +359,9 @@ io.on('connection', (socket) => {
       maxPip: safeMaxPip,
       teamsEnabled: safeTeams,
       drawEnabled: safeDraw,
-      isPublic: safePublic
+      isPublic: safePublic,
+      powerIntensity: safeIntensity,
+      onePowerPerTurn: safeOnePerTurn
     });
     game.turnDurationMs = TURN_SECONDS * 1000;
 
@@ -325,10 +391,33 @@ io.on('connection', (socket) => {
   socket.on('lobby_subscribe', () => {
     socket.join('lobby');
     socket.emit('rooms_list', publicRoomsList());
+    socket.emit('live_games', spectatableRoomsList());
     socket.emit('lobby_stats', lobbyStats());
   });
 
   socket.on('lobby_unsubscribe', () => socket.leave('lobby'));
+
+  // Ver una partida en curso como espectador (sin ocupar silla).
+  socket.on('spectate_room', ({ roomId }) => {
+    const game = rooms.get(roomId);
+    if (!game) return socket.emit('error_msg', { key: 'srv.err.roomNotFound' });
+    if (game.status !== 'playing') return socket.emit('error_msg', { key: 'srv.err.notWatchable' });
+
+    socket.leave('lobby');
+    socket.join(roomId);
+    addSpectator(roomId, socket.id);
+
+    socket.emit('spectating', { roomId });
+    socket.emit('game_state', game.getSpectatorState());
+    broadcastLobby(); // cambió el contador de espectadores
+  });
+
+  // Dejar de espectar y volver al lobby.
+  socket.on('leave_spectate', ({ roomId }) => {
+    removeSpectatorEverywhere(socket.id);
+    if (roomId) socket.leave(roomId);
+    broadcastLobby();
+  });
 
   // 1.6 Partida rápida: sienta al jugador en la sala pública más avanzada, y si
   // no hay ninguna, le crea una. Un botón y a jugar, sin códigos.
@@ -490,8 +579,7 @@ io.on('connection', (socket) => {
     });
 
     if (!game.hasHumans()) {
-      rooms.delete(roomId);
-      clearRoomTimers(roomId);
+      destroyRoom(roomId);
       broadcastLobby();
       return;
     }
@@ -548,8 +636,7 @@ io.on('connection', (socket) => {
     }
 
     if (!game.hasHumans()) {
-      rooms.delete(roomId);
-      clearRoomTimers(roomId);
+      destroyRoom(roomId);
       broadcastLobby();
       console.log(`Sala ${roomId} eliminada: se fue el último humano`);
       return;
@@ -670,6 +757,11 @@ io.on('connection', (socket) => {
           case 'boneyard_reset': msgKey = 'srv.pw.boneyard_reset'; break;
           case 'magnetic_pull': msgKey = 'srv.pw.magnetic_pull'; msgParams.target = targetName; break;
           case 'russian_roulette': msgKey = 'srv.pw.russian_roulette'; break;
+          case 'block_both': msgKey = 'srv.pw.block_both'; break;
+          case 'storm': msgKey = 'srv.pw.storm'; break;
+          case 'second_wind': msgKey = 'srv.pw.second_wind'; break;
+          case 'spy_all': msgKey = 'srv.pw.spy_all'; break;
+          case 'curse': msgKey = 'srv.pw.curse'; msgParams.target = targetName; break;
           default: msgKey = 'srv.pw.default';
         }
       }
@@ -685,6 +777,10 @@ io.on('connection', (socket) => {
       // El Ojo Soplón revela por tiempo: hay que reemitir al caducar.
       if (cardId === 'spy_eye' && game.activeEffects.spyEyeEndTime) {
         scheduleEffectExpiry(roomId, game.activeEffects.spyEyeEndTime - Date.now());
+      }
+      // El Ojo Total también revela por tiempo: reemitir cuando caduque.
+      if (cardId === 'spy_all' && game.activeEffects.spyAllEndTime) {
+        scheduleEffectExpiry(roomId, game.activeEffects.spyAllEndTime - Date.now());
       }
 
       advanceRoom(roomId);
@@ -815,7 +911,10 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     leaveVoice(findMe());
     console.log(`Cliente desconectado: ${socket.id}`);
-    
+
+    // Si era espectador, sacarlo y refrescar el lobby (cambió el contador).
+    if (removeSpectatorEverywhere(socket.id)) broadcastLobby();
+
     // Buscar la sala donde estaba este socket
     for (const [roomId, game] of rooms.entries()) {
       const player = game.players.find(p => p.socketId === socket.id);
@@ -828,8 +927,7 @@ io.on('connection', (socket) => {
           // Con bots la sala nunca queda en 0 jugadores: lo que la vacía de
           // verdad es que no quede ningún humano.
           if (!game.hasHumans()) {
-            rooms.delete(roomId);
-            clearRoomTimers(roomId);
+            destroyRoom(roomId);
             console.log(`Sala sin humanos eliminada: ${roomId}`);
           } else {
             broadcastGameState(roomId);
@@ -848,8 +946,7 @@ io.on('connection', (socket) => {
             setTimeout(() => {
               const checkGame = rooms.get(roomId);
               if (checkGame && checkGame.players.every(p => p.socketId === null)) {
-                rooms.delete(roomId);
-                clearRoomTimers(roomId);
+                destroyRoom(roomId);
                 broadcastLobby();
                 console.log(`Sala ${roomId} eliminada por inactividad prolongada (todos offline).`);
               }

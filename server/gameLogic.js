@@ -1,21 +1,44 @@
+// Catálogo de poderes. Cada carta lleva:
+//  - type: buff | attack | defense | caos (categoría visual)
+//  - rarity: common | rare | legendary (pondera el mazo y filtra por intensidad)
+//  - needsBoneyard: true si el efecto no tiene sentido sin pozo
 const POWER_CATALOG = {
-  double_shot: { id: 'double_shot', name: 'Doble Tiro', desc: 'Juega 2 fichas en este turno si ambas son válidas.', type: 'buff' },
-  smuggle: { id: 'smuggle', name: 'Contrabando', desc: 'Regala una ficha de tu mano a un oponente.', type: 'attack' },
-  spy_eye: { id: 'spy_eye', name: 'El Ojo Soplón', desc: 'Revela la mano de un oponente por 10 segundos.', type: 'attack' },
-  skip: { id: 'skip', name: 'Salto de Turno', desc: 'Salta el turno del siguiente jugador inmediatamente.', type: 'attack' },
-  draw_penalty: { id: 'draw_penalty', name: 'Multa de Pozo', desc: 'Obliga a un oponente a robar 1 ficha del pozo.', type: 'attack' },
-  reverse: { id: 'reverse', name: 'Sentido Contrario', desc: 'Invierte el orden de flujo de turnos.', type: 'buff' },
-  trade: { id: 'trade', name: 'Trueque', desc: 'Cambia una ficha de tu mano por una aleatoria del pozo.', type: 'buff' },
-  shield: { id: 'shield', name: 'Escudo de Neón', desc: 'Inmune a ataques de oponentes hasta tu próximo turno.', type: 'defense' },
-  freeze: { id: 'freeze', name: 'Congelar Extremo', desc: 'Bloquea un extremo del tablero para los oponentes este turno.', type: 'attack' },
-  destiny_steal: { id: 'destiny_steal', name: 'Robo del Destino', desc: 'Roba una carta de poder al azar de un oponente.', type: 'attack' },
-  mind_swap: { id: 'mind_swap', name: 'Intercambio Mental', desc: 'Intercambia tu mano completa de fichas con la de un oponente.', type: 'attack' },
-  tile_demolition: { id: 'tile_demolition', name: 'Ficha Dinamita', desc: 'Elimina una ficha colocada en un extremo del tablero.', type: 'attack' },
-  wildcard: { id: 'wildcard', name: 'Ficha Comodín', desc: 'Habilita colocar cualquier ficha en el tablero en este turno.', type: 'buff' },
-  boneyard_reset: { id: 'boneyard_reset', name: 'Reinicio Estelar', desc: 'Devuelve tu mano al pozo, barájalo y roba la misma cantidad.', type: 'buff' },
-  magnetic_pull: { id: 'magnetic_pull', name: 'Atracción Magnética', desc: 'Obliga a un oponente a robar del pozo hasta tener jugada (max 3).', type: 'attack' },
-  russian_roulette: { id: 'russian_roulette', name: 'Ruleta Rusa', desc: 'Todos los jugadores pasan una ficha al azar al jugador de su derecha.', type: 'caos' }
+  // --- Comunes (efectos suaves; presentes en todas las intensidades) ---
+  smuggle: { id: 'smuggle', name: 'Contrabando', desc: 'Regala una ficha de tu mano a un oponente.', type: 'attack', rarity: 'common' },
+  spy_eye: { id: 'spy_eye', name: 'El Ojo Soplón', desc: 'Revela la mano de un oponente por 10 segundos.', type: 'attack', rarity: 'common' },
+  draw_penalty: { id: 'draw_penalty', name: 'Multa de Pozo', desc: 'Obliga a un oponente a robar 1 ficha del pozo.', type: 'attack', rarity: 'common', needsBoneyard: true },
+  reverse: { id: 'reverse', name: 'Sentido Contrario', desc: 'Invierte el orden de flujo de turnos.', type: 'buff', rarity: 'common' },
+  trade: { id: 'trade', name: 'Trueque', desc: 'Cambia una ficha de tu mano por una aleatoria del pozo.', type: 'buff', rarity: 'common', needsBoneyard: true },
+  shield: { id: 'shield', name: 'Escudo de Neón', desc: 'Inmune a ataques de oponentes hasta tu próximo turno.', type: 'defense', rarity: 'common' },
+  second_wind: { id: 'second_wind', name: 'Segunda Oportunidad', desc: 'Robas del pozo hasta tener jugada (máx 3).', type: 'buff', rarity: 'common', needsBoneyard: true },
+
+  // --- Raros (medios; en normal y caos) ---
+  double_shot: { id: 'double_shot', name: 'Doble Tiro', desc: 'Juega 2 fichas en este turno si ambas son válidas.', type: 'buff', rarity: 'rare' },
+  skip: { id: 'skip', name: 'Salto de Turno', desc: 'Salta el turno del siguiente jugador inmediatamente.', type: 'attack', rarity: 'rare' },
+  freeze: { id: 'freeze', name: 'Congelar Extremo', desc: 'Bloquea un extremo del tablero para los oponentes este turno.', type: 'attack', rarity: 'rare' },
+  destiny_steal: { id: 'destiny_steal', name: 'Robo del Destino', desc: 'Roba una carta de poder al azar de un oponente.', type: 'attack', rarity: 'rare' },
+  tile_demolition: { id: 'tile_demolition', name: 'Ficha Dinamita', desc: 'Elimina una ficha colocada en un extremo del tablero.', type: 'attack', rarity: 'rare' },
+  wildcard: { id: 'wildcard', name: 'Ficha Comodín', desc: 'Habilita colocar cualquier ficha en el tablero en este turno.', type: 'buff', rarity: 'rare' },
+  boneyard_reset: { id: 'boneyard_reset', name: 'Reinicio Estelar', desc: 'Devuelve tu mano al pozo, barájalo y roba la misma cantidad.', type: 'buff', rarity: 'rare', needsBoneyard: true },
+  magnetic_pull: { id: 'magnetic_pull', name: 'Atracción Magnética', desc: 'Obliga a un oponente a robar del pozo hasta tener jugada (max 3).', type: 'attack', rarity: 'rare', needsBoneyard: true },
+  storm: { id: 'storm', name: 'Tormenta', desc: 'Todos los oponentes roban 1 ficha del pozo.', type: 'attack', rarity: 'rare', needsBoneyard: true },
+  spy_all: { id: 'spy_all', name: 'Ojo Total', desc: 'Revela la mano de TODOS los oponentes por 8 segundos.', type: 'attack', rarity: 'rare' },
+  curse: { id: 'curse', name: 'Maldición', desc: 'Un oponente solo podrá jugar en un extremo en su próximo turno.', type: 'attack', rarity: 'rare' },
+
+  // --- Legendarios (cambian la partida; solo en caos) ---
+  mind_swap: { id: 'mind_swap', name: 'Intercambio Mental', desc: 'Intercambia tu mano completa de fichas con la de un oponente.', type: 'attack', rarity: 'legendary' },
+  russian_roulette: { id: 'russian_roulette', name: 'Ruleta Rusa', desc: 'Todos los jugadores pasan una ficha al azar al jugador de su derecha.', type: 'caos', rarity: 'legendary' },
+  block_both: { id: 'block_both', name: 'Bloqueo Total', desc: 'Congela AMBOS extremos para los oponentes este turno.', type: 'attack', rarity: 'legendary' }
 };
+
+// Qué rarezas entran según la intensidad elegida.
+const INTENSITY_RARITIES = {
+  light: ['common'],
+  normal: ['common', 'rare'],
+  chaos: ['common', 'rare', 'legendary']
+};
+// Copias de cada carta en el mazo, por rareza (los legendarios son más escasos).
+const RARITY_COPIES = { common: 3, rare: 2, legendary: 1 };
 
 // Variantes de dominó soportadas, indexadas por el valor máximo de puntos.
 // - Doble 6: 28 fichas. Con 4 jugadores × 7 fichas se reparte el mazo entero (pozo vacío).
@@ -32,7 +55,7 @@ class DominoGame {
   constructor(roomId, maxScore = null, options = {}) {
     const {
       powersEnabled = true, maxPip = 6, teamsEnabled = false, drawEnabled = true,
-      isPublic = true
+      isPublic = true, powerIntensity = 'normal', onePowerPerTurn = false
     } = options;
 
     // Pública: aparece en la lista del lobby mientras espera jugadores.
@@ -46,6 +69,14 @@ class DominoGame {
     const variant = VARIANTS[this.maxPip];
     this.handSize = variant.handSize;
     this.powersEnabled = powersEnabled !== false;
+    // Intensidad de los poderes: filtra qué rarezas entran al mazo.
+    //  - light  = solo comunes (efectos suaves)
+    //  - normal = comunes + raros
+    //  - chaos  = todo, con más copias de los legendarios
+    this.powerIntensity = ['light', 'normal', 'chaos'].includes(powerIntensity) ? powerIntensity : 'normal';
+    // Límite opcional de un poder por turno (evita encadenar combos).
+    this.onePowerPerTurn = onePowerPerTurn === true;
+    this.powerUsedThisTurn = false;
     // Parejas: exige exactamente 4 jugadores. Se sientan alternados (0,2) vs (1,3),
     // así los compañeros nunca juegan seguidos.
     this.teamsEnabled = teamsEnabled === true;
@@ -79,15 +110,20 @@ class DominoGame {
     // Estados activos para cartas de poderes
     this.powerDeck = [];
     this.activeEffects = {
-      frozenEnd: null, // 'left' | 'right' | null
+      frozenEnd: null, // 'left' | 'right' | 'both' | null
       frozenEndOwnerId: null,
       doubleTurnActive: false,
       reversed: false,
       spyEyeTargetId: null,
       spyEyeOwnerId: null,
       spyEyeEndTime: 0,
+      spyAllOwnerId: null,   // Ojo Total: revela TODAS las manos a este jugador
+      spyAllEndTime: 0,
       skipNextTurn: false,
-      wildcardActive: false
+      wildcardActive: false,
+      cursedPlayerId: null,  // Maldición: solo puede jugar en cursedSide su próximo turno
+      cursedSide: null,      // 'left' | 'right'
+      curseServed: false
     };
   }
 
@@ -268,6 +304,7 @@ class DominoGame {
     this.roundWinner = null;
     this.playerPassedOn = {};
     this.status = 'playing';
+    this.powerUsedThisTurn = false;
 
     // Inicializar efectos activos de poderes
     this.activeEffects = {
@@ -278,17 +315,25 @@ class DominoGame {
       spyEyeTargetId: null,
       spyEyeOwnerId: null,
       spyEyeEndTime: 0,
+      spyAllOwnerId: null,
+      spyAllEndTime: 0,
       skipNextTurn: false,
-      wildcardActive: false
+      wildcardActive: false,
+      cursedPlayerId: null,
+      cursedSide: null,
+      curseServed: false
     };
 
-    // Generar mazo de cartas de poderes (2 de cada una). En modo clásico no se usa.
+    // Generar mazo de cartas de poderes según intensidad y rareza. En modo
+    // clásico no se usa. Los comunes salen más (x3) y los legendarios menos (x1).
     this.powerDeck = [];
     if (this.powersEnabled) {
+      const allowed = INTENSITY_RARITIES[this.powerIntensity] || INTENSITY_RARITIES.normal;
       const allPowers = [];
-      Object.keys(POWER_CATALOG).forEach(key => {
-        allPowers.push({ ...POWER_CATALOG[key] });
-        allPowers.push({ ...POWER_CATALOG[key] });
+      Object.values(POWER_CATALOG).forEach(card => {
+        if (!allowed.includes(card.rarity)) return;
+        const copies = RARITY_COPIES[card.rarity] || 2;
+        for (let c = 0; c < copies; c++) allPowers.push({ ...card });
       });
       this.shuffle(allPowers);
       this.powerDeck = allPowers;
@@ -314,7 +359,17 @@ class DominoGame {
     });
 
     // Nunca repartir más fichas de las que hay en el mazo.
-    const dealCount = Math.min(this.handSize, Math.floor(deck.length / numPlayers));
+    let dealCount = Math.min(this.handSize, Math.floor(deck.length / numPlayers));
+    // Con poderes activados garantizamos un pozo mínimo: varias cartas (Multa,
+    // Trueque, Atracción, Tormenta...) no tienen sentido sin pozo, y en 4
+    // jugadores a doble-6 se repartiría el mazo entero dejándolo vacío. Solo
+    // baja la mano lo justo para dejar unas pocas fichas en el pozo.
+    if (this.powersEnabled) {
+      const MIN_BONEYARD = 4;
+      while (dealCount > 1 && deck.length - dealCount * numPlayers < MIN_BONEYARD) {
+        dealCount--;
+      }
+    }
     for (let i = 0; i < dealCount; i++) {
       for (let p = 0; p < numPlayers; p++) {
         this.players[p].hand.push(deck.pop());
@@ -378,6 +433,22 @@ class DominoGame {
     return this.board[this.board.length - 1][1];
   }
 
+  // Qué extremos NO puede usar este jugador ahora mismo, considerando el
+  // congelamiento (Congelar Extremo / Bloqueo Total, que puede ser 'both') y la
+  // Maldición (solo puede jugar en un extremo). Centralizado para que
+  // hasValidMove, getValidMoves y playTile coincidan siempre.
+  endsBlockedFor(playerId) {
+    const fe = this.activeEffects.frozenEnd;
+    const owner = this.activeEffects.frozenEndOwnerId;
+    let leftBlocked = (fe === 'left' || fe === 'both') && owner !== playerId;
+    let rightBlocked = (fe === 'right' || fe === 'both') && owner !== playerId;
+    if (this.activeEffects.cursedPlayerId === playerId && this.activeEffects.cursedSide) {
+      if (this.activeEffects.cursedSide === 'left') rightBlocked = true;
+      else leftBlocked = true;
+    }
+    return { leftBlocked, rightBlocked };
+  }
+
   // Verifica si un jugador tiene movimientos válidos
   hasValidMove(playerId) {
     const player = this.players.find(p => p.id === playerId);
@@ -391,16 +462,15 @@ class DominoGame {
     const left = this.getLeftEnd();
     const right = this.getRightEnd();
 
-    const isLeftFrozenForMe = this.activeEffects.frozenEnd === 'left' && this.activeEffects.frozenEndOwnerId !== playerId;
-    const isRightFrozenForMe = this.activeEffects.frozenEnd === 'right' && this.activeEffects.frozenEndOwnerId !== playerId;
+    const { leftBlocked, rightBlocked } = this.endsBlockedFor(playerId);
 
     return player.hand.some(tile => {
       const matchesLeft = tile[0] === left || tile[1] === left;
       const matchesRight = tile[0] === right || tile[1] === right;
-      
-      const canPlayL = matchesLeft && !isLeftFrozenForMe;
-      const canPlayR = matchesRight && !isRightFrozenForMe;
-      
+
+      const canPlayL = matchesLeft && !leftBlocked;
+      const canPlayR = matchesRight && !rightBlocked;
+
       return canPlayL || canPlayR;
     });
   }
@@ -418,21 +488,20 @@ class DominoGame {
 
     const left = this.getLeftEnd();
     const right = this.getRightEnd();
-    const leftFrozen = this.activeEffects.frozenEnd === 'left' && this.activeEffects.frozenEndOwnerId !== playerId;
-    const rightFrozen = this.activeEffects.frozenEnd === 'right' && this.activeEffects.frozenEndOwnerId !== playerId;
+    const { leftBlocked, rightBlocked } = this.endsBlockedFor(playerId);
 
     const moves = [];
     for (let i = 0; i < player.hand.length; i++) {
       const tile = player.hand[i];
 
       if (this.activeEffects.wildcardActive) {
-        if (!leftFrozen) moves.push({ tileIndex: i, side: 'left' });
-        if (!rightFrozen) moves.push({ tileIndex: i, side: 'right' });
+        if (!leftBlocked) moves.push({ tileIndex: i, side: 'left' });
+        if (!rightBlocked) moves.push({ tileIndex: i, side: 'right' });
         continue;
       }
 
-      if (!leftFrozen && (tile[0] === left || tile[1] === left)) moves.push({ tileIndex: i, side: 'left' });
-      if (!rightFrozen && (tile[0] === right || tile[1] === right)) moves.push({ tileIndex: i, side: 'right' });
+      if (!leftBlocked && (tile[0] === left || tile[1] === left)) moves.push({ tileIndex: i, side: 'left' });
+      if (!rightBlocked && (tile[0] === right || tile[1] === right)) moves.push({ tileIndex: i, side: 'right' });
     }
     return moves;
   }
@@ -504,14 +573,14 @@ class DominoGame {
     const tile = player.hand[tileIndex];
     if (!tile) return { success: false, error: 'srv.err.tileNotInHand' };
 
-    const isLeftFrozenForMe = this.activeEffects.frozenEnd === 'left' && this.activeEffects.frozenEndOwnerId !== playerId;
-    const isRightFrozenForMe = this.activeEffects.frozenEnd === 'right' && this.activeEffects.frozenEndOwnerId !== playerId;
+    const { leftBlocked, rightBlocked } = this.endsBlockedFor(playerId);
+    const curseHere = this.activeEffects.cursedPlayerId === playerId;
 
-    if (side === 'left' && isLeftFrozenForMe) {
-      return { success: false, error: 'srv.err.leftFrozen' };
+    if (side === 'left' && leftBlocked) {
+      return { success: false, error: curseHere ? 'srv.err.cursed' : 'srv.err.leftFrozen' };
     }
-    if (side === 'right' && isRightFrozenForMe) {
-      return { success: false, error: 'srv.err.rightFrozen' };
+    if (side === 'right' && rightBlocked) {
+      return { success: false, error: curseHere ? 'srv.err.cursed' : 'srv.err.rightFrozen' };
     }
 
     if (this.board.length === 0) {
@@ -643,14 +712,13 @@ class DominoGame {
   }
 
   nextTurn() {
+    // Jugador cuyo turno termina ahora (para expirar la Maldición tras su turno).
+    const outgoing = this.players[this.currentPlayerIndex];
+
     let step = 1;
-    let skippedPlayerIndex = null;
     if (this.activeEffects.skipNextTurn) {
       this.activeEffects.skipNextTurn = false;
       step = 2;
-      skippedPlayerIndex = this.activeEffects.reversed
-        ? (this.currentPlayerIndex - 1 + this.players.length) % this.players.length
-        : (this.currentPlayerIndex + 1) % this.players.length;
     }
 
     // Siguiente índice respetando orden inverso y saltos
@@ -660,13 +728,23 @@ class DominoGame {
       this.currentPlayerIndex = (this.currentPlayerIndex + step) % this.players.length;
     }
 
-    // El escudo del jugador saltado se apaga
-    if (skippedPlayerIndex !== null) {
-      const skippedPlayer = this.players[skippedPlayerIndex];
-      if (skippedPlayer) {
-        skippedPlayer.shieldActive = false;
-      }
+    // Maldición: se levanta en cuanto el jugador maldito termina su turno.
+    if (outgoing && this.activeEffects.cursedPlayerId === outgoing.id) {
+      this.activeEffects.cursedPlayerId = null;
+      this.activeEffects.cursedSide = null;
     }
+
+    // El escudo del jugador SALTADO NO se apaga: sigue protegido hasta que
+    // llegue de verdad su turno (antes se le quemaba el escudo sin jugar).
+
+    // Doble Tiro solo puede aplicar al lanzador dentro de su propio turno: una
+    // jugada doble no pasa por aquí (no llama a nextTurn entre las dos fichas).
+    // Si el turno avanza con el flag aún puesto (p. ej. el lanzador no tuvo
+    // jugada y pasó), lo limpiamos para que no lo herede el rival.
+    this.activeEffects.doubleTurnActive = false;
+
+    // Un poder por turno: se reinicia el contador al cambiar de turno.
+    this.powerUsedThisTurn = false;
 
     // Desactivar escudo del jugador que entra en turno, y congelamiento si vuelve a su creador
     const activePlayer = this.players[this.currentPlayerIndex];
@@ -823,6 +901,11 @@ class DominoGame {
       return { success: false, error: 'srv.err.gameNotInProgress' };
     }
 
+    // Límite opcional: un poder por turno.
+    if (this.onePowerPerTurn && this.powerUsedThisTurn) {
+      return { success: false, error: 'srv.err.onePowerPerTurn' };
+    }
+
     // Encontrar la carta en la mano de poderes del jugador
     const cardIdx = player.powers.findIndex(c => c.id === cardId);
     if (cardIdx === -1) return { success: false, error: 'srv.err.dontOwnCard' };
@@ -834,9 +917,11 @@ class DominoGame {
       if (targetPlayer && targetPlayer.id === playerId) {
         return { success: false, error: 'srv.err.cantTargetSelf' };
       }
-      if (targetPlayer && targetPlayer.shieldActive && cardId !== 'destiny_steal') {
-        // Consumimos el poder pero el escudo lo anula
+      if (targetPlayer && targetPlayer.shieldActive) {
+        // El Escudo anula CUALQUIER ataque dirigido (incluido Robo del Destino):
+        // coherente con "inmune a ataques". Consumimos el poder igualmente.
         player.powers.splice(cardIdx, 1);
+        this.powerUsedThisTurn = true;
         return { success: true, shielded: true, targetName: targetPlayer.name };
       }
     }
@@ -993,12 +1078,62 @@ class DominoGame {
         }
         break;
 
+      // --- Poderes nuevos ---
+      case 'block_both':
+        // Congela AMBOS extremos para los oponentes hasta que vuelva tu turno.
+        this.activeEffects.frozenEnd = 'both';
+        this.activeEffects.frozenEndOwnerId = playerId;
+        break;
+
+      case 'storm': {
+        // Todos los oponentes (sin escudo) roban 1 del pozo.
+        if (this.boneyard.length === 0) {
+          return { success: false, error: 'srv.err.boneyardEmpty' };
+        }
+        let hit = 0;
+        for (const opp of this.players) {
+          if (opp.id === playerId || opp.shieldActive) continue;
+          if (this.boneyard.length === 0) break;
+          opp.hand.push(this.boneyard.pop());
+          hit++;
+        }
+        if (hit === 0) return { success: false, error: 'srv.err.boneyardEmpty' };
+        break;
+      }
+
+      case 'second_wind': {
+        // Tú robas del pozo hasta tener jugada (máx 3).
+        if (this.boneyard.length === 0) {
+          return { success: false, error: 'srv.err.boneyardEmpty' };
+        }
+        let sw = 0;
+        while (sw < 3 && this.boneyard.length > 0 && !this.hasValidMove(playerId)) {
+          player.hand.push(this.boneyard.pop());
+          sw++;
+        }
+        break;
+      }
+
+      case 'spy_all':
+        // Revela la mano de TODOS los oponentes durante 8 segundos.
+        this.activeEffects.spyAllOwnerId = playerId;
+        this.activeEffects.spyAllEndTime = Date.now() + 8000;
+        break;
+
+      case 'curse':
+        if (!targetPlayer) return { success: false, error: 'srv.err.selectOpponent' };
+        // El maldito solo podrá jugar en un extremo (aleatorio) su próximo turno.
+        this.activeEffects.cursedPlayerId = targetPlayer.id;
+        this.activeEffects.cursedSide = Math.random() < 0.5 ? 'left' : 'right';
+        break;
+
       default:
         return { success: false, error: 'srv.err.powerNotRecognized' };
     }
 
     // Quitar la carta usada de la mano del jugador
     player.powers.splice(cardIdx, 1);
+    this.powerUsedThisTurn = true;
     return { success: true };
   }
 
@@ -1008,6 +1143,7 @@ class DominoGame {
   // destinatario. Solo la lista de jugadores varía por receptor (privacidad).
   getSharedState() {
     const isSpyActive = this.activeEffects.spyEyeTargetId && this.activeEffects.spyEyeEndTime > Date.now();
+    const isSpyAllActive = this.activeEffects.spyAllOwnerId && this.activeEffects.spyAllEndTime > Date.now();
     return {
       roomId: this.roomId,
       status: this.status,
@@ -1037,7 +1173,9 @@ class DominoGame {
       activeEffects: {
         ...this.activeEffects,
         spyEyeActive: isSpyActive,
-        spyEyeTimeRemaining: isSpyActive ? Math.max(0, Math.round((this.activeEffects.spyEyeEndTime - Date.now()) / 1000)) : 0
+        spyEyeTimeRemaining: isSpyActive ? Math.max(0, Math.round((this.activeEffects.spyEyeEndTime - Date.now()) / 1000)) : 0,
+        spyAllActive: isSpyAllActive,
+        spyAllTimeRemaining: isSpyAllActive ? Math.max(0, Math.round((this.activeEffects.spyAllEndTime - Date.now()) / 1000)) : 0
       }
     };
   }
@@ -1050,12 +1188,15 @@ class DominoGame {
     const isSpyActive = shared.activeEffects.spyEyeActive;
     const spyTargetId = this.activeEffects.spyEyeTargetId;
     const spyOwnerId = this.activeEffects.spyEyeOwnerId;
+    // Ojo Total: si YO soy el dueño y sigue activo, veo la mano de todos.
+    const iSeeAll = shared.activeEffects.spyAllActive && this.activeEffects.spyAllOwnerId === playerId;
 
     return {
       ...shared,
       // Lo único que varía por destinatario: qué manos y poderes puede ver.
       players: this.players.map(p => {
-        const isRevealedBySpy = isSpyActive && p.id === spyTargetId && spyOwnerId === playerId;
+        const isRevealedBySpy = (isSpyActive && p.id === spyTargetId && spyOwnerId === playerId)
+          || (iSeeAll && p.id !== playerId);
 
         return {
           id: p.id,
@@ -1078,6 +1219,38 @@ class DominoGame {
       })
     };
   }
+
+  // Vista para ESPECTADORES: como la de un jugador ajeno, pero sin la mano ni
+  // las cartas de poder de NADIE (solo los contadores). En el reveal público de
+  // fin de ronda/partida se muestran las manos, igual que lo ven los jugadores.
+  getSpectatorState(shared) {
+    shared = shared || this.getSharedState();
+    const revealAll = this.status === 'round_ended' || this.status === 'game_ended';
+    return {
+      ...shared,
+      isSpectator: true,
+      players: this.players.map(p => ({
+        id: p.id,
+        name: p.name,
+        ready: p.ready,
+        score: p.score,
+        team: p.team,
+        inVoice: !!p.inVoice,
+        camOn: !!p.camOn,
+        isBot: !!p.isBot,
+        difficulty: p.isBot ? p.difficulty : undefined,
+        handCount: p.hand.length,
+        shieldActive: p.shieldActive,
+        powersCount: p.powers ? p.powers.length : 0,
+        powers: [],                     // nunca revelamos cartas de poder
+        hand: revealAll ? p.hand : []   // solo el reveal público de fin de ronda
+      }))
+    };
+  }
 }
 
 module.exports = DominoGame;
+// Metadatos exportados para tests y para el cliente/servidor si los necesitan.
+module.exports.POWER_CATALOG = POWER_CATALOG;
+module.exports.INTENSITY_RARITIES = INTENSITY_RARITIES;
+module.exports.RARITY_COPIES = RARITY_COPIES;

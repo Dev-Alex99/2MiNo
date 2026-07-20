@@ -12,18 +12,22 @@ import { useT } from '../i18n/LanguageContext';
  */
 export default function SpyReveal({ gameState, playerId }) {
   const { t } = useT();
-  // Tick local para la cuenta atrás suave (el estado del servidor no llega cada
-  // segundo). Barato: un intervalo mientras el componente está montado.
   const [, setTick] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setTick(n => (n + 1) % 1000), 500);
-    return () => clearInterval(id);
-  }, []);
 
   const ae = (gameState && gameState.activeEffects) || {};
   const isEyeOwner = ae.spyEyeActive && ae.spyEyeOwnerId === playerId;
   const isAllOwner = ae.spyAllActive && ae.spyAllOwnerId === playerId;
-  if (!isEyeOwner && !isAllOwner) return null;
+  const active = isEyeOwner || isAllOwner;
+
+  // Tick local para la cuenta atrás suave, SOLO mientras hay una revelación
+  // activa. Antes corría toda la partida (re-render cada 0,5s en balde).
+  useEffect(() => {
+    if (!active) return undefined;
+    const id = setInterval(() => setTick(n => (n + 1) % 1000), 500);
+    return () => clearInterval(id);
+  }, [active]);
+
+  if (!active) return null;
 
   const players = gameState.players || [];
   const targets = isAllOwner

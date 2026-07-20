@@ -76,6 +76,8 @@ export default function SpectatorView({ gameState, onLeave }) {
             onSelectEndTarget={noop}
             activeEffects={g.activeEffects}
             lastPlay={g.lastPlay}
+            lastPlacedTile={g.lastPlacedTile}
+            lastPlacedBy={g.lastPlacedBy}
             seatsPadding={40}
           />
         </div>

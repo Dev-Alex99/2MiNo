@@ -201,6 +201,7 @@ export default function useVoiceChat({ roomId, playerId }) {
   const destroyPeer = useCallback((id) => {
     const peer = peersRef.current.get(id);
     if (!peer) return;
+    if (peer.recoverTimer) { clearTimeout(peer.recoverTimer); peer.recoverTimer = null; }
     try { peer.pc.close(); } catch { /* ya cerrada */ }
     if (peer.audio) {
       peer.audio.srcObject = null;
@@ -249,7 +250,13 @@ export default function useVoiceChat({ roomId, playerId }) {
       audio: null,
       audioSender: null,
       videoSender: null,
-      restarts: 0
+      restarts: 0,
+      // Candidatos ICE que llegan antes de tener descripción remota: se guardan
+      // y se aplican en cuanto exista, para no perder rutas (causa de enlaces
+      // que fallan de forma intermitente).
+      pendingCandidates: [],
+      // Temporizador de recuperación cuando la conexión queda 'disconnected'.
+      recoverTimer: null
     };
     peersRef.current.set(peerId, peer); // síncrono: sin ventana para duplicados
     setPeerState(peerId, 'connecting');
@@ -342,8 +349,22 @@ export default function useVoiceChat({ roomId, playerId }) {
     };
 
     // --- Robustez: recuperar la conexión cuando la red se cae ---
+    // Reintento de ICE acotado y protegido: solo si el peer sigue siendo este.
+    const scheduleRestart = (delay) => {
+      if (peer.restarts >= MAX_ICE_RESTARTS) return;
+      peer.restarts++;
+      setTimeout(() => {
+        if (peersRef.current.get(peerId) !== peer) return;
+        const s = pc.connectionState;
+        if (s === 'connected' || s === 'closed') return; // ya se recuperó
+        try { pc.restartIce(); } catch { /* navegador antiguo */ }
+      }, delay);
+    };
+
     pc.onconnectionstatechange = () => {
       const st = pc.connectionState;
+      if (peer.recoverTimer) { clearTimeout(peer.recoverTimer); peer.recoverTimer = null; }
+
       if (st === 'connected') {
         peer.restarts = 0;
         setPeerState(peerId, 'connected');
@@ -351,18 +372,17 @@ export default function useVoiceChat({ roomId, playerId }) {
       } else if (st === 'new' || st === 'connecting') {
         setPeerState(peerId, 'connecting');
       } else if (st === 'disconnected') {
-        // Suele ser transitorio: se le da margen antes de actuar.
+        // Suele ser transitorio; damos margen y, si no se recupera solo,
+        // forzamos un reinicio de ICE (antes se quedaba colgado para siempre).
         setPeerState(peerId, 'connecting');
+        peer.recoverTimer = setTimeout(() => {
+          peer.recoverTimer = null;
+          if (peersRef.current.get(peerId) !== peer) return;
+          if (pc.connectionState === 'disconnected') scheduleRestart(0);
+        }, 4000);
       } else if (st === 'failed') {
         setPeerState(peerId, 'failed');
-        if (peer.restarts < MAX_ICE_RESTARTS) {
-          peer.restarts++;
-          setTimeout(() => {
-            // Si el peer se destruyó o se recreó mientras tanto, no tocar nada.
-            if (peersRef.current.get(peerId) !== peer) return;
-            try { pc.restartIce(); } catch { /* navegador antiguo */ }
-          }, 500 * peer.restarts);
-        }
+        scheduleRestart(500 * (peer.restarts + 1));
       }
     };
 
@@ -706,6 +726,16 @@ export default function useVoiceChat({ roomId, playerId }) {
           if (peer.ignoreOffer) return;
 
           await pc.setRemoteDescription(data.description);
+
+          // Ya hay descripción remota: aplicar los candidatos que llegaron antes.
+          if (peer.pendingCandidates.length) {
+            const queued = peer.pendingCandidates;
+            peer.pendingCandidates = [];
+            for (const c of queued) {
+              try { await pc.addIceCandidate(c); } catch { /* candidato ya inútil */ }
+            }
+          }
+
           if (data.description.type === 'offer') {
             await pc.setLocalDescription();
             const description = { ...pc.localDescription.toJSON() };
@@ -713,10 +743,16 @@ export default function useVoiceChat({ roomId, playerId }) {
             socket.emit('voice_signal', { to: from, data: { description } });
           }
         } else if (data.candidate) {
-          try {
-            await pc.addIceCandidate(data.candidate);
-          } catch (e) {
-            if (!peer.ignoreOffer) throw e;
+          // Si aún no hay descripción remota, addIceCandidate lanzaría y se
+          // perdería el candidato: mejor encolarlo y aplicarlo luego.
+          if (!pc.remoteDescription || !pc.remoteDescription.type) {
+            peer.pendingCandidates.push(data.candidate);
+          } else {
+            try {
+              await pc.addIceCandidate(data.candidate);
+            } catch (e) {
+              if (!peer.ignoreOffer) throw e;
+            }
           }
         }
       } catch (e) {

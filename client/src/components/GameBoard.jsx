@@ -159,6 +159,8 @@ export default function GameBoard({
   onSelectEndTarget,
   activeEffects,
   lastPlay,
+  lastPlacedTile,
+  lastPlacedBy,
   // Ancho que ocupan los asientos a los lados: se descuenta del auto-encaje
   // para que la serpiente no acabe pintada por debajo de ellos.
   seatsPadding = 0
@@ -276,9 +278,14 @@ export default function GameBoard({
 
   // Resaltar la última ficha colocada: ayuda a seguir el hilo, sobre todo en
   // doble 9 donde el tablero puede llegar a 55 fichas.
-  const lastKey = lastPlay && lastPlay.tile ? tileKey(lastPlay.tile) : null;
-  const lastPlayerName = lastPlay
-    ? players.find((p) => p.id === lastPlay.playerId)?.name
+  // Normalmente resaltamos la ficha de la última jugada. Si el último acto fue
+  // un pase (lastPlay.tile === null, p. ej. una tranca), caemos a la última
+  // ficha REALMENTE colocada para que se siga viendo la jugada final.
+  const highlightTile = (lastPlay && lastPlay.tile) || lastPlacedTile || null;
+  const highlightBy = (lastPlay && lastPlay.tile) ? lastPlay.playerId : lastPlacedBy;
+  const lastKey = highlightTile ? tileKey(highlightTile) : null;
+  const lastPlayerName = highlightBy
+    ? players.find((p) => p.id === highlightBy)?.name
     : null;
 
   return (
@@ -347,7 +354,7 @@ export default function GameBoard({
                 <div
                   key={key}
                   className={`board-tile-wrap ${isLast ? 'last-played' : ''}`}
-                  title={isLast && lastPlayerName ? `Última ficha · ${lastPlayerName}` : undefined}
+                  title={isLast && lastPlayerName ? t('board.lastTile', { name: lastPlayerName }) : undefined}
                   style={{
                     position: 'absolute',
                     left: `calc(50% + ${item.cx}px)`,

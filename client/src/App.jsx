@@ -19,6 +19,7 @@ import ProfileModal from './components/ProfileModal';
 import SpectatorView from './components/SpectatorView';
 import ThemeModal from './components/ThemeModal';
 import SpyReveal from './components/SpyReveal';
+import EpicMoment from './components/EpicMoment';
 import { recordGame, recordRoundWin } from './stats';
 import { initTheme } from './theme';
 
@@ -96,6 +97,12 @@ export default function App() {
   const [liveGames, setLiveGames] = useState([]);
   const spectatingRef = useRef(spectating);
   spectatingRef.current = spectating;
+
+  // Momentos épicos (cinemática). gameStateRef permite leer el estado actual
+  // desde handlers de socket registrados una sola vez (deps []).
+  const [epicMoment, setEpicMoment] = useState(null);
+  const gameStateRef = useRef(gameState);
+  gameStateRef.current = gameState;
  
    useEffect(() => {
      if (name) {
@@ -105,6 +112,16 @@ export default function App() {
 
   // Aplica el tema de mesa / skin de fichas guardado, al cargar la app.
   useEffect(() => { initTheme(); }, []);
+
+  // Al dispararse un momento épico: suena el "sting" y se auto-descarta. Los de
+  // poder son más breves (interrumpen menos el juego en curso).
+  useEffect(() => {
+    if (!epicMoment) return undefined;
+    playGameSound('epic');
+    const dur = epicMoment.kind === 'power' ? 2400 : 4200;
+    const id = setTimeout(() => setEpicMoment(null), dur);
+    return () => clearTimeout(id);
+  }, [epicMoment && epicMoment.id]);
 
   // Al cargar con un enlace de invitación, limpiamos la URL a "/" para que un
   // refresh no vuelva a disparar el auto-join y la barra de direcciones quede
@@ -181,6 +198,22 @@ export default function App() {
           }
           // Estadística local: rondas ganadas (los espectadores no cuentan).
           if (!state.isSpectator) recordRoundWin(state, playerIdRef.current);
+
+          // Momento épico: ¡DOMINÓ! (mano vacía) o ¡TRANCA! (bloqueo).
+          if (!state.isSpectator && state.roundWinner !== 'tie') {
+            const winP = state.players.find(p => p.id === state.roundWinner);
+            const sub = state.teamsEnabled
+              ? tRef.current(state.roundWinnerTeam === 0 ? 'team.a' : 'team.b')
+              : (winP ? winP.name : '');
+            const tranca = !!(state.lastPlay && state.lastPlay.side === 'pass');
+            setEpicMoment({
+              id: `${Date.now()}_${Math.random()}`,
+              kind: tranca ? 'tranca' : 'domino',
+              title: tRef.current(tranca ? 'epic.tranca' : 'epic.domino'),
+              sub,
+              starId: state.roundWinner
+            });
+          }
         } else if (currentStatus === 'game_ended') {
           playGameSound('win_game');
           // Estadística local: W/L, rachas y logros. Se registra una sola vez
@@ -200,6 +233,32 @@ export default function App() {
               setQuickNotifications(prev => prev.filter(n => n.id !== nid));
             }, 4000);
           }
+
+          // Momento épico: ¡VICTORIA! (o ¡REMONTADA! si el final fue apretado).
+          if (!state.isSpectator) {
+            const maxScore = state.maxScore || 100;
+            const winP = state.players.find(p => p.id === state.gameWinner);
+            const sub = state.teamsEnabled
+              ? tRef.current(state.gameWinnerTeam === 0 ? 'team.a' : 'team.b')
+              : (winP ? winP.name : '');
+            let rivalPeak = 0;
+            if (state.teamsEnabled) {
+              const loseTeam = state.gameWinnerTeam === 0 ? 1 : 0;
+              rivalPeak = (state.teamScores || [0, 0])[loseTeam] || 0;
+            } else {
+              rivalPeak = state.players
+                .filter(p => p.id !== state.gameWinner)
+                .reduce((m, p) => Math.max(m, p.score || 0), 0);
+            }
+            const comeback = rivalPeak >= maxScore * 0.7;
+            setEpicMoment({
+              id: `${Date.now()}_${Math.random()}`,
+              kind: comeback ? 'comeback' : 'victory',
+              title: tRef.current(comeback ? 'epic.comeback' : 'epic.victory'),
+              sub,
+              starId: state.gameWinner
+            });
+          }
         }
       }
       prevGameStatusRef.current = currentStatus;
@@ -210,6 +269,22 @@ export default function App() {
     }
 
     function onReceiveQuickMessage(msg) {
+      // Momento épico al usar un poder LEGENDARIO.
+      const LEGENDARY = { 'srv.pw.mind_swap': 1, 'srv.pw.russian_roulette': 1, 'srv.pw.block_both': 1 };
+      if (msg.key && LEGENDARY[msg.key] && !spectatingRef.current) {
+        const casterName = msg.params && msg.params.name;
+        const gs = gameStateRef.current;
+        const caster = casterName && gs ? gs.players.find(p => p.name === casterName) : null;
+        const powerId = msg.key.slice('srv.pw.'.length);
+        setEpicMoment({
+          id: `${Date.now()}_${Math.random()}`,
+          kind: 'power',
+          title: tRef.current(`pw.${powerId}.n`),
+          sub: casterName || '',
+          starId: caster ? caster.id : null
+        });
+      }
+
       const id = `${Date.now()}_${Math.random()}`;
       const newNotification = {
         id,
@@ -518,6 +593,9 @@ export default function App() {
       {/* Ojo Soplón / Ojo Total: manos reveladas al espía, temporalmente */}
       <SpyReveal gameState={gameState} playerId={playerId} />
 
+      {/* Momento épico: cinemática sobre el protagonista + captura compartible */}
+      {epicMoment && <EpicMoment moment={epicMoment} gameState={gameState} playerId={playerId} />}
+
       {/* Indicador de Desconexión de Red */}
       {!isConnected && (
         <div className="network-alert">
@@ -600,6 +678,8 @@ export default function App() {
             onSelectEndTarget={handleEndTargetSelected}
             activeEffects={gameState.activeEffects}
             lastPlay={gameState.lastPlay}
+            lastPlacedTile={gameState.lastPlacedTile}
+            lastPlacedBy={gameState.lastPlacedBy}
             seatsPadding={isMobile ? 170 : 240}
           />
 
@@ -662,8 +742,13 @@ export default function App() {
         )}
       </div>
 
-      {/* Modal de Finalización de Ronda / Partida */}
-      <EndGameModal gameState={gameState} playerId={playerId} />
+      {/* Modal de Finalización de Ronda / Partida. La key lo re-monta en cada
+          ronda/estado, reseteando el "ver tablero" y el margen inicial. */}
+      <EndGameModal
+        key={`end-${gameState.status}-${gameState.roundNumber}`}
+        gameState={gameState}
+        playerId={playerId}
+      />
     </div>
       )}
     </VoiceProvider>

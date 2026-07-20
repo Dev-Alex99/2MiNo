@@ -11,23 +11,85 @@ app.use(cors());
 // Configuración ICE para el chat de voz. Se sirve desde aquí (y no se incrusta
 // en el cliente) para que las credenciales TURN vivan en variables de entorno
 // y se puedan rotar sin volver a desplegar el front.
-app.get('/ice-config', (req, res) => {
+// Credenciales TURN de Cloudflare: son EFÍMERAS, así que las genera el servidor
+// llamando a su API y las cachea hasta poco antes de que caduquen. Se activa
+// solo si están las variables CF_TURN_KEY_ID y CF_TURN_API_TOKEN.
+let cfIceCache = null; // { iceServers, expiresAt }
+async function getCloudflareIceServers() {
+  const keyId = process.env.CF_TURN_KEY_ID;
+  const apiToken = process.env.CF_TURN_API_TOKEN;
+  if (!keyId || !apiToken) return null;
+  if (cfIceCache && cfIceCache.expiresAt > Date.now()) return cfIceCache.iceServers;
+  try {
+    const ttl = 86400; // 24 h
+    const r = await fetch(
+      `https://rtc.live.cloudflare.com/v1/turn/keys/${keyId}/credentials/generate-ice-servers`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${apiToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ttl })
+      }
+    );
+    if (!r.ok) {
+      console.warn('[ice] Cloudflare TURN respondió', r.status);
+      return cfIceCache ? cfIceCache.iceServers : null;
+    }
+    const data = await r.json();
+    const servers = Array.isArray(data.iceServers) ? data.iceServers : null;
+    if (!servers) return null;
+    // Renovar con 4 h de margen para no usar credenciales a punto de expirar.
+    cfIceCache = { iceServers: servers, expiresAt: Date.now() + (ttl - 4 * 3600) * 1000 };
+    return servers;
+  } catch (e) {
+    console.warn('[ice] Cloudflare TURN error:', e.message);
+    return cfIceCache ? cfIceCache.iceServers : null; // usar lo último válido si lo hay
+  }
+}
+
+app.get('/ice-config', async (req, res) => {
+  // Varios STUN (redundancia si uno está caído) para descubrir la IP pública.
   const iceServers = [
-    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }
+    { urls: [
+      'stun:stun.l.google.com:19302',
+      'stun:stun1.l.google.com:19302',
+      'stun:stun2.l.google.com:19302',
+      'stun:stun.cloudflare.com:3478'
+    ] }
   ];
 
-  // TURN es opcional: sin él, el ~10-20% tras NAT simétrico no conectará.
-  if (process.env.TURN_URL) {
+  // Prioridad de TURN (relay), imprescindible para el ~10-20% tras NAT estricto:
+  //   1) Cloudflare (recomendado): credenciales efímeras generadas aquí.
+  //   2) TURN propio estático por variables de entorno (TURN_URL/USER/CRED).
+  //   3) Respaldo gratuito best-effort (OpenRelay), por si no hay nada configurado.
+  let turnMode = 'none';
+  const cf = await getCloudflareIceServers();
+  if (cf) {
+    iceServers.push(...cf); // el array de Cloudflare ya trae su STUN + TURN
+    turnMode = 'cloudflare';
+  } else if (process.env.TURN_URL) {
     iceServers.push({
       urls: process.env.TURN_URL.split(',').map(s => s.trim()).filter(Boolean),
       username: process.env.TURN_USERNAME,
       credential: process.env.TURN_CREDENTIAL
     });
+    turnMode = 'custom';
+  } else {
+    // Puede estar saturado o caído; NO sustituye a un TURN propio.
+    iceServers.push({
+      urls: [
+        'turn:openrelay.metered.ca:80',
+        'turn:openrelay.metered.ca:443',
+        'turn:openrelay.metered.ca:443?transport=tcp'
+      ],
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    });
+    turnMode = 'free-fallback';
   }
 
   // Cachear poco: las credenciales TURN suelen ser efímeras.
   res.set('Cache-Control', 'public, max-age=60');
-  res.json({ iceServers, turnConfigured: !!process.env.TURN_URL });
+  res.json({ iceServers, turnMode, turnConfigured: turnMode === 'cloudflare' || turnMode === 'custom' });
 });
 
 app.get('/health', (req, res) => {

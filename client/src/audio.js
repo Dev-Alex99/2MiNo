@@ -71,7 +71,12 @@ export function playGameSound(type) {
       case 'power':
         playPowerSynth(ctx, now);
         break;
-      
+
+      case 'epic':
+        // Golpe cinematográfico: impacto grave + barrido ascendente + acorde brillante.
+        playEpicSting(ctx, now);
+        break;
+
       default:
         break;
     }
@@ -213,6 +218,59 @@ function playVictoryChime(ctx, time) {
       osc.start(chordTime);
       osc.stop(chordTime + duration + 0.05);
     });
+  });
+}
+
+// "Sting" épico para momentos grandes (dominó, tranca, poder legendario, victoria).
+function playEpicSting(ctx, time) {
+  // 1) Impacto grave (boom)
+  const boom = ctx.createOscillator();
+  const boomGain = ctx.createGain();
+  boom.type = 'sine';
+  boom.frequency.setValueAtTime(120, time);
+  boom.frequency.exponentialRampToValueAtTime(45, time + 0.5);
+  boomGain.gain.setValueAtTime(0.0001, time);
+  boomGain.gain.exponentialRampToValueAtTime(0.5, time + 0.02);
+  boomGain.gain.exponentialRampToValueAtTime(0.001, time + 0.7);
+  boom.connect(boomGain);
+  boomGain.connect(ctx.destination);
+  boom.start(time);
+  boom.stop(time + 0.75);
+
+  // 2) Barrido ascendente (riser)
+  const riser = ctx.createOscillator();
+  const riserGain = ctx.createGain();
+  const riserFilter = ctx.createBiquadFilter();
+  riser.type = 'sawtooth';
+  riser.frequency.setValueAtTime(200, time);
+  riser.frequency.exponentialRampToValueAtTime(1600, time + 0.6);
+  riserFilter.type = 'lowpass';
+  riserFilter.frequency.setValueAtTime(500, time);
+  riserFilter.frequency.exponentialRampToValueAtTime(3000, time + 0.6);
+  riserGain.gain.setValueAtTime(0.0001, time);
+  riserGain.gain.linearRampToValueAtTime(0.12, time + 0.5);
+  riserGain.gain.exponentialRampToValueAtTime(0.001, time + 0.75);
+  riser.connect(riserFilter);
+  riserFilter.connect(riserGain);
+  riserGain.connect(ctx.destination);
+  riser.start(time);
+  riser.stop(time + 0.78);
+
+  // 3) Acorde brillante al caer el impacto (shimmer)
+  const chord = [523.25, 659.25, 783.99, 1046.50];
+  chord.forEach(freq => {
+    const t2 = time + 0.55;
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(freq, t2);
+    g.gain.setValueAtTime(0, t2);
+    g.gain.linearRampToValueAtTime(0.09, t2 + 0.04);
+    g.gain.exponentialRampToValueAtTime(0.001, t2 + 1.1);
+    o.connect(g);
+    g.connect(ctx.destination);
+    o.start(t2);
+    o.stop(t2 + 1.15);
   });
 }
 

@@ -100,6 +100,10 @@ class DominoGame {
     this.roundWinner = null;
     this.gameWinner = null;
     this.lastPlay = null; // Para historial o animaciones: { playerId, tile, side }
+    // Última ficha REALMENTE colocada (no se pisa con los pases). Sirve para
+    // resaltar la jugada final aunque la ronda acabe en tranca (todos pasan).
+    this.lastPlacedTile = null;
+    this.lastPlacedBy = null;
     this.passedTurns = 0; // Contador de turnos seguidos pasados para detectar bloqueo
     this.roundNumber = 0;
     this.startingPlayerId = null; // Quien inicia la ronda
@@ -300,6 +304,8 @@ class DominoGame {
     this.roundNumber++;
     this.board = [];
     this.lastPlay = null;
+    this.lastPlacedTile = null;
+    this.lastPlacedBy = null;
     this.passedTurns = 0;
     this.roundWinner = null;
     this.playerPassedOn = {};
@@ -588,6 +594,8 @@ class DominoGame {
       this.board.push(tile);
       player.hand.splice(tileIndex, 1);
       this.lastPlay = { playerId, tile, side: 'left' };
+      this.lastPlacedTile = tile;
+      this.lastPlacedBy = playerId;
       this.passedTurns = 0;
       this.checkRoundEnd();
       if (this.status === 'playing') {
@@ -652,6 +660,8 @@ class DominoGame {
     // Remover ficha de la mano del jugador
     player.hand.splice(tileIndex, 1);
     this.lastPlay = { playerId, tile: playedTile, side };
+    this.lastPlacedTile = playedTile;
+    this.lastPlacedBy = playerId;
     this.passedTurns = 0; // Reseteamos contador de pases
 
     this.checkRoundEnd();
@@ -1169,6 +1179,8 @@ class DominoGame {
       roundWinner: this.roundWinner,
       gameWinner: this.gameWinner,
       lastPlay: this.lastPlay,
+      lastPlacedTile: this.lastPlacedTile,
+      lastPlacedBy: this.lastPlacedBy,
       roundNumber: this.roundNumber,
       activeEffects: {
         ...this.activeEffects,

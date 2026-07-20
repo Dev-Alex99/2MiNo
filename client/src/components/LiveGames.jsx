@@ -1,5 +1,5 @@
 import React from 'react';
-import { Eye, Zap, Layers, Users } from 'lucide-react';
+import { Eye, Zap, Layers } from 'lucide-react';
 import { useT } from '../i18n/LanguageContext';
 
 /**

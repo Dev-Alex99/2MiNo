@@ -1,10 +1,21 @@
-import React from 'react';
-import { Trophy, RefreshCw, ChevronRight, Award, AwardIcon } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Trophy, RefreshCw, ChevronRight, Award, Eye } from 'lucide-react';
 import { socket } from '../socket';
 import { useT } from '../i18n/LanguageContext';
 
 export default function EndGameModal({ gameState, playerId }) {
   const { t } = useT();
+  // "Ver tablero": el jugador oculta el resultado para inspeccionar la mesa
+  // (y la última ficha jugada, que queda resaltada) y vuelve cuando quiera.
+  const [peek, setPeek] = useState(false);
+  // Pequeño margen antes de mostrar el diálogo: da tiempo a ver aterrizar la
+  // ficha final en lugar de taparla al instante.
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const id = setTimeout(() => setReady(true), 900);
+    return () => clearTimeout(id);
+  }, []);
+
   // Nombres de equipo traducidos en cliente (el servidor ya no manda el texto).
   const teamLabel = (i) => (i === 0 ? t('team.a') : t('team.b'));
   const {
@@ -15,6 +26,19 @@ export default function EndGameModal({ gameState, playerId }) {
 
   // Si no ha terminado ni la ronda ni el juego, no mostrar nada
   if (status !== 'round_ended' && status !== 'game_ended') return null;
+  // Aún dentro del margen inicial: dejamos ver el tablero un momento.
+  if (!ready) return null;
+
+  // Modo "ver tablero": el diálogo se colapsa en una pastilla flotante que no
+  // tapa la mesa; se pulsa para recuperar el resultado.
+  if (peek) {
+    return (
+      <button className="end-peek-pill" onClick={() => setPeek(false)}>
+        <Trophy size={14} />
+        {t('end.showResult')}
+      </button>
+    );
+  }
 
   const isGameEnd = status === 'game_ended';
   const winner = players.find(p => p.id === (isGameEnd ? gameWinner : roundWinner));
@@ -150,6 +174,12 @@ export default function EndGameModal({ gameState, playerId }) {
               <ChevronRight size={18} />
             </>
           )}
+        </button>
+
+        {/* Ver el tablero final sin cerrar la partida */}
+        <button className="end-view-board" onClick={() => setPeek(true)}>
+          <Eye size={14} />
+          {t('end.viewBoard')}
         </button>
 
       </div>

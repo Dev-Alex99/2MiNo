@@ -1,13 +1,34 @@
 const { Pool } = require('pg');
+const { STORE_ITEMS, getItem } = require('./storeCatalog');
 
-const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://postgres:e5SWx125pb1z4Qj9@db.bbaedrtzhfnnpdkuwbsr.supabase.co:5432/postgres';
+// La cadena de conexión SIEMPRE viene de la variable de entorno DATABASE_URL.
+// Nunca se hardcodea una credencial en el código (quedaría expuesta en git).
+// Si falta, el juego funciona igual en modo "sin persistencia" (degradado).
+const DATABASE_URL = process.env.DATABASE_URL || '';
+const DB_ENABLED = !!DATABASE_URL;
 
-const pool = new Pool({
-  connectionString: DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
-});
+const pool = DB_ENABLED
+  ? new Pool({
+      connectionString: DATABASE_URL,
+      ssl: { rejectUnauthorized: false },
+      // Límites conservadores pensados para Render 512 MB + Supabase.
+      max: Number(process.env.DB_POOL_MAX) || 5,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000
+    })
+  : null;
+
+if (!DB_ENABLED) {
+  console.warn('[BD] DATABASE_URL no está configurada. Persistencia (usuarios, tienda, ranking) DESACTIVADA.');
+}
+
+if (pool) {
+  // Un error en un cliente inactivo del pool no debe tumbar el proceso.
+  pool.on('error', (err) => console.warn('[BD] Error de cliente inactivo:', err.message));
+}
 
 async function initDb() {
+  if (!pool) return;
   try {
     const client = await pool.connect();
     console.log('[Supabase BD] Conexión establecida correctamente');
@@ -55,6 +76,8 @@ async function initDb() {
         purchased_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (user_id, skin_id)
       );
+
+      CREATE INDEX IF NOT EXISTS idx_users_elo ON users (elo DESC);
     `);
 
     // Eliminar la constraint UNIQUE del username si existía de versiones anteriores
@@ -72,8 +95,14 @@ async function initDb() {
   }
 }
 
+// ¿Es un nombre real elegido por el jugador o un marcador de posición?
+function isRealName(username) {
+  return !!username && username !== 'Jugador' && !/^Jugador_/.test(username);
+}
+
 // Funciones helper de persistencia
 async function getOrCreateUser(userId, username) {
+  if (!pool || !userId) return null;
   try {
     let res = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
     if (res.rows.length === 0) {
@@ -86,6 +115,10 @@ async function getOrCreateUser(userId, username) {
         [userId]
       );
       res = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
+    } else if (isRealName(username) && res.rows[0].username !== username) {
+      // Mantener el nombre para mostrar sincronizado si el jugador lo cambió.
+      await pool.query('UPDATE users SET username = $2 WHERE id = $1', [userId, username]);
+      res.rows[0].username = username;
     }
     const statsRes = await pool.query('SELECT * FROM stats WHERE user_id = $1', [userId]);
     const ownedRes = await pool.query('SELECT skin_id FROM owned_skins WHERE user_id = $1', [userId]);
@@ -98,6 +131,7 @@ async function getOrCreateUser(userId, username) {
 }
 
 async function recordMatchEnd({ id, roomId, variant, teamsEnabled, winnerName, winnerId, finalScores, moveLog, players }) {
+  if (!pool) return;
   try {
     await pool.query(
       `INSERT INTO match_history (id, room_id, variant, teams_enabled, winner_name, winner_id, final_scores, move_log)
@@ -105,24 +139,32 @@ async function recordMatchEnd({ id, roomId, variant, teamsEnabled, winnerName, w
       [id, roomId, variant || 'double_6', !!teamsEnabled, winnerName, winnerId, JSON.stringify(finalScores), JSON.stringify(moveLog)]
     );
 
-    // Actualizar estadísticas y ELO de cada jugador en la partida
+    // Actualizar estadísticas, ELO y doblones de cada jugador humano.
     if (Array.isArray(players)) {
       for (const p of players) {
         if (!p.isBot && p.id) {
-          const isWinner = p.id === winnerId || (teamsEnabled && p.team === winnerId);
-          const eloChange = isWinner ? 25 : -10;
-          const coinsEarned = isWinner ? 50 : 10;
+          const isWinner = p.id === winnerId || (teamsEnabled && `team_${p.team}` === winnerId);
+          const isTie = winnerId === 'tie' || !winnerId;
+          const eloChange = isTie ? 0 : (isWinner ? 25 : -10);
+          const coinsEarned = isTie ? 25 : (isWinner ? 50 : 10);
+
+          // Asegurar que la fila del usuario existe antes de acreditar recompensas.
+          await pool.query(
+            `INSERT INTO users (id, username) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING`,
+            [p.id, isRealName(p.name) ? p.name : `Jugador_${String(p.id).substring(0, 4)}`]
+          );
 
           await pool.query(
-            `INSERT INTO stats (user_id, games_played, wins, losses, points_scored)
-             VALUES ($1, 1, $2, $3, $4)
+            `INSERT INTO stats (user_id, games_played, wins, losses, ties, points_scored)
+             VALUES ($1, 1, $2, $3, $4, $5)
              ON CONFLICT (user_id) DO UPDATE SET
                games_played = stats.games_played + 1,
                wins = stats.wins + $2,
                losses = stats.losses + $3,
-               points_scored = stats.points_scored + $4,
+               ties = stats.ties + $4,
+               points_scored = stats.points_scored + $5,
                updated_at = CURRENT_TIMESTAMP`,
-            [p.id, isWinner ? 1 : 0, isWinner ? 0 : 1, p.score || 0]
+            [p.id, isWinner ? 1 : 0, (!isWinner && !isTie) ? 1 : 0, isTie ? 1 : 0, p.score || 0]
           );
 
           await pool.query(
@@ -141,13 +183,16 @@ async function recordMatchEnd({ id, roomId, variant, teamsEnabled, winnerName, w
   }
 }
 
-async function getGlobalLeaderboard(limit = 10) {
+async function getGlobalLeaderboard(limit = 15) {
+  if (!pool) return [];
   try {
     const res = await pool.query(`
-      SELECT u.id, u.username, u.avatar, u.elo, u.coins, s.games_played, s.wins, s.losses, s.points_scored
+      SELECT u.id, u.username, u.avatar, u.elo, u.coins,
+             s.games_played, s.wins, s.losses, s.ties, s.points_scored
       FROM users u
-      LEFT JOIN stats s ON u.id = s.user_id
-      ORDER BY s.wins DESC, u.elo DESC
+      JOIN stats s ON u.id = s.user_id
+      WHERE s.games_played > 0
+      ORDER BY u.elo DESC, s.wins DESC
       LIMIT $1
     `, [limit]);
     return res.rows;
@@ -158,6 +203,7 @@ async function getGlobalLeaderboard(limit = 10) {
 }
 
 async function getUserProfile(userId) {
+  if (!pool || !userId) return null;
   try {
     const res = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
     if (res.rows.length === 0) return null;
@@ -171,53 +217,60 @@ async function getUserProfile(userId) {
   }
 }
 
-async function equipItem(userId, category, itemId, cost = 0, username = 'Jugador') {
-  try {
-    let userRes = await pool.query('SELECT coins FROM users WHERE id = $1', [userId]);
-    if (userRes.rows.length === 0) {
-      await getOrCreateUser(userId, username);
-      userRes = await pool.query('SELECT coins FROM users WHERE id = $1', [userId]);
-    }
+// Comprar (si hace falta) y equipar una skin/tapete.
+// El precio es AUTORITATIVO del servidor: nunca se confía en un coste enviado
+// por el cliente. Un item desconocido se rechaza.
+async function equipItem(userId, category, itemId, username = 'Jugador') {
+  if (!pool) return { success: false, error: 'Persistencia no disponible.' };
+  if (!userId) return { success: false, error: 'Jugador no identificado.' };
 
+  const item = getItem(category, itemId);
+  if (!item) return { success: false, error: 'Artículo no válido.' };
+
+  try {
+    // Garantizar que el usuario existe (crea fila con valores por defecto).
+    await getOrCreateUser(userId, username);
+
+    const userRes = await pool.query('SELECT coins FROM users WHERE id = $1', [userId]);
     const user = userRes.rows[0] || { coins: 500 };
 
-    // Verificar si ya la tiene
+    // ¿Ya la posee? (los gratuitos se consideran siempre en propiedad)
     const ownedCheck = await pool.query(
       'SELECT 1 FROM owned_skins WHERE user_id = $1 AND skin_id = $2',
       [userId, itemId]
     );
-    const alreadyOwned = ownedCheck.rows.length > 0 || cost === 0;
-
-    const actualCost = alreadyOwned ? 0 : cost;
+    const alreadyOwned = ownedCheck.rows.length > 0 || item.cost === 0;
+    const actualCost = alreadyOwned ? 0 : item.cost;
 
     if (actualCost > 0 && (user.coins || 0) < actualCost) {
       return { success: false, error: 'Doblones insuficientes. ¡Gana más partidas!' };
     }
 
-    // Si es compra nueva, registrar la skin y descontar monedas
+    // Compra nueva: descontar monedas de forma atómica (evita saldo negativo por
+    // condiciones de carrera) y registrar la skin.
     if (!alreadyOwned && actualCost > 0) {
+      const spend = await pool.query(
+        'UPDATE users SET coins = coins - $2 WHERE id = $1 AND coins >= $2 RETURNING coins',
+        [userId, actualCost]
+      );
+      if (spend.rows.length === 0) {
+        return { success: false, error: 'Doblones insuficientes. ¡Gana más partidas!' };
+      }
       await pool.query(
         'INSERT INTO owned_skins (user_id, skin_id, category) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
         [userId, itemId, category]
       );
-      await pool.query(
-        'UPDATE users SET coins = GREATEST(0, coins - $2) WHERE id = $1',
-        [userId, actualCost]
-      );
     }
 
-    // Equipar la skin
+    // Equipar la skin en el campo correspondiente.
     const field = category === 'tile' ? 'equipped_tile_skin' : 'equipped_board_theme';
-    await pool.query(
-      `UPDATE users SET ${field} = $2 WHERE id = $1`,
-      [userId, itemId]
-    );
+    await pool.query(`UPDATE users SET ${field} = $2 WHERE id = $1`, [userId, itemId]);
 
     const updated = await getUserProfile(userId);
     return { success: true, user: updated, purchased: !alreadyOwned && actualCost > 0 };
   } catch (e) {
     console.warn('[BD Error equipItem]', e.message);
-    return { success: false, error: e.message };
+    return { success: false, error: 'No se pudo completar la operación.' };
   }
 }
 
@@ -225,6 +278,8 @@ initDb();
 
 module.exports = {
   pool,
+  dbEnabled: DB_ENABLED,
+  STORE_ITEMS,
   getOrCreateUser,
   recordMatchEnd,
   getGlobalLeaderboard,

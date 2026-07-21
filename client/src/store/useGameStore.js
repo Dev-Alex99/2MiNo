@@ -12,7 +12,10 @@ export function getOrCreatePersistentPlayerId() {
 export const useGameStore = create((set) => ({
   // Usuario y Conexión
   name: localStorage.getItem('domino_username') || '',
-  playerId: sessionStorage.getItem('domino_player_id') || getOrCreatePersistentPlayerId(),
+  // Identidad canónica: SIEMPRE el id persistente (localStorage). Así las monedas,
+  // el ELO y las estadísticas que gana jugando se acreditan al mismo usuario que
+  // lee la tienda, el perfil y el ranking. El servidor devuelve este mismo id.
+  playerId: getOrCreatePersistentPlayerId(),
   roomId: sessionStorage.getItem('domino_room_id') || '',
   isConnected: false,
 

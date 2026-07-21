@@ -264,10 +264,9 @@ const { recordMatchEnd } = require('./db');
 
 function advanceRoom(io, roomId) {
   const game = rooms.get(roomId);
-  if (game && (game.status === 'round_ended' || game.status === 'game_ended') && !game._matchRecorded) {
+  if (game && game.status === 'game_ended' && !game._matchRecorded) {
     game._matchRecorded = true;
-    const isGameEnd = game.status === 'game_ended';
-    const winnerId = isGameEnd ? game.gameWinner : game.roundWinner;
+    const winnerId = game.gameWinner;
     const winner = game.players.find(p => p.id === winnerId);
     
     recordMatchEnd({
@@ -275,7 +274,7 @@ function advanceRoom(io, roomId) {
       roomId,
       variant: `double_${game.maxPip || 6}`,
       teamsEnabled: game.teamsEnabled,
-      winnerName: winner ? winner.name : (game.teamsEnabled ? `Equipo ${winnerId}` : 'Empate'),
+      winnerName: winner ? winner.name : (game.teamsEnabled && winnerId ? `Equipo ${winnerId.replace('team_', '') === '0' ? 'A' : 'B'}` : 'Empate'),
       winnerId: winnerId || null,
       finalScores: game.players.map(p => ({ id: p.id, name: p.name, score: p.score })),
       moveLog: game.moveLog || [],

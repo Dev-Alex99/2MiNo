@@ -167,8 +167,8 @@ export default function SkinStoreModal({ playerId, name, onClose }) {
     if (isEquipped || purchasing) return;
 
     const isOwned = ownedSkins.has(item.id) || item.cost === 0;
-    const costToPay = isOwned ? 0 : item.cost;
 
+    // Chequeo de solvencia solo para UX; el precio real y el cobro los valida el servidor.
     if (!isOwned && userCoins < item.cost) {
       showMessage('¡Doblones insuficientes! Gana más partidas para obtener monedas.', 'error');
       return;
@@ -179,8 +179,7 @@ export default function SkinStoreModal({ playerId, name, onClose }) {
       playerId,
       username: name || 'Jugador',
       category: activeTab,
-      itemId: item.id,
-      cost: costToPay
+      itemId: item.id
     });
   }, [activeTab, equippedTile, equippedBoard, ownedSkins, userCoins, purchasing, playerId, name, showMessage]);
 

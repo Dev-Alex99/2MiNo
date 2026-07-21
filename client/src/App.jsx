@@ -132,7 +132,7 @@ export default function App() {
     if (!isConnected || !invitedCode || roomId || autoJoinedRef.current) return;
     if (name && name.trim()) {
       autoJoinedRef.current = true;
-      socket.emit('join_room', { roomId: invitedCode, name: name.trim() });
+      socket.emit('join_room', { roomId: invitedCode, name: name.trim(), playerId: getOrCreatePersistentPlayerId() });
     }
   }, [isConnected, invitedCode, roomId, name]);
 
@@ -405,16 +405,17 @@ export default function App() {
     } = options;
     socket.emit('create_room', {
       name, powersEnabled, maxPip, teamsEnabled, drawEnabled, maxScore, isPublic,
-      powerIntensity, onePowerPerTurn
+      powerIntensity, onePowerPerTurn,
+      playerId: getOrCreatePersistentPlayerId()
     });
   };
 
   const handleQuickPlay = () => {
-    socket.emit('quick_play', { name, playerId });
+    socket.emit('quick_play', { name, playerId: getOrCreatePersistentPlayerId() });
   };
 
   const handleJoinRoom = (code) => {
-    socket.emit('join_room', { roomId: code, name });
+    socket.emit('join_room', { roomId: code, name, playerId: getOrCreatePersistentPlayerId() });
   };
 
   const handleSpectate = (code) => {

@@ -157,7 +157,8 @@ function runTests() {
   // --- Alta y baja de bots ---
   {
     const g = makeGame();
-    assert(g.addBot('Rita', 'dificil').difficulty === 'dificil', 'addBot: respeta la dificultad');
+    assert(g.addBot('Rita', 'dificil').difficulty === 'dificil', 'addBot: respeta la dificultad difícil');
+    assert(g.addBot('Yuri', 'maestro').difficulty === 'maestro', 'addBot: respeta la dificultad maestro');
     assert(g.addBot('Chema', 'inventada').difficulty === 'normal', 'addBot: una dificultad inválida cae a normal');
     assert(g.players[1].ready === true, 'addBot: el bot entra ya listo');
     assert(g.allReady() === false, 'allReady: sigue esperando al humano');

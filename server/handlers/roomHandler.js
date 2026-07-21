@@ -37,9 +37,10 @@ function registerRoomHandlers(io, socket, leaveVoiceFn) {
     socket.emit('profile_data', profile);
   });
 
-  socket.on('equip_skin', async ({ playerId, category, itemId, cost, username }) => {
+  socket.on('equip_skin', async ({ playerId, category, itemId, username }) => {
     if (!playerId || !category || !itemId) return;
-    const result = await equipItem(playerId, category, itemId, cost || 0, username || 'Jugador');
+    // El precio lo decide el servidor (storeCatalog); ignoramos cualquier coste del cliente.
+    const result = await equipItem(playerId, category, itemId, username || 'Jugador');
     socket.emit('skin_equipped', result);
   });
 
@@ -68,6 +69,7 @@ function registerRoomHandlers(io, socket, leaveVoiceFn) {
       const game = rooms.get(candidate.roomId);
       const actualPlayerId = playerId || `p_${Math.random().toString(36).substring(2, 9)}`;
       if (game && game.addPlayer(actualPlayerId, name, socket.id)) {
+        getOrCreateUser(actualPlayerId, name);
         socket.join(candidate.roomId);
         socket.leave('lobby');
         socket.emit('room_joined', { roomId: candidate.roomId, playerId: actualPlayerId });
@@ -121,6 +123,7 @@ function registerRoomHandlers(io, socket, leaveVoiceFn) {
       return socket.emit('error_msg', { key: 'srv.err.nameRequired' });
     }
 
+    getOrCreateUser(actualPlayerId, name);
     game.addPlayer(actualPlayerId, name, socket.id);
     socket.join(roomId);
 

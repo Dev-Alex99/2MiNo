@@ -193,7 +193,7 @@ class DominoGame {
       shieldActive: false,
       isBot: true,
       team: 0,
-      difficulty: ['facil', 'normal', 'dificil'].includes(difficulty) ? difficulty : 'normal'
+      difficulty: ['facil', 'normal', 'dificil', 'maestro'].includes(difficulty) ? difficulty : 'normal'
     };
     this.players.push(bot);
     this.assignTeams();

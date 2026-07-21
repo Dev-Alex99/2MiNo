@@ -3,17 +3,6 @@ import { Bot, Mic, Shield, Zap } from 'lucide-react';
 import { useVoice } from '../voice/VoiceContext';
 import { useT } from '../i18n/LanguageContext';
 
-/**
- * Los rivales colocados alrededor del tablero, como en una mesa real.
- *
- * Sustituye a la barra lateral en móvil: allí costaba 173px de los ~640 de alto,
- * y aquí no cuesta nada porque va flotando sobre el tablero.
- *
- * El sitio se deduce del ORDEN DE TURNOS, no del array: el siguiente en jugar
- * va a tu derecha, el de después arriba y el último a tu izquierda. Con eso, en
- * parejas tu compañero (que juega dos turnos después) te queda siempre enfrente,
- * igual que en la mesa de verdad.
- */
 const SEAT_BY_OFFSET = { 1: 'right', 2: 'top', 3: 'left' };
 
 function initials(name) {
@@ -32,18 +21,22 @@ function SeatVideo({ stream }) {
   return <video ref={ref} autoPlay playsInline muted className="seat-video" />;
 }
 
-/**
- * Un asiento, memoizado. Recibe solo primitivas (y el stream, que es una ref
- * estable cuando no cambia). Así, cuando alguien empieza o deja de hablar y el
- * contexto de voz se re-renderiza, React salta todos los asientos MENOS el que
- * de verdad cambió su `talking`. El resto no vuelve a pintarse.
- */
+const STATIC_TILE_ICONS = Array.from({ length: 15 }).map((_, i) => <i key={i} />);
+
 const Seat = React.memo(function Seat({
   id, pos, name, isBot, teamClass, isActive, talking,
   stream, shieldActive, inVoice, handCount, powersCount, showPowers,
-  targeting, onSelect
+  targeting, isLeader, taunt, blitzTime, onSelect
 }) {
   const { t } = useT();
+
+  const tMsg = (key, params) => {
+    if (!params) return t(key);
+    const p = { ...params };
+    for (const k in p) if (p[k] === '@opponent') p[k] = t('srv.opponent');
+    return t(key, p);
+  };
+
   return (
     <div
       className={`seat seat-${pos} ${isActive ? 'active' : ''} ${teamClass} ${
@@ -52,7 +45,24 @@ const Seat = React.memo(function Seat({
       onClick={targeting ? () => onSelect(id) : undefined}
       role={targeting ? 'button' : undefined}
     >
+      {taunt && (
+        <div className="seat-taunt-bubble animate-taunt-float">
+          <span className="taunt-text">
+            {taunt.playerName ? <strong>{taunt.playerName}: </strong> : null}
+            {taunt.msgKey ? tMsg(taunt.msgKey, taunt.params) : taunt.text}
+          </span>
+        </div>
+      )}
+
       <div className="seat-face">
+        {talking && (
+          <div className="voice-spectrum-ring-container">
+            <div className="voice-spectrum-ring ring-1" />
+            <div className="voice-spectrum-ring ring-2" />
+            <div className="voice-spectrum-ring ring-3" />
+          </div>
+        )}
+        {isLeader && <span className="seat-crown" title="Líder del Marcador">👑</span>}
         {stream ? <SeatVideo stream={stream} /> : (
           <span className="seat-avatar">
             {isBot ? <Bot size={13} /> : initials(name)}
@@ -62,14 +72,17 @@ const Seat = React.memo(function Seat({
         {inVoice && !stream && <Mic size={8} className="seat-mic" />}
       </div>
 
-      <span className="seat-name">{name}</span>
+      <span className="seat-name">
+        {name}
+        {blitzTime !== undefined && (
+          <span className={`seat-blitz-badge ${blitzTime <= 10 ? 'critical' : ''}`}>
+            ⚡{blitzTime}s
+          </span>
+        )}
+      </span>
 
-      {/* Las fichas en la mano, como barritas: se ve de un vistazo quién está a
-          punto de cerrar, sin tener que leer un número. */}
       <div className="seat-tiles" title={t('seat.tiles', { n: handCount })}>
-        {Array.from({ length: Math.min(handCount, 10) }).map((_, i) => (
-          <i key={i} />
-        ))}
+        {STATIC_TILE_ICONS.slice(0, Math.min(handCount, 10))}
         <span className="seat-count">{handCount}</span>
 
         {showPowers && powersCount > 0 && (
@@ -92,7 +105,9 @@ export default function PlayerSeats({
   teamsEnabled,
   powersEnabled,
   pendingTargetType,
-  onSelectPlayerTarget
+  onSelectPlayerTarget,
+  quickNotifications = [],
+  blitzTimeRemaining
 }) {
   const voice = useVoice();
   const remoteVideos = voice ? voice.remoteVideos : {};
@@ -105,7 +120,6 @@ export default function PlayerSeats({
   const seats = [];
   for (let offset = 1; offset < n; offset++) {
     const player = players[(meIndex + offset) % n];
-    // Cara a cara cuando solo sois dos: enfrente se lee mejor que a un lado.
     const pos = n === 2 ? 'top' : SEAT_BY_OFFSET[offset];
     if (pos) seats.push({ player, pos });
   }
@@ -113,28 +127,40 @@ export default function PlayerSeats({
   const targeting =
     pendingTargetType === 'player_target' || pendingTargetType === 'smuggle_select_player';
 
+  const maxScore = players.reduce((m, p) => Math.max(m, p.score || 0), 0);
+  const leaderId = maxScore > 0 ? (players.find(p => p.score === maxScore) || {}).id : null;
+
   return (
     <>
-      {seats.map(({ player, pos }) => (
-        <Seat
-          key={player.id}
-          id={player.id}
-          pos={pos}
-          name={player.name}
-          isBot={player.isBot}
-          teamClass={teamsEnabled ? `team-${player.team}` : ''}
-          isActive={player.id === currentPlayerId}
-          talking={!!speaking[player.id]}
-          stream={player.camOn ? remoteVideos[player.id] || null : null}
-          shieldActive={player.shieldActive}
-          inVoice={player.inVoice}
-          handCount={player.handCount}
-          powersCount={player.powersCount}
-          showPowers={powersEnabled}
-          targeting={targeting}
-          onSelect={onSelectPlayerTarget}
-        />
-      ))}
+      {seats.map(({ player, pos }) => {
+        const taunt = (quickNotifications || []).slice().reverse().find(
+          (notif) => notif.playerName === player.name || notif.playerId === player.id
+        );
+
+        return (
+          <Seat
+            key={player.id}
+            id={player.id}
+            pos={pos}
+            name={player.name}
+            isBot={player.isBot}
+            teamClass={teamsEnabled ? `team-${player.team}` : ''}
+            isActive={player.id === currentPlayerId}
+            talking={!!speaking[player.id]}
+            stream={player.camOn ? remoteVideos[player.id] || null : null}
+            shieldActive={player.shieldActive}
+            inVoice={player.inVoice}
+            handCount={player.handCount}
+            powersCount={player.powersCount}
+            showPowers={powersEnabled}
+            targeting={targeting}
+            isLeader={player.id === leaderId}
+            taunt={taunt}
+            blitzTime={blitzTimeRemaining ? blitzTimeRemaining[player.id] : undefined}
+            onSelect={onSelectPlayerTarget}
+          />
+        );
+      })}
     </>
   );
 }

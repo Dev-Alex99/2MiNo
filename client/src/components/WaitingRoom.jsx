@@ -10,7 +10,8 @@ export default function WaitingRoom({ gameState, playerId, onLeave }) {
   const BOT_LEVELS = [
     { id: 'facil', label: t('wait.difEasy') },
     { id: 'normal', label: t('wait.difNormal') },
-    { id: 'dificil', label: t('wait.difHard') }
+    { id: 'dificil', label: t('wait.difHard') },
+    { id: 'maestro', label: t('wait.difMaster') }
   ];
   const [copied, setCopied] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);

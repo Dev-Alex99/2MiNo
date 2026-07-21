@@ -128,6 +128,52 @@ export default function VoiceChat({ playerId, players, nudge = false }) {
             <Settings2 size={14} />
           </button>
 
+          {/* Selector de Filtros de Voz (visibles en cabecera en escritorio) */}
+          <div className="voice-filter-bar desktop-only-filters">
+            <button
+              onClick={() => voice.setVoiceFilter('normal')}
+              className={`voice-filter-btn ${voice.voiceFilter === 'normal' ? 'active' : ''}`}
+              title="Voz Normal"
+            >
+              🎤
+            </button>
+            <button
+              onClick={() => voice.setVoiceFilter('megaphone')}
+              className={`voice-filter-btn ${voice.voiceFilter === 'megaphone' ? 'active' : ''}`}
+              title="Filtro Megáfono / Anunciador"
+            >
+              📢
+            </button>
+            <button
+              onClick={() => voice.setVoiceFilter('robot')}
+              className={`voice-filter-btn ${voice.voiceFilter === 'robot' ? 'active' : ''}`}
+              title="Filtro Robot Cyborg"
+            >
+              🤖
+            </button>
+            <button
+              onClick={() => voice.setVoiceFilter('alien')}
+              className={`voice-filter-btn ${voice.voiceFilter === 'alien' ? 'active' : ''}`}
+              title="Filtro Alienígena"
+            >
+              👾
+            </button>
+            <button
+              onClick={() => voice.setVoiceFilter('monster')}
+              className={`voice-filter-btn ${voice.voiceFilter === 'monster' ? 'active' : ''}`}
+              title="Filtro Monstruo Ogro"
+            >
+              👹
+            </button>
+            <button
+              onClick={() => voice.setVoiceFilter('radio')}
+              className={`voice-filter-btn ${voice.voiceFilter === 'radio' ? 'active' : ''}`}
+              title="Filtro Walkie-Talkie Piloto"
+            >
+              📻
+            </button>
+          </div>
+
           <button onClick={leave} className="voice-leave-btn" title={t('voice.leave')}>
             <PhoneOff size={14} />
           </button>
@@ -144,6 +190,8 @@ export default function VoiceChat({ playerId, players, nudge = false }) {
           onMic={selectMic}
           onCam={selectCam}
           onSpeaker={selectSpeaker}
+          voiceFilter={voice.voiceFilter}
+          onVoiceFilter={voice.setVoiceFilter}
         />
       )}
 

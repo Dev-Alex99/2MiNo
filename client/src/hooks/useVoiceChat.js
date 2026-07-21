@@ -136,16 +136,211 @@ export default function useVoiceChat({ roomId, playerId }) {
     mic: recall('mic'), cam: recall('cam'), speaker: recall('speaker')
   });
   const [switching, setSwitching] = useState(false);
+  const [voiceFilter, setVoiceFilter] = useState('normal'); // 'normal' | 'megaphone' | 'robot'
 
   const mutedRef = useRef(false);
   const speakerRef = useRef(recall('speaker'));
 
   const localStreamRef = useRef(null);
+  const rawStreamRef = useRef(null);
+  const filterCtxRef = useRef(null);
+  const filterNodesRef = useRef([]);
+  const voiceFilterRef = useRef('normal');
+  voiceFilterRef.current = voiceFilter;
+
   const camStreamRef = useRef(null);
   const peersRef = useRef(new Map());
   const iceConfigRef = useRef(null);
   const joinedRef = useRef(false);
   const vadRef = useRef(null);
+
+  // --- Procesador WebAudio DSP de Filtros de Voz ---
+  const setupVoiceFilterGraph = useCallback((rawStream, filterType) => {
+    if (!rawStream) return rawStream;
+
+    if (filterCtxRef.current) {
+      try {
+        filterNodesRef.current.forEach(n => {
+          if (n.stop) n.stop();
+          if (n.disconnect) n.disconnect();
+        });
+        filterCtxRef.current.close().catch(() => {});
+      } catch (e) {}
+      filterCtxRef.current = null;
+      filterNodesRef.current = [];
+    }
+
+    if (!filterType || filterType === 'normal') {
+      return rawStream;
+    }
+
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      const ctx = new AudioCtx();
+      ctx.resume().catch(() => {});
+
+      const source = ctx.createMediaStreamSource(rawStream);
+      const dest = ctx.createMediaStreamDestination();
+      const nodes = [];
+
+      if (filterType === 'megaphone') {
+        // 📢 Megáfono / Anunciador: Pasa-alto 1000Hz + Pasa-bajo 3200Hz + Distorsión WaveShaper
+        const hp = ctx.createBiquadFilter();
+        hp.type = 'highpass';
+        hp.frequency.value = 1000;
+
+        const lp = ctx.createBiquadFilter();
+        lp.type = 'lowpass';
+        lp.frequency.value = 3200;
+
+        const shaper = ctx.createWaveShaper();
+        const samples = 44100;
+        const curve = new Float32Array(samples);
+        const deg = Math.PI / 180;
+        for (let i = 0; i < samples; ++i) {
+          const x = (i * 2) / samples - 1;
+          curve[i] = ((3 + 15) * x * 20 * deg) / (Math.PI + 15 * Math.abs(x));
+        }
+        shaper.curve = curve;
+        shaper.oversample = '4x';
+
+        const gain = ctx.createGain();
+        gain.gain.value = 1.6;
+
+        source.connect(hp);
+        hp.connect(lp);
+        lp.connect(shaper);
+        shaper.connect(gain);
+        gain.connect(dest);
+
+        nodes.push(hp, lp, shaper, gain);
+      } else if (filterType === 'robot') {
+        // 🤖 Robot Cyborg: Modulación de anillo a 65Hz + Filtro Formante
+        const osc = ctx.createOscillator();
+        osc.type = 'sawtooth';
+        osc.frequency.value = 65;
+
+        const ringGain = ctx.createGain();
+        ringGain.gain.value = 0.85;
+
+        const formant = ctx.createBiquadFilter();
+        formant.type = 'peaking';
+        formant.frequency.value = 1800;
+        formant.Q.value = 4;
+        formant.gain.value = 10;
+
+        const outGain = ctx.createGain();
+        outGain.gain.value = 1.4;
+
+        source.connect(ringGain);
+        osc.connect(ringGain.gain);
+        ringGain.connect(formant);
+        formant.connect(outGain);
+        outGain.connect(dest);
+
+        osc.start();
+        nodes.push(osc, ringGain, formant, outGain);
+      } else if (filterType === 'alien') {
+        // 👾 Voz Alienígena: Modulación LFO rápida (14Hz) + High-Shelf 1500Hz
+        const lfo = ctx.createOscillator();
+        lfo.type = 'sine';
+        lfo.frequency.value = 14;
+
+        const lfoGain = ctx.createGain();
+        lfoGain.gain.value = 0.004;
+
+        const delay = ctx.createDelay();
+        delay.delayTime.value = 0.015;
+
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'highshelf';
+        filter.frequency.value = 1500;
+        filter.gain.value = 12;
+
+        const outGain = ctx.createGain();
+        outGain.gain.value = 1.3;
+
+        lfo.connect(lfoGain);
+        lfoGain.connect(delay.delayTime);
+        source.connect(filter);
+        filter.connect(delay);
+        delay.connect(outGain);
+        outGain.connect(dest);
+
+        lfo.start();
+        nodes.push(lfo, lfoGain, delay, filter, outGain);
+      } else if (filterType === 'monster') {
+        // 👹 Monstruo / Ogro: Refuerzo de Sub-Graves (+14dB a 150Hz) + Modulación Sub-octava 40Hz
+        const bass = ctx.createBiquadFilter();
+        bass.type = 'lowshelf';
+        bass.frequency.value = 180;
+        bass.gain.value = 14;
+
+        const lp = ctx.createBiquadFilter();
+        lp.type = 'lowpass';
+        lp.frequency.value = 1400;
+
+        const osc = ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.value = 40;
+
+        const subGain = ctx.createGain();
+        subGain.gain.value = 0.65;
+
+        const outGain = ctx.createGain();
+        outGain.gain.value = 1.5;
+
+        source.connect(bass);
+        bass.connect(lp);
+        lp.connect(subGain);
+        osc.connect(subGain.gain);
+        subGain.connect(outGain);
+        outGain.connect(dest);
+
+        osc.start();
+        nodes.push(bass, lp, osc, subGain, outGain);
+      } else if (filterType === 'radio') {
+        // 📻 Walkie-Talkie / Piloto: Pasa-banda angosto 1500Hz + Distorsión militar
+        const bp = ctx.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.frequency.value = 1500;
+        bp.Q.value = 3.5;
+
+        const shaper = ctx.createWaveShaper();
+        const samples = 44100;
+        const curve = new Float32Array(samples);
+        for (let i = 0; i < samples; ++i) {
+          const x = (i * 2) / samples - 1;
+          curve[i] = x * 2.5;
+        }
+        shaper.curve = curve;
+
+        const outGain = ctx.createGain();
+        outGain.gain.value = 1.8;
+
+        source.connect(bp);
+        bp.connect(shaper);
+        shaper.connect(outGain);
+        outGain.connect(dest);
+
+        nodes.push(bp, shaper, outGain);
+      }
+
+      filterCtxRef.current = ctx;
+      filterNodesRef.current = nodes;
+
+      const rawTrack = rawStream.getAudioTracks()[0];
+      const procTrack = dest.stream.getAudioTracks()[0];
+      if (rawTrack && procTrack) {
+        procTrack.enabled = rawTrack.enabled;
+      }
+
+      return dest.stream;
+    } catch (e) {
+      console.warn('[Voz] Fallo al aplicar filtro WebAudio:', e);
+      return rawStream;
+    }
+  }, []);
 
   // --- Configuración ICE (STUN siempre; TURN si el servidor lo tiene) ---
   const loadIceConfig = useCallback(async () => {
@@ -450,10 +645,21 @@ export default function useVoiceChat({ roomId, playerId }) {
     stopVAD();
     peersRef.current.forEach((_, id) => destroyPeer(id));
     peersRef.current.clear();
-    // Soltar micro y cámara: si no, el piloto del navegador se queda encendido.
+    if (rawStreamRef.current) {
+      rawStreamRef.current.getTracks().forEach(t => t.stop());
+      rawStreamRef.current = null;
+    }
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(t => t.stop());
       localStreamRef.current = null;
+    }
+    if (filterCtxRef.current) {
+      try {
+        filterNodesRef.current.forEach(n => { if (n.stop) n.stop(); if (n.disconnect) n.disconnect(); });
+        filterCtxRef.current.close().catch(() => {});
+      } catch (e) {}
+      filterCtxRef.current = null;
+      filterNodesRef.current = [];
     }
     if (camStreamRef.current) {
       camStreamRef.current.getTracks().forEach(t => t.stop());
@@ -480,7 +686,9 @@ export default function useVoiceChat({ roomId, playerId }) {
         audio: withDevice(MIC_CONSTRAINTS.audio, recall('mic'), false),
         video: false
       });
-      localStreamRef.current = stream;
+      rawStreamRef.current = stream;
+      const filteredStream = setupVoiceFilterGraph(stream, voiceFilterRef.current);
+      localStreamRef.current = filteredStream;
       joinedRef.current = true;
       setJoined(true);
       setMuted(false);
@@ -506,7 +714,24 @@ export default function useVoiceChat({ roomId, playerId }) {
     } finally {
       setConnecting(false);
     }
-  }, [connecting, loadIceConfig, playerId, roomId, startVAD]);
+  }, [connecting, loadIceConfig, playerId, roomId, setupVoiceFilterGraph, startVAD]);
+
+  // Re-procesar audio en caliente cuando el usuario cambia de filtro de voz
+  useEffect(() => {
+    if (!joinedRef.current || !rawStreamRef.current) return;
+
+    const filteredStream = setupVoiceFilterGraph(rawStreamRef.current, voiceFilter);
+    localStreamRef.current = filteredStream;
+    const track = filteredStream.getAudioTracks()[0];
+    if (track) {
+      track.enabled = !mutedRef.current;
+      peersRef.current.forEach(peer => {
+        if (peer.audioSender) {
+          peer.audioSender.replaceTrack(track).catch(() => {});
+        }
+      });
+    }
+  }, [voiceFilter, setupVoiceFilterGraph]);
 
   const leave = useCallback(() => {
     if (!joinedRef.current) return;
@@ -526,19 +751,18 @@ export default function useVoiceChat({ roomId, playerId }) {
         audio: withDevice(MIC_CONSTRAINTS.audio, deviceId, true),
         video: false
       });
-      const track = stream.getAudioTracks()[0];
+      if (rawStreamRef.current) rawStreamRef.current.getTracks().forEach(t => t.stop());
+      rawStreamRef.current = stream;
+      const filteredStream = setupVoiceFilterGraph(stream, voiceFilterRef.current);
+      localStreamRef.current = filteredStream;
+      const track = filteredStream.getAudioTracks()[0];
 
-      // Trampa nº1: la pista nueva nace habilitada. Si estabas silenciado y no
-      // se replica el estado, empezarías a emitir sin enterarte.
       track.enabled = !mutedRef.current;
 
       await Promise.all([...peersRef.current.values()].map(peer =>
         peer.audioSender ? peer.audioSender.replaceTrack(track).catch(() => {}) : null
       ));
 
-      // Trampa nº2: el detector de voz está enganchado al stream viejo.
-      if (localStreamRef.current) localStreamRef.current.getTracks().forEach(t => t.stop());
-      localStreamRef.current = stream;
       stopVAD();
       startVAD(stream);
 
@@ -804,6 +1028,7 @@ export default function useVoiceChat({ roomId, playerId }) {
     join, leave, toggleMute,
     camOn, camBusy, localVideo, remoteVideos, toggleCam,
     devices, selected, switching, selectMic, selectCam, selectSpeaker,
-    canPickSpeaker: CAN_PICK_SPEAKER
+    canPickSpeaker: CAN_PICK_SPEAKER,
+    voiceFilter, setVoiceFilter
   };
 }

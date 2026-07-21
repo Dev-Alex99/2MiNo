@@ -1,38 +1,54 @@
-// Personalización visual: tema de mesa y skin de fichas. 100% cliente: se
-// aplica escribiendo variables CSS en :root y se guarda en localStorage. La
-// mesa (--bg-table) solo afecta al tablero; las fichas usan --tile-bg/--tile-pip.
+// Personalización visual unificada: tema de mesa y skin de fichas.
+// Se aplica escribiendo variables CSS en :root y se guarda en localStorage.
+// La mesa (--bg-table) solo afecta al tablero; las fichas usan --tile-bg/--tile-pip.
+//
+// Los IDs de este catálogo se mapean 1:1 con los IDs de la tienda (SkinStoreModal)
+// y de la base de datos (tabla owned_skins). Cualquier ID que aparezca en la
+// tienda DEBE tener una entrada visual aquí; si no la tiene, se usa el fallback.
 
+/* ─── Tapetes de mesa (--bg-table) ─── */
 export const TABLES = [
-  { id: 'green',    bg: 'radial-gradient(circle at center, #0f3d30 0%, #041410 100%)' },
-  { id: 'ocean',    bg: 'radial-gradient(circle at center, #0f3350 0%, #04101f 100%)' },
-  { id: 'royal',    bg: 'radial-gradient(circle at center, #3a1f52 0%, #14061f 100%)' },
-  { id: 'crimson',  bg: 'radial-gradient(circle at center, #4d1a22 0%, #1f0609 100%)' },
-  { id: 'charcoal', bg: 'radial-gradient(circle at center, #2b313c 0%, #0b0e13 100%)' },
-  { id: 'sunset',   bg: 'radial-gradient(circle at center, #4d3316 0%, #1f1004 100%)' }
+  // Gratis
+  { id: 'emerald',      bg: 'radial-gradient(circle at center, #0f3d30 0%, #041410 100%)' },
+  // De pago (coinciden con BOARD_THEMES de la tienda)
+  { id: 'dark_oak',     bg: 'radial-gradient(circle at center, #292524 0%, #0c0a09 100%)' },
+  { id: 'neon_galaxy',  bg: 'radial-gradient(circle at center, #0f172a 0%, #1e3a5f 100%)' },
+  { id: 'mayan_temple', bg: 'radial-gradient(circle at center, #451a03 0%, #1c0b01 100%)' },
+  { id: 'ocean_deep',   bg: 'radial-gradient(circle at center, #0c4a6e 0%, #041c2c 100%)' },
+  { id: 'blood_moon',   bg: 'radial-gradient(circle at center, #450a0a 0%, #1c0404 100%)' },
+  { id: 'zen_garden',   bg: 'radial-gradient(circle at center, #57534e 0%, #1c1917 100%)' },
+  { id: 'cyber_grid',   bg: 'radial-gradient(circle at center, #1e1b4b 0%, #030712 100%)' },
 ];
 
+/* ─── Skins de fichas (--tile-bg, --tile-pip) ─── */
 export const SKINS = [
-  { id: 'ivory',    bg: 'linear-gradient(135deg, #ffffff 0%, #f6f6eb 100%)', pip: '#111827' },
-  { id: 'obsidian', bg: 'linear-gradient(135deg, #2b303b 0%, #1a1e26 100%)', pip: '#e5e7eb' },
-  { id: 'bone',     bg: 'linear-gradient(135deg, #f5efdd 0%, #e6dcc3 100%)', pip: '#4b3b26' },
-  { id: 'slate',    bg: 'linear-gradient(135deg, #d3dae4 0%, #aab6c6 100%)', pip: '#1e293b' },
-  { id: 'emerald',  bg: 'linear-gradient(135deg, #0e2a22 0%, #08201a 100%)', pip: '#34d399' },
-  { id: 'rose',     bg: 'linear-gradient(135deg, #fde8ee 0%, #f8cdd9 100%)', pip: '#9f1239' }
+  // Gratis
+  { id: 'classic',       bg: 'linear-gradient(135deg, #ffffff 0%, #f6f6eb 100%)', pip: '#111827' },
+  // De pago (coinciden con TILE_SKINS de la tienda)
+  { id: 'cyberpunk',     bg: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)', pip: '#00ffcc' },
+  { id: 'obsidian',      bg: 'linear-gradient(135deg, #1e1b4b 0%, #0f0d2e 100%)', pip: '#a78bfa' },
+  { id: 'walnut',        bg: 'linear-gradient(135deg, #78350f 0%, #451a03 100%)', pip: '#fde68a' },
+  { id: 'rose_gold',     bg: 'linear-gradient(135deg, #fde8ee 0%, #f8cdd9 100%)', pip: '#9f1239' },
+  { id: 'midnight',      bg: 'linear-gradient(135deg, #0c4a6e 0%, #082f49 100%)', pip: '#7dd3fc' },
+  { id: 'volcanic',      bg: 'linear-gradient(135deg, #7f1d1d 0%, #450a0a 100%)', pip: '#fbbf24' },
+  { id: 'arctic',        bg: 'linear-gradient(135deg, #cffafe 0%, #a5f3fc 100%)', pip: '#0e7490' },
+  { id: 'jade',          bg: 'linear-gradient(135deg, #064e3b 0%, #022c22 100%)', pip: '#34d399' },
+  { id: 'golden_dragon', bg: 'linear-gradient(135deg, #1f1f23 0%, #0a0a0d 100%)', pip: '#fbbf24' },
 ];
 
 const TABLE_KEY = 'domino_table';
-const SKIN_KEY = 'domino_skin';
+const SKIN_KEY  = 'domino_skin';
 
 function read(key, def) { try { return localStorage.getItem(key) || def; } catch { return def; } }
 function write(key, v) { try { localStorage.setItem(key, v); } catch { /* modo privado */ } }
 
 export function getTable() {
-  const id = read(TABLE_KEY, 'green');
-  return TABLES.some(t => t.id === id) ? id : 'green';
+  const id = read(TABLE_KEY, 'emerald');
+  return TABLES.some(t => t.id === id) ? id : 'emerald';
 }
 export function getSkin() {
-  const id = read(SKIN_KEY, 'ivory');
-  return SKINS.some(s => s.id === id) ? id : 'ivory';
+  const id = read(SKIN_KEY, 'classic');
+  return SKINS.some(s => s.id === id) ? id : 'classic';
 }
 
 export function applyTable(id) {

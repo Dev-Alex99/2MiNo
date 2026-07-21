@@ -37,15 +37,22 @@ export function playGameSound(type) {
         playClack(ctx, now + 0.05, 0.7, 850);
         break;
 
+      case 'double_place':
+        // Gran impacto de ficha doble ("¡Traz!"): clac pesado + resonancia de madera
+        playClack(ctx, now, 1.3, 1250);
+        playClack(ctx, now + 0.04, 0.95, 980);
+        playWoodKnock(ctx, now, 180, 0.6);
+        break;
+
       case 'draw':
         // Raspado suave de la ficha al arrastrarla
         playScrape(ctx, now);
         break;
 
       case 'pass':
-        // Golpe apagado tipo madera (toc-toc)
-        playWoodKnock(ctx, now, 250);
-        playWoodKnock(ctx, now + 0.15, 200);
+        // Dos toques de nudillos en la mesa de madera (toc-toc hiperrealista)
+        playWoodKnock(ctx, now, 240, 0.48);
+        playWoodKnock(ctx, now + 0.13, 195, 0.42);
         break;
 
       case 'shuffle':
@@ -77,12 +84,43 @@ export function playGameSound(type) {
         playEpicSting(ctx, now);
         break;
 
+      case 'turn_alert':
+        playTurnChime(ctx, now);
+        break;
+
       default:
         break;
     }
   } catch (e) {
     console.warn('Web Audio no soportado o bloqueado por política de usuario:', e);
   }
+}
+
+// Alerta sonora doble (Do5 - Sol5) de aviso de turno
+function playTurnChime(ctx, time) {
+  const notes = [523.25, 783.99];
+  notes.forEach((freq, index) => {
+    const noteTime = time + index * 0.08;
+    const osc = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, noteTime);
+
+    gainNode.gain.setValueAtTime(0.0, noteTime);
+    gainNode.gain.linearRampToValueAtTime(0.2, noteTime + 0.02);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, noteTime + 0.35);
+
+    osc.connect(gainNode);
+    gainNode.connect(ctx.destination);
+
+    osc.onended = () => {
+      try { osc.disconnect(); gainNode.disconnect(); } catch {}
+    };
+
+    osc.start(noteTime);
+    osc.stop(noteTime + 0.4);
+  });
 }
 
 // Genera un golpe agudo de dominó (clac)
@@ -92,13 +130,11 @@ function playClack(ctx, time, volume, frequency) {
   
   osc.type = 'triangle';
   osc.frequency.setValueAtTime(frequency, time);
-  // Pequeña modulación rápida del tono para simular resonancia
   osc.frequency.exponentialRampToValueAtTime(100, time + 0.04);
 
   gainNode.gain.setValueAtTime(volume * 0.4, time);
   gainNode.gain.exponentialRampToValueAtTime(0.01, time + 0.05);
 
-  // Filtro pasa banda para dar un sonido más hueco y plástico
   const filter = ctx.createBiquadFilter();
   filter.type = 'bandpass';
   filter.frequency.setValueAtTime(frequency * 0.8, time);
@@ -108,28 +144,40 @@ function playClack(ctx, time, volume, frequency) {
   filter.connect(gainNode);
   gainNode.connect(ctx.destination);
 
+  osc.onended = () => {
+    try { osc.disconnect(); filter.disconnect(); gainNode.disconnect(); } catch {}
+  };
+
   osc.start(time);
   osc.stop(time + 0.06);
 }
 
-// Genera un sonido de raspado al robar (scrape)
-function playScrape(ctx, time) {
-  const bufferSize = ctx.sampleRate * 0.25; // 0.25 segundos
+// Cache global del buffer de ruido para playScrape (previene 12,000 asignaciones por robo de ficha)
+let cachedScrapeBuffer = null;
+
+function getScrapeBuffer(ctx) {
+  if (cachedScrapeBuffer && cachedScrapeBuffer.sampleRate === ctx.sampleRate) {
+    return cachedScrapeBuffer;
+  }
+  const bufferSize = Math.floor(ctx.sampleRate * 0.22);
   const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
   const data = buffer.getChannelData(0);
-  
-  // Generar ruido blanco
   for (let i = 0; i < bufferSize; i++) {
     data[i] = Math.random() * 2 - 1;
   }
+  cachedScrapeBuffer = buffer;
+  return buffer;
+}
 
+// Genera un sonido de raspado al robar (scrape)
+function playScrape(ctx, time) {
+  const buffer = getScrapeBuffer(ctx);
   const noiseNode = ctx.createBufferSource();
   noiseNode.buffer = buffer;
 
   const filter = ctx.createBiquadFilter();
   filter.type = 'bandpass';
   filter.frequency.setValueAtTime(600, time);
-  // Variar la frecuencia del filtro para simular arrastre
   filter.frequency.exponentialRampToValueAtTime(250, time + 0.25);
   filter.Q.setValueAtTime(2, time);
 
@@ -141,27 +189,41 @@ function playScrape(ctx, time) {
   filter.connect(gainNode);
   gainNode.connect(ctx.destination);
 
+  noiseNode.onended = () => {
+    try { noiseNode.disconnect(); filter.disconnect(); gainNode.disconnect(); } catch {}
+  };
+
   noiseNode.start(time);
   noiseNode.stop(time + 0.26);
 }
 
-// Sonido sordo de golpe en madera o plástico pesado (para el paso)
-function playWoodKnock(ctx, time, freq) {
+// Sonido realista de golpe con nudillos sobre mesa de madera (para el paso de turno)
+function playWoodKnock(ctx, time, freq, vol = 0.35) {
   const osc = ctx.createOscillator();
   const gainNode = ctx.createGain();
+  const filter = ctx.createBiquadFilter();
 
   osc.type = 'sine';
   osc.frequency.setValueAtTime(freq, time);
-  osc.frequency.exponentialRampToValueAtTime(80, time + 0.08);
+  osc.frequency.exponentialRampToValueAtTime(70, time + 0.08);
 
-  gainNode.gain.setValueAtTime(0.3, time);
-  gainNode.gain.exponentialRampToValueAtTime(0.001, time + 0.1);
+  filter.type = 'lowpass';
+  filter.frequency.setValueAtTime(500, time);
+  filter.Q.setValueAtTime(2.5, time);
 
-  osc.connect(gainNode);
+  gainNode.gain.setValueAtTime(vol, time);
+  gainNode.gain.exponentialRampToValueAtTime(0.001, time + 0.09);
+
+  osc.connect(filter);
+  filter.connect(gainNode);
   gainNode.connect(ctx.destination);
 
+  osc.onended = () => {
+    try { osc.disconnect(); filter.disconnect(); gainNode.disconnect(); } catch {}
+  };
+
   osc.start(time);
-  osc.stop(time + 0.11);
+  osc.stop(time + 0.1);
 }
 
 // Sonido feliz para finalizar ronda

@@ -2,19 +2,29 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
-const DominoGame = require('./gameLogic');
-const { chooseMove, choosePower, pickBotName } = require('./botLogic');
+
+const {
+  rooms,
+  getOnlineCount,
+  incOnlineCount,
+  decOnlineCount,
+  findMe,
+  removeSpectatorEverywhere,
+  broadcastLobby,
+  broadcastGameState,
+  broadcastStats,
+  destroyRoom
+} = require('./roomManager');
+
+const registerRoomHandlers = require('./handlers/roomHandler');
+const registerGameHandlers = require('./handlers/gameHandler');
+const { registerVoiceHandlers, leaveVoice } = require('./handlers/voiceHandler');
 
 const app = express();
 app.use(cors());
 
-// Configuración ICE para el chat de voz. Se sirve desde aquí (y no se incrusta
-// en el cliente) para que las credenciales TURN vivan en variables de entorno
-// y se puedan rotar sin volver a desplegar el front.
-// Credenciales TURN de Cloudflare: son EFÍMERAS, así que las genera el servidor
-// llamando a su API y las cachea hasta poco antes de que caduquen. Se activa
-// solo si están las variables CF_TURN_KEY_ID y CF_TURN_API_TOKEN.
-let cfIceCache = null; // { iceServers, expiresAt }
+// Configuración ICE para el chat de voz
+let cfIceCache = null;
 async function getCloudflareIceServers() {
   const keyId = process.env.CF_TURN_KEY_ID;
   const apiToken = process.env.CF_TURN_API_TOKEN;
@@ -37,17 +47,15 @@ async function getCloudflareIceServers() {
     const data = await r.json();
     const servers = Array.isArray(data.iceServers) ? data.iceServers : null;
     if (!servers) return null;
-    // Renovar con 4 h de margen para no usar credenciales a punto de expirar.
     cfIceCache = { iceServers: servers, expiresAt: Date.now() + (ttl - 4 * 3600) * 1000 };
     return servers;
   } catch (e) {
     console.warn('[ice] Cloudflare TURN error:', e.message);
-    return cfIceCache ? cfIceCache.iceServers : null; // usar lo último válido si lo hay
+    return cfIceCache ? cfIceCache.iceServers : null;
   }
 }
 
 app.get('/ice-config', async (req, res) => {
-  // Varios STUN (redundancia si uno está caído) para descubrir la IP pública.
   const iceServers = [
     { urls: [
       'stun:stun.l.google.com:19302',
@@ -57,14 +65,10 @@ app.get('/ice-config', async (req, res) => {
     ] }
   ];
 
-  // Prioridad de TURN (relay), imprescindible para el ~10-20% tras NAT estricto:
-  //   1) Cloudflare (recomendado): credenciales efímeras generadas aquí.
-  //   2) TURN propio estático por variables de entorno (TURN_URL/USER/CRED).
-  //   3) Respaldo gratuito best-effort (OpenRelay), por si no hay nada configurado.
   let turnMode = 'none';
   const cf = await getCloudflareIceServers();
   if (cf) {
-    iceServers.push(...cf); // el array de Cloudflare ya trae su STUN + TURN
+    iceServers.push(...cf);
     turnMode = 'cloudflare';
   } else if (process.env.TURN_URL) {
     iceServers.push({
@@ -74,7 +78,6 @@ app.get('/ice-config', async (req, res) => {
     });
     turnMode = 'custom';
   } else {
-    // Puede estar saturado o caído; NO sustituye a un TURN propio.
     iceServers.push({
       urls: [
         'turn:openrelay.metered.ca:80',
@@ -87,7 +90,6 @@ app.get('/ice-config', async (req, res) => {
     turnMode = 'free-fallback';
   }
 
-  // Cachear poco: las credenciales TURN suelen ser efímeras.
   res.set('Cache-Control', 'public, max-age=60');
   res.json({ iceServers, turnMode, turnConfigured: turnMode === 'cloudflare' || turnMode === 'custom' });
 });
@@ -97,7 +99,7 @@ app.get('/health', (req, res) => {
   res.json({
     ok: true,
     rooms: rooms.size,
-    sockets: onlineCount,
+    sockets: getOnlineCount(),
     rssMB: +(m.rss / 1048576).toFixed(1),
     heapMB: +(m.heapUsed / 1048576).toFixed(1)
   });
@@ -106,910 +108,56 @@ app.get('/health', (req, res) => {
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: '*', // En un entorno real se limitaría a los dominios del frontend
+    origin: '*',
     methods: ['GET', 'POST']
   },
-  // Memoria acotada por conexión (crítico en 512MB):
-  // - perMessageDeflate apagado explícito: con compresión, cada socket reserva
-  //   contextos zlib de ~300KB. En v4 ya viene apagado, pero lo fijamos para
-  //   que un cambio de versión no lo reactive y nos tumbe la RAM.
-  // - maxHttpBufferSize bajo: nuestros mensajes son diminutos (jugadas, señales
-  //   de voz); 100KB sobra y acota memoria y superficie de abuso.
   perMessageDeflate: false,
   maxHttpBufferSize: 1e5
 });
 
-// Almacén de salas activas: roomId -> DominoGame
-const rooms = new Map();
-
-// Espectadores por sala: roomId -> Set<socketId>. No forman parte de
-// game.players (no ocupan silla ni afectan al juego); solo reciben el estado.
-const spectators = new Map();
-
-function spectatorsOf(roomId) {
-  return spectators.get(roomId) || null;
-}
-function spectatorCount(roomId) {
-  const set = spectators.get(roomId);
-  return set ? set.size : 0;
-}
-function addSpectator(roomId, socketId) {
-  if (!spectators.has(roomId)) spectators.set(roomId, new Set());
-  spectators.get(roomId).add(socketId);
-}
-// Quita un socket de cualquier sala que esté viendo. Devuelve true si lo estaba.
-function removeSpectatorEverywhere(socketId) {
-  let removed = false;
-  for (const set of spectators.values()) {
-    if (set.delete(socketId)) removed = true;
-  }
-  return removed;
-}
-
-// Elimina una sala por completo y avisa a quien esté dentro (jugadores y
-// espectadores comparten la sala de Socket.IO), para que vuelvan al lobby.
-function destroyRoom(roomId) {
-  io.to(roomId).emit('room_closed');
-  rooms.delete(roomId);
-  spectators.delete(roomId);
-  clearRoomTimers(roomId);
-}
-
-// Conectados. Contador propio en vez de io.engine.clientsCount: ese no ha
-// decrementado todavía cuando se dispara el evento 'disconnect', y el número
-// salía desfasado.
-let onlineCount = 0;
-
-// Temporizadores por sala: roomId -> handle
-const turnTimers = new Map();   // reloj de turno
-const effectTimers = new Map(); // caducidad de efectos (p. ej. Ojo Soplón)
-const botTimers = new Map();    // "pensar" de los bots antes de jugar
-
-// Segundos por turno. Configurable para ajustarlo sin tocar código.
-const TURN_SECONDS = Math.max(5, Number(process.env.TURN_SECONDS) || 30);
-
-// Genera un código de sala de 4 letras aleatorias
-function generateRoomId() {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-  let result = '';
-  do {
-    result = '';
-    for (let i = 0; i < 4; i++) {
-      result += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-  } while (rooms.has(result));
-  return result;
-}
-
-// Envía el estado del juego actualizado a todos los jugadores de la sala de forma privada
-function broadcastGameState(roomId) {
-  const game = rooms.get(roomId);
-  if (!game) return;
-
-  // La parte común (config, tablero, efectos, reloj…) se calcula UNA vez y se
-  // reutiliza; solo la lista de jugadores se filtra por destinatario. Evita
-  // rehacer ~25 campos y el spread de activeEffects por cada jugador.
-  const shared = game.getSharedState();
-
-  game.players.forEach(player => {
-    if (player.socketId) {
-      io.to(player.socketId).emit('game_state', game.getGameStateForPlayer(player.id, shared));
-    }
-  });
-
-  // Espectadores: una sola vista común, sin manos ni poderes de nadie.
-  const specs = spectatorsOf(roomId);
-  if (specs && specs.size) {
-    const specView = game.getSpectatorState(shared);
-    for (const sid of specs) io.to(sid).emit('game_state', specView);
-  }
-}
-
-// --- LISTA DE SALAS PÚBLICAS ---
-// Se listan solo las que esperan jugadores y tienen sitio: una sala en curso o
-// llena no sirve de nada en el lobby.
-function publicRoomsList() {
-  const list = [];
-  for (const [roomId, game] of rooms.entries()) {
-    if (!game.isPublic || game.status !== 'waiting' || game.players.length >= 4) continue;
-    const host = game.players.find(p => !p.isBot);
-    list.push({
-      roomId,
-      host: host ? host.name : '—',
-      players: game.players.length,
-      bots: game.players.filter(p => p.isBot).length,
-      maxPip: game.maxPip,
-      maxScore: game.maxScore,
-      powersEnabled: game.powersEnabled,
-      teamsEnabled: game.teamsEnabled,
-      drawEnabled: game.drawEnabled
-    });
-  }
-  // Primero las que están más cerca de arrancar.
-  return list.sort((a, b) => b.players - a.players);
-}
-
-// --- PARTIDAS EN VIVO (para espectar) ---
-// Públicas y en curso: no se pueden jugar (llenas/empezadas) pero sí ver.
-function spectatableRoomsList() {
-  const list = [];
-  for (const [roomId, game] of rooms.entries()) {
-    if (!game.isPublic || game.status !== 'playing') continue;
-    list.push({
-      roomId,
-      players: game.players.map(p => p.name),
-      spectators: spectatorCount(roomId),
-      maxPip: game.maxPip,
-      maxScore: game.maxScore,
-      powersEnabled: game.powersEnabled,
-      teamsEnabled: game.teamsEnabled,
-      roundNumber: game.roundNumber
-    });
-  }
-  // Primero las más vistas.
-  return list.sort((a, b) => b.spectators - a.spectators);
-}
-
-// Cifras para el lobby. online = sockets conectados (interpretación honesta de
-// "en línea"); playing = humanos en salas que ya están jugando.
-function lobbyStats() {
-  let playing = 0;
-  for (const game of rooms.values()) {
-    if (game.status === 'playing') playing += game.players.filter(p => !p.isBot).length;
-  }
-  return {
-    online: onlineCount,
-    playing,
-    openRooms: publicRoomsList().length
-  };
-}
-
-function broadcastStats() {
-  io.to('lobby').emit('lobby_stats', lobbyStats());
-}
-
-// Los clientes que están en el lobby se suscriben a una sala de Socket.IO
-// llamada 'lobby' para recibir la lista en vivo, sin sondear.
-function broadcastLobby() {
-  io.to('lobby').emit('rooms_list', publicRoomsList());
-  io.to('lobby').emit('live_games', spectatableRoomsList());
-  broadcastStats(); // una sala que cambia también cambia "salas abiertas"
-}
-
-function clearRoomTimers(roomId) {
-  clearTimeout(turnTimers.get(roomId));
-  clearTimeout(effectTimers.get(roomId));
-  clearTimeout(botTimers.get(roomId));
-  turnTimers.delete(roomId);
-  effectTimers.delete(roomId);
-  botTimers.delete(roomId);
-}
-
-// Arranca (o reinicia) el reloj del turno actual. Sin esto, un jugador que se
-// desconecta o se distrae deja la mesa colgada indefinidamente.
-function armTurnTimer(roomId) {
-  const game = rooms.get(roomId);
-  clearTimeout(turnTimers.get(roomId));
-  turnTimers.delete(roomId);
-
-  if (!game || game.status !== 'playing') {
-    if (game) game.turnEndsAt = null;
-    return;
-  }
-
-  game.turnEndsAt = Date.now() + game.turnDurationMs;
-
-  turnTimers.set(roomId, setTimeout(() => {
-    const current = rooms.get(roomId);
-    if (!current || current.status !== 'playing') return;
-
-    const result = current.forceTurn();
-    if (result.action === 'none') return;
-
-    const drew = result.drew > 0 ? result.drew : 0;
-    const key = result.action === 'played'
-      ? (drew ? 'srv.sys.timeoutPlayedDrew' : 'srv.sys.timeoutPlayed')
-      : (drew ? 'srv.sys.timeoutPassedDrew' : 'srv.sys.timeoutPassed');
-
-    io.to(roomId).emit('receive_quick_message', {
-      playerName: 'SISTEMA',
-      key,
-      params: { name: result.playerName, n: drew },
-      type: 'phrase'
-    });
-    io.to(roomId).emit('play_sound', { type: result.action === 'played' ? 'place' : 'pass' });
-
-    advanceRoom(roomId);
-    broadcastGameState(roomId);
-  }, game.turnDurationMs));
-}
-
-// Reemite el estado cuando un efecto temporal caduca. El Ojo Soplón se calcula
-// con Date.now() al pedir el estado, así que sin esto la mano revelada seguía
-// en pantalla hasta que alguien moviera.
-function scheduleEffectExpiry(roomId, ms) {
-  clearTimeout(effectTimers.get(roomId));
-  effectTimers.set(roomId, setTimeout(() => {
-    effectTimers.delete(roomId);
-    if (rooms.has(roomId)) broadcastGameState(roomId);
-  }, ms + 250));
-}
-
-// Si el turno es de un bot, lo juega tras una pausa para que se lea como una
-// decisión y no como un cálculo instantáneo.
-function scheduleBotTurn(roomId) {
-  const game = rooms.get(roomId);
-  clearTimeout(botTimers.get(roomId));
-  botTimers.delete(roomId);
-
-  if (!game || game.status !== 'playing') return;
-
-  const current = game.players[game.currentPlayerIndex];
-  if (!current || !current.isBot) return;
-
-  const thinkMs = 700 + Math.floor(Math.random() * 900);
-
-  botTimers.set(roomId, setTimeout(() => {
-    botTimers.delete(roomId);
-    const g = rooms.get(roomId);
-    if (!g || g.status !== 'playing') return;
-
-    const bot = g.players[g.currentPlayerIndex];
-    if (!bot || !bot.isBot) return;
-
-    // 1. Un poder sin objetivo, de vez en cuando.
-    const powerId = choosePower(g, bot.id);
-    if (powerId) {
-      const used = g.usePowerCard(bot.id, powerId, null, null);
-      if (used.success) {
-        io.to(roomId).emit('play_sound', { type: 'power' });
-        io.to(roomId).emit('receive_quick_message', {
-          playerName: 'SISTEMA',
-          key: 'srv.sys.botUsedPower',
-          params: { name: bot.name },
-          type: 'phrase'
-        });
-      }
-    }
-
-    // 2. Su jugada. forceTurn() ya implementa "juega / roba / pasa" con las
-    //    reglas completas; solo elegimos nosotros QUÉ ficha, según dificultad.
-    const move = chooseMove(g, bot.id);
-    if (move) {
-      const played = g.playTile(bot.id, move.tileIndex, move.side);
-      if (played.success) {
-        io.to(roomId).emit('play_sound', { type: 'place', tile: g.lastPlay.tile });
-      } else {
-        g.forceTurn();
-      }
-    } else {
-      const result = g.forceTurn();
-      io.to(roomId).emit('play_sound', { type: result.action === 'played' ? 'place' : 'pass' });
-    }
-
-    advanceRoom(roomId);
-    broadcastGameState(roomId);
-  }, thinkMs));
-}
-
-// Todo lo que hay que rearmar tras cambiar el estado de una partida.
-function advanceRoom(roomId) {
-  armTurnTimer(roomId);
-  scheduleBotTurn(roomId);
-}
-
 io.on('connection', (socket) => {
   console.log(`Nuevo cliente conectado: ${socket.id}`);
-  onlineCount++;
-  broadcastStats(); // subió el nº de conectados
-
-  // Crea una sala y sienta al jugador. Compartido por create_room y quick_play.
-  function createRoomFor(name, playerId, opts = {}) {
-    // No confiamos en el cliente: normalizamos las opciones aquí.
-    const safeMaxPip = opts.maxPip === 9 ? 9 : 6;
-    const safePowers = opts.powersEnabled !== false;
-    const safeTeams = opts.teamsEnabled === true;
-    const safeDraw = opts.drawEnabled !== false;
-    const safePublic = opts.isPublic !== false;
-    const safeScore = [100, 150, 200, 300].includes(opts.maxScore) ? opts.maxScore : null;
-    const safeIntensity = ['light', 'normal', 'chaos'].includes(opts.powerIntensity) ? opts.powerIntensity : 'normal';
-    const safeOnePerTurn = opts.onePowerPerTurn === true;
-
-    const roomId = generateRoomId();
-    const game = new DominoGame(roomId, safeScore, {
-      powersEnabled: safePowers,
-      maxPip: safeMaxPip,
-      teamsEnabled: safeTeams,
-      drawEnabled: safeDraw,
-      isPublic: safePublic,
-      powerIntensity: safeIntensity,
-      onePowerPerTurn: safeOnePerTurn
-    });
-    game.turnDurationMs = TURN_SECONDS * 1000;
-
-    const actualPlayerId = playerId || `p_${Math.random().toString(36).substring(2, 9)}`;
-    game.addPlayer(actualPlayerId, name, socket.id);
-
-    rooms.set(roomId, game);
-    socket.join(roomId);
-    socket.leave('lobby'); // ya no está mirando la lista
-
-    console.log(`Sala creada: ${roomId} por ${name} (doble ${safeMaxPip}, ${safePublic ? 'pública' : 'privada'}, ` +
-      `poderes: ${safePowers ? 'sí' : 'no'}, ${safeTeams ? 'parejas' : 'individual'}, ${game.maxScore} pts)`);
-
-    return { roomId, playerId: actualPlayerId };
-  }
-
-  // 1. Crear una sala
-  socket.on('create_room', ({ name, playerId, ...opts }) => {
-    if (!name) return socket.emit('error_msg', { key: 'srv.err.nameRequired' });
-    const created = createRoomFor(name, playerId, opts);
-    socket.emit('room_created', created);
-    broadcastGameState(created.roomId);
-    broadcastLobby();
-  });
-
-  // 1.5 Lista de salas públicas en vivo
-  socket.on('lobby_subscribe', () => {
-    socket.join('lobby');
-    socket.emit('rooms_list', publicRoomsList());
-    socket.emit('live_games', spectatableRoomsList());
-    socket.emit('lobby_stats', lobbyStats());
-  });
-
-  socket.on('lobby_unsubscribe', () => socket.leave('lobby'));
-
-  // Ver una partida en curso como espectador (sin ocupar silla).
-  socket.on('spectate_room', ({ roomId }) => {
-    const game = rooms.get(roomId);
-    if (!game) return socket.emit('error_msg', { key: 'srv.err.roomNotFound' });
-    if (game.status !== 'playing') return socket.emit('error_msg', { key: 'srv.err.notWatchable' });
-
-    socket.leave('lobby');
-    socket.join(roomId);
-    addSpectator(roomId, socket.id);
-
-    socket.emit('spectating', { roomId });
-    socket.emit('game_state', game.getSpectatorState());
-    broadcastLobby(); // cambió el contador de espectadores
-  });
-
-  // Dejar de espectar y volver al lobby.
-  socket.on('leave_spectate', ({ roomId }) => {
-    removeSpectatorEverywhere(socket.id);
-    if (roomId) socket.leave(roomId);
-    broadcastLobby();
-  });
-
-  // 1.6 Partida rápida: sienta al jugador en la sala pública más avanzada, y si
-  // no hay ninguna, le crea una. Un botón y a jugar, sin códigos.
-  socket.on('quick_play', ({ name, playerId }) => {
-    if (!name) return socket.emit('error_msg', { key: 'srv.err.nameRequired' });
-
-    const candidate = publicRoomsList()[0]; // ya vienen ordenadas por ocupación
-    if (candidate) {
-      const game = rooms.get(candidate.roomId);
-      const actualPlayerId = playerId || `p_${Math.random().toString(36).substring(2, 9)}`;
-      if (game && game.addPlayer(actualPlayerId, name, socket.id)) {
-        socket.join(candidate.roomId);
-        socket.leave('lobby');
-        socket.emit('room_joined', { roomId: candidate.roomId, playerId: actualPlayerId });
-        broadcastGameState(candidate.roomId);
-        broadcastLobby();
-        console.log(`Partida rápida: ${name} -> sala ${candidate.roomId}`);
-        return;
-      }
-    }
-
-    // No había ninguna libre: se crea una pública y clásica (sin poderes).
-    const created = createRoomFor(name, playerId, { isPublic: true, powersEnabled: false });
-    socket.emit('room_created', created);
-    broadcastGameState(created.roomId);
-    broadcastLobby();
-    console.log(`Partida rápida: ${name} abrió sala nueva ${created.roomId}`);
-  });
-
-  // 2. Unirse a una sala (soporta reconexión si se pasa el playerId existente)
-  socket.on('join_room', ({ roomId, name, playerId }) => {
-    roomId = roomId.trim().toUpperCase();
-    const game = rooms.get(roomId);
-    
-    if (!game) {
-      return socket.emit('error_msg', { key: 'srv.err.roomNotFound' });
-    }
-
-    const actualPlayerId = playerId || `p_${Math.random().toString(36).substring(2, 9)}`;
-    const existingPlayer = game.players.find(p => p.id === actualPlayerId);
-
-    if (existingPlayer) {
-      // Reconexión exitosa
-      existingPlayer.socketId = socket.id;
-      socket.join(roomId);
-      socket.emit('room_joined', { roomId, playerId: actualPlayerId });
-      broadcastGameState(roomId);
-      broadcastLobby();
-      console.log(`Jugador reconectado: ${existingPlayer.name} a sala ${roomId}`);
-      return;
-    }
-
-    // Si es un nuevo jugador
-    if (game.players.length >= 4) {
-      return socket.emit('error_msg', { key: 'srv.err.roomFull' });
-    }
-    if (game.status !== 'waiting') {
-      return socket.emit('error_msg', { key: 'srv.err.gameStarted' });
-    }
-    if (!name) {
-      return socket.emit('error_msg', { key: 'srv.err.nameRequired' });
-    }
-
-    game.addPlayer(actualPlayerId, name, socket.id);
-    socket.join(roomId);
-    
-    socket.emit('room_joined', { roomId, playerId: actualPlayerId });
-    broadcastGameState(roomId);
-    broadcastLobby();
-    console.log(`Jugador ${name} se unió a sala ${roomId}`);
-  });
-
-  // 2.5 Añadir / quitar bots (solo en la sala de espera)
-  socket.on('add_bot', ({ roomId, difficulty }) => {
-    const game = rooms.get(roomId);
-    if (!game) return socket.emit('error_msg', { key: 'srv.err.roomNotFound' });
-    if (game.status !== 'waiting') return socket.emit('error_msg', { key: 'srv.err.noBotsInGame' });
-    if (game.players.length >= 4) return socket.emit('error_msg', { key: 'srv.err.roomFull' });
-
-    const bot = game.addBot(pickBotName(game.players.map(p => p.name)), difficulty);
-    if (!bot) return socket.emit('error_msg', { key: 'srv.err.botAddFailed' });
-
-    broadcastGameState(roomId);
-    broadcastLobby();
-    console.log(`Bot ${bot.name} (${bot.difficulty}) añadido a sala ${roomId}`);
-
-    // Un bot entra ya listo: puede completar el "todos listos".
-    if (game.allReady()) {
-      game.startNewGame();
-      io.to(roomId).emit('game_started');
-      broadcastLobby(); // al arrancar deja de listarse
-      advanceRoom(roomId);
-      broadcastGameState(roomId);
-    }
-  });
-
-  // 2.6 Cambiar de sitio (así se elige compañero: el equipo sale del asiento)
-  socket.on('swap_seats', ({ roomId, playerA, playerB }) => {
-    const game = rooms.get(roomId);
-    if (!game) return;
-    if (game.status !== 'waiting') {
-      return socket.emit('error_msg', { key: 'srv.err.noSwapInGame' });
-    }
-    if (!game.swapSeats(playerA, playerB)) {
-      return socket.emit('error_msg', { key: 'srv.err.swapFailed' });
-    }
-
-    // Cambiar de sitio cambia los equipos y el orden de turnos: que todo el
-    // mundo reconfirme en vez de arrancar con una mesa que nadie aceptó.
-    game.players.forEach(p => { if (!p.isBot) p.ready = false; });
-
-    broadcastGameState(roomId);
-  });
-
-  // 2.8 Expulsar a un jugador. Solo el administrador de la sala.
-  socket.on('kick_player', ({ targetId }) => {
-    const ctx = findMe();
-    if (!ctx) return;
-    const { roomId, game, player } = ctx;
-
-    if (game.hostId !== player.id) {
-      return socket.emit('error_msg', { key: 'srv.err.onlyHostKick' });
-    }
-    if (!targetId || targetId === player.id) {
-      return socket.emit('error_msg', { key: 'srv.err.cantKickSelf' });
-    }
-    const target = game.players.find(p => p.id === targetId);
-    if (!target) return;
-
-    const targetSocketId = target.socketId;
-
-    if (target.isBot || game.status === 'waiting') {
-      // En espera (o si es un bot) se libera la silla directamente.
-      game.removePlayerById(targetId);
-    } else {
-      // En partida no se puede quitar la silla sin romper turnos/puntuación:
-      // la hereda un bot, igual que cuando alguien abandona.
-      target.isBot = true;
-      target.difficulty = 'normal';
-      target.socketId = null;
-      target.ready = true;
-      game.ensureHost();
-    }
-
-    // Sacar al expulsado de su socket y avisarle para que vuelva al lobby.
-    if (targetSocketId && !target.isBot) {
-      const targetSocket = io.sockets.sockets.get(targetSocketId);
-      if (targetSocket) targetSocket.leave(roomId);
-    }
-    if (targetSocketId) {
-      io.to(targetSocketId).emit('kicked', { by: player.name });
-    }
-
-    io.to(roomId).emit('receive_quick_message', {
-      playerName: 'SISTEMA',
-      key: 'srv.sys.kicked',
-      params: { name: player.name, target: target.name },
-      type: 'phrase'
-    });
-
-    if (!game.hasHumans()) {
-      destroyRoom(roomId);
-      broadcastLobby();
-      return;
-    }
-
-    advanceRoom(roomId);
-    broadcastGameState(roomId);
-    broadcastLobby();
-    console.log(`${player.name} expulsó a ${target.name} de ${roomId}`);
-  });
-
-  socket.on('remove_bot', ({ roomId, botId }) => {
-    const game = rooms.get(roomId);
-    if (!game) return;
-    if (game.status !== 'waiting') return socket.emit('error_msg', { key: 'srv.err.noRemoveBotInGame' });
-
-    const target = game.players.find(p => p.id === botId);
-    if (!target || !target.isBot) return socket.emit('error_msg', { key: 'srv.err.notABot' });
-
-    game.removePlayerById(botId);
-    broadcastGameState(roomId);
-    broadcastLobby();
-  });
-
-  // 2.7 Abandonar la sala de forma explícita.
-  // Antes esto se simulaba desconectando el socket, y el servidor lo trataba
-  // como una caída: la silla quedaba reservada esperando una reconexión que
-  // nunca llegaba.
-  socket.on('leave_room', () => {
-    const ctx = findMe();
-    if (!ctx) return;
-    const { roomId, game, player } = ctx;
-
-    leaveVoice(ctx);
-    socket.leave(roomId);
-
-    if (game.status === 'waiting') {
-      game.removePlayerById(player.id);
-    } else {
-      // Partida en curso: no se puede quitar la silla sin romperle el juego a
-      // los demás (turnos, equipos, puntuación). La hereda un bot con su misma
-      // mano y su mismo sitio, y la partida sigue.
-      player.isBot = true;
-      player.difficulty = 'normal';
-      player.socketId = null;
-      player.ready = true;
-
-      io.to(roomId).emit('receive_quick_message', {
-        playerName: 'SISTEMA',
-        key: 'srv.sys.leftGame',
-        params: { name: player.name },
-        type: 'phrase'
-      });
-      game.ensureHost(); // si el que se fue era el admin, lo hereda otro humano
-    }
-
-    if (!game.hasHumans()) {
-      destroyRoom(roomId);
-      broadcastLobby();
-      console.log(`Sala ${roomId} eliminada: se fue el último humano`);
-      return;
-    }
-
-    advanceRoom(roomId); // por si ahora le toca mover al bot recién heredado
-    broadcastGameState(roomId);
-    broadcastLobby(); // ha quedado un sitio libre
-    console.log(`${player.name} abandonó la sala ${roomId}`);
-  });
-
-  // 3. Cambiar estado de "Listo"
-  socket.on('toggle_ready', ({ roomId, playerId }) => {
-    const game = rooms.get(roomId);
-    if (!game) return;
-
-    game.toggleReady(socket.id);
-    broadcastGameState(roomId);
-
-    // Si todos están listos, iniciar la partida automáticamente
-    if (game.allReady()) {
-      game.startNewGame();
-      io.to(roomId).emit('game_started');
-      broadcastLobby(); // al arrancar deja de listarse
-      advanceRoom(roomId);
-      broadcastGameState(roomId);
-      console.log(`Partida iniciada en sala ${roomId}`);
-    }
-  });
-
-  // 4. Jugar una ficha
-  socket.on('play_tile', ({ roomId, playerId, tileIndex, side }) => {
-    const game = rooms.get(roomId);
-    if (!game) return;
-
-    const result = game.playTile(playerId, tileIndex, side);
-    if (result.success) {
-      // Notificar sonido de ficha colocada
-      io.to(roomId).emit('play_sound', { type: 'place', tile: game.lastPlay.tile });
-      advanceRoom(roomId);
-      broadcastGameState(roomId);
-    } else {
-      socket.emit('error_msg', { key: result.error });
-    }
-  });
-
-  // 5. Robar una ficha del pozo
-  socket.on('draw_tile', ({ roomId, playerId }) => {
-    const game = rooms.get(roomId);
-    if (!game) return;
-
-    const result = game.drawTile(playerId);
-    if (result.success) {
-      io.to(roomId).emit('play_sound', { type: 'draw' });
-      advanceRoom(roomId); // robar no cede el turno: se da margen nuevo
-      broadcastGameState(roomId);
-    } else {
-      socket.emit('error_msg', { key: result.error });
-    }
-  });
-
-  // 6. Pasar turno
-  socket.on('pass_turn', ({ roomId, playerId }) => {
-    const game = rooms.get(roomId);
-    if (!game) return;
-
-    const result = game.passTurn(playerId);
-    if (result.success) {
-      io.to(roomId).emit('play_sound', { type: 'pass' });
-      advanceRoom(roomId);
-      broadcastGameState(roomId);
-    } else {
-      socket.emit('error_msg', { key: result.error });
-    }
-  });
-
-  // 6.5 Usar una carta de poder
-  socket.on('use_power_card', ({ roomId, playerId, cardId, targetId, tileIndex }) => {
-    const game = rooms.get(roomId);
-    if (!game) return;
-
-    const player = game.players.find(p => p.id === playerId);
-    if (!player) return;
-
-    const result = game.usePowerCard(playerId, cardId, targetId, tileIndex);
-    if (result.success) {
-      // Emitir sonido de poder activado a toda la sala
-      io.to(roomId).emit('play_sound', { type: 'power' });
-
-      // Preparar notificación de chat según el poder. El servidor envía una
-      // CLAVE i18n + parámetros; cada cliente la traduce a su propio idioma
-      // (así una sala con jugadores en idiomas distintos ve cada uno el suyo).
-      const targetPlayer = targetId ? game.players.find(p => p.id === targetId) : null;
-      // '@opponent' es un centinela: el cliente lo sustituye por "un oponente"
-      // traducido cuando el poder no apuntó a un jugador concreto.
-      const targetName = targetPlayer ? targetPlayer.name : '@opponent';
-      let msgKey;
-      const msgParams = { name: player.name };
-
-      if (result.shielded) {
-        msgKey = 'srv.pw.shielded';
-        msgParams.target = result.targetName;
-      } else {
-        switch (cardId) {
-          case 'double_shot': msgKey = 'srv.pw.double_shot'; break;
-          case 'smuggle': msgKey = 'srv.pw.smuggle'; msgParams.target = targetName; break;
-          case 'spy_eye': msgKey = 'srv.pw.spy_eye'; msgParams.target = targetName; break;
-          case 'skip': msgKey = 'srv.pw.skip'; break;
-          case 'draw_penalty': msgKey = 'srv.pw.draw_penalty'; msgParams.target = targetName; break;
-          case 'reverse': msgKey = 'srv.pw.reverse'; break;
-          case 'trade': msgKey = 'srv.pw.trade'; break;
-          case 'shield': msgKey = 'srv.pw.shield'; break;
-          case 'freeze': msgKey = targetId === 'left' ? 'srv.pw.freezeLeft' : 'srv.pw.freezeRight'; break;
-          case 'destiny_steal': msgKey = 'srv.pw.destiny_steal'; msgParams.target = targetName; break;
-          case 'mind_swap': msgKey = 'srv.pw.mind_swap'; msgParams.target = targetName; break;
-          case 'tile_demolition': msgKey = targetId === 'left' ? 'srv.pw.demolishLeft' : 'srv.pw.demolishRight'; break;
-          case 'wildcard': msgKey = 'srv.pw.wildcard'; break;
-          case 'boneyard_reset': msgKey = 'srv.pw.boneyard_reset'; break;
-          case 'magnetic_pull': msgKey = 'srv.pw.magnetic_pull'; msgParams.target = targetName; break;
-          case 'russian_roulette': msgKey = 'srv.pw.russian_roulette'; break;
-          case 'block_both': msgKey = 'srv.pw.block_both'; break;
-          case 'storm': msgKey = 'srv.pw.storm'; break;
-          case 'second_wind': msgKey = 'srv.pw.second_wind'; break;
-          case 'spy_all': msgKey = 'srv.pw.spy_all'; break;
-          case 'curse': msgKey = 'srv.pw.curse'; msgParams.target = targetName; break;
-          default: msgKey = 'srv.pw.default';
-        }
-      }
-
-      // Propagar mensaje al chat rápido para que aparezca como toast flotante
-      io.to(roomId).emit('receive_quick_message', {
-        playerName: 'SISTEMA',
-        key: msgKey,
-        params: msgParams,
-        type: 'phrase'
-      });
-
-      // El Ojo Soplón revela por tiempo: hay que reemitir al caducar.
-      if (cardId === 'spy_eye' && game.activeEffects.spyEyeEndTime) {
-        scheduleEffectExpiry(roomId, game.activeEffects.spyEyeEndTime - Date.now());
-      }
-      // El Ojo Total también revela por tiempo: reemitir cuando caduque.
-      if (cardId === 'spy_all' && game.activeEffects.spyAllEndTime) {
-        scheduleEffectExpiry(roomId, game.activeEffects.spyAllEndTime - Date.now());
-      }
-
-      advanceRoom(roomId);
-      broadcastGameState(roomId);
-    } else {
-      socket.emit('error_msg', { key: result.error });
-    }
-  });
-
-  // 7. Siguiente ronda (cuando finaliza una)
-  socket.on('next_round', ({ roomId }) => {
-    const game = rooms.get(roomId);
-    if (!game) return;
-
-    if (game.status === 'round_ended') {
-      game.startNewRound();
-      io.to(roomId).emit('play_sound', { type: 'shuffle' });
-      advanceRoom(roomId);
-      broadcastGameState(roomId);
-    }
-  });
-
-  // 8. Reiniciar juego (jugar de nuevo al finalizar la partida)
-  socket.on('play_again', ({ roomId }) => {
-    const game = rooms.get(roomId);
-    if (!game) return;
-
-    if (game.status === 'game_ended' || game.status === 'round_ended') {
-      game.startNewGame();
-      io.to(roomId).emit('play_sound', { type: 'shuffle' });
-      advanceRoom(roomId);
-      broadcastGameState(roomId);
-    }
-  });
-
-  // 9. Mensajes rápidos y Emojis
-  socket.on('send_quick_message', ({ roomId, playerId, text, type }) => {
-    // type: 'phrase' o 'emoji'
-    const game = rooms.get(roomId);
-    if (!game) return;
-
-    const player = game.players.find(p => p.id === playerId);
-    if (!player) return;
-
-    io.to(roomId).emit('receive_quick_message', {
-      playerId,
-      playerName: player.name,
-      text,
-      type
-    });
-  });
-
-  // --- CHAT DE VOZ (WebRTC en malla) ---
-  // El audio va peer-to-peer y NUNCA pasa por aquí: por el servidor solo viajan
-  // ofertas, respuestas y candidatos ICE (unos pocos KB al conectar).
-
-  function findMe() {
-    for (const [roomId, game] of rooms.entries()) {
-      const player = game.players.find(p => p.socketId === socket.id);
-      if (player) return { roomId, game, player };
-    }
-    return null;
-  }
-
-  // Saca a un jugador de la voz y avisa al resto. Se usa al salir y al caerse.
-  function leaveVoice(ctx) {
-    if (!ctx || !ctx.player.inVoice) return;
-    ctx.player.inVoice = false;
-    ctx.player.camOn = false;
-    socket.to(ctx.roomId).emit('voice_peer_left', { playerId: ctx.player.id });
-    broadcastGameState(ctx.roomId);
-  }
-
-  // Estado de la cámara. Va por aquí y NO se deduce del track remoto:
-  // replaceTrack(null) deja de enviar fotogramas pero el track del receptor NO
-  // pasa a "muted", así que los demás verían el último fotograma congelado.
-  // Al vivir en el estado del jugador, quien entre después también se entera.
-  socket.on('voice_cam', ({ on }) => {
-    const ctx = findMe();
-    if (!ctx || !ctx.player.inVoice) return;
-    ctx.player.camOn = !!on;
-    broadcastGameState(ctx.roomId);
-  });
-
-  socket.on('voice_join', () => {
-    const ctx = findMe();
-    if (!ctx) return socket.emit('error_msg', { key: 'srv.err.notInRoom' });
-
-    ctx.player.inVoice = true;
-    ctx.player.camOn = false;
-
-    // A quién debe llamar: los que ya estaban dentro y siguen conectados.
-    const peers = ctx.game.players
-      .filter(p => p.inVoice && p.socketId && p.id !== ctx.player.id)
-      .map(p => ({ playerId: p.id, name: p.name }));
-
-    socket.emit('voice_peers', { peers });
-    socket.to(ctx.roomId).emit('voice_peer_joined', { playerId: ctx.player.id, name: ctx.player.name });
-    broadcastGameState(ctx.roomId);
-  });
-
-  socket.on('voice_leave', () => {
-    leaveVoice(findMe());
-  });
-
-  // Relay de señalización dirigido a UN peer concreto de la misma sala.
-  socket.on('voice_signal', ({ to, data }) => {
-    const ctx = findMe();
-    if (!ctx || !to || !data) return;
-
-    const target = ctx.game.players.find(p => p.id === to);
-    // Solo se retransmite dentro de la sala y a alguien realmente conectado:
-    // el servidor no es un relay abierto.
-    if (!target || !target.socketId) return;
-
-    io.to(target.socketId).emit('voice_signal', { from: ctx.player.id, data });
-  });
-
-  // Quién está hablando. Va aparte del game_state porque cambia ~1 vez/seg y
-  // no queremos reemitir la partida entera por eso.
-  socket.on('voice_speaking', ({ speaking }) => {
-    const ctx = findMe();
-    if (!ctx || !ctx.player.inVoice) return;
-    socket.to(ctx.roomId).emit('voice_speaking', { playerId: ctx.player.id, speaking: !!speaking });
-  });
-
-  // 10. Desconexión
+  incOnlineCount();
+  broadcastStats(io);
+
+  // Registrar manejadores modularizados
+  const { leaveVoice: leaveVoiceSelf } = registerVoiceHandlers(io, socket);
+  registerRoomHandlers(io, socket, leaveVoiceSelf);
+  registerGameHandlers(io, socket);
+
+  // Evento de Desconexión
   socket.on('disconnect', () => {
-    leaveVoice(findMe());
+    leaveVoice(io, socket, findMe(socket.id));
     console.log(`Cliente desconectado: ${socket.id}`);
 
-    // Si era espectador, sacarlo y refrescar el lobby (cambió el contador).
-    if (removeSpectatorEverywhere(socket.id)) broadcastLobby();
+    if (removeSpectatorEverywhere(socket.id)) broadcastLobby(io);
 
-    // Buscar la sala donde estaba este socket
     for (const [roomId, game] of rooms.entries()) {
       const player = game.players.find(p => p.socketId === socket.id);
       if (player) {
         if (game.status === 'waiting') {
-          // Si estaba esperando, lo sacamos de inmediato
           game.removePlayer(socket.id);
           console.log(`Jugador ${player.name} abandonó la sala en espera ${roomId}`);
-          
-          // Con bots la sala nunca queda en 0 jugadores: lo que la vacía de
-          // verdad es que no quede ningún humano.
+
           if (!game.hasHumans()) {
-            destroyRoom(roomId);
+            destroyRoom(io, roomId);
             console.log(`Sala sin humanos eliminada: ${roomId}`);
           } else {
-            broadcastGameState(roomId);
+            broadcastGameState(io, roomId);
           }
-          broadcastLobby(); // la sala se fue de la lista, o le quedó un hueco
+          broadcastLobby(io);
         } else {
-          // Si la partida está activa, no lo eliminamos, marcamos socketId como nulo para darle tiempo a reconectar
           player.socketId = null;
-          broadcastGameState(roomId);
+          broadcastGameState(io, roomId);
           console.log(`Jugador ${player.name} se desconectó temporalmente de la sala activa ${roomId}`);
-          
-          // Limpieza de sala si todos están desconectados
+
           const allOffline = game.players.every(p => p.socketId === null);
           if (allOffline) {
-            // Dar 2 minutos antes de borrar la sala entera
             setTimeout(() => {
               const checkGame = rooms.get(roomId);
               if (checkGame && checkGame.players.every(p => p.socketId === null)) {
-                destroyRoom(roomId);
-                broadcastLobby();
+                destroyRoom(io, roomId);
+                broadcastLobby(io);
                 console.log(`Sala ${roomId} eliminada por inactividad prolongada (todos offline).`);
               }
             }, 120000);
@@ -1019,8 +167,8 @@ io.on('connection', (socket) => {
       }
     }
 
-    onlineCount = Math.max(0, onlineCount - 1);
-    broadcastStats();
+    decOnlineCount();
+    broadcastStats(io);
   });
 });
 

@@ -3,20 +3,95 @@ import { Trophy, RefreshCw, ChevronRight, Award, Eye } from 'lucide-react';
 import { socket } from '../socket';
 import { useT } from '../i18n/LanguageContext';
 
+import { playGameSound } from '../audio';
+
+function ConfettiCanvas() {
+  const canvasRef = React.useRef(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const w = (canvas.width = window.innerWidth);
+    const h = (canvas.height = window.innerHeight);
+
+    const isMobile = w < 640;
+    const particleCount = isMobile ? 35 : 60;
+    const colors = ['#10b981', '#34d399', '#f59e0b', '#fbbf24', '#6366f1', '#ec4899', '#3b82f6'];
+
+    const particles = Array.from({ length: particleCount }).map(() => ({
+      x: Math.random() * w,
+      y: Math.random() * h - h,
+      r: Math.random() * 5 + 3,
+      d: Math.random() * 20 + 8,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      tilt: Math.random() * 10 - 10,
+      tiltAngleIncremental: Math.random() * 0.07 + 0.04,
+      tiltAngle: Math.random() * Math.PI
+    }));
+
+    let animationFrameId;
+    const startTime = Date.now();
+    const DURATION = 6000;
+
+    const render = () => {
+      const elapsed = Date.now() - startTime;
+      if (elapsed > DURATION) {
+        ctx.clearRect(0, 0, w, h);
+        return;
+      }
+
+      ctx.clearRect(0, 0, w, h);
+      particles.forEach((p) => {
+        p.tiltAngle += p.tiltAngleIncremental;
+        p.y += (Math.cos(p.d) + 3 + p.r / 2) / 2;
+        p.tilt = Math.sin(p.tiltAngle) * 12;
+
+        if (p.y > h) {
+          p.x = Math.random() * w;
+          p.y = -15;
+          p.tilt = Math.random() * 10 - 10;
+        }
+
+        ctx.beginPath();
+        ctx.lineWidth = p.r;
+        ctx.strokeStyle = p.color;
+        ctx.moveTo(p.x + p.tilt + p.r / 2, p.y);
+        ctx.lineTo(p.x + p.tilt, p.y + p.tilt + p.r / 2);
+        ctx.stroke();
+      });
+      animationFrameId = requestAnimationFrame(render);
+    };
+
+    render();
+    return () => cancelAnimationFrame(animationFrameId);
+  }, []);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100vw',
+        height: '100vh',
+        pointerEvents: 'none',
+        zIndex: 200
+      }}
+    />
+  );
+}
+
 export default function EndGameModal({ gameState, playerId }) {
   const { t } = useT();
-  // "Ver tablero": el jugador oculta el resultado para inspeccionar la mesa
-  // (y la última ficha jugada, que queda resaltada) y vuelve cuando quiera.
   const [peek, setPeek] = useState(false);
-  // Pequeño margen antes de mostrar el diálogo: da tiempo a ver aterrizar la
-  // ficha final en lugar de taparla al instante.
   const [ready, setReady] = useState(false);
   useEffect(() => {
-    const id = setTimeout(() => setReady(true), 900);
+    const id = setTimeout(() => setReady(true), 4100);
     return () => clearTimeout(id);
   }, []);
 
-  // Nombres de equipo traducidos en cliente (el servidor ya no manda el texto).
   const teamLabel = (i) => (i === 0 ? t('team.a') : t('team.b'));
   const {
     status, roundWinner, gameWinner, players,
@@ -24,34 +99,31 @@ export default function EndGameModal({ gameState, playerId }) {
     roundWinnerTeam, gameWinnerTeam
   } = gameState;
 
-  // Si no ha terminado ni la ronda ni el juego, no mostrar nada
   if (status !== 'round_ended' && status !== 'game_ended') return null;
-  // Aún dentro del margen inicial: dejamos ver el tablero un momento.
   if (!ready) return null;
-
-  // Modo "ver tablero": el diálogo se colapsa en una pastilla flotante que no
-  // tapa la mesa; se pulsa para recuperar el resultado.
-  if (peek) {
-    return (
-      <button className="end-peek-pill" onClick={() => setPeek(false)}>
-        <Trophy size={14} />
-        {t('end.showResult')}
-      </button>
-    );
-  }
 
   const isGameEnd = status === 'game_ended';
   const winner = players.find(p => p.id === (isGameEnd ? gameWinner : roundWinner));
   const me = players.find(p => p.id === playerId);
 
-  // En parejas gana un EQUIPO: gameWinner vale "team_0", no un id de jugador.
   const winningTeam = isGameEnd ? gameWinnerTeam : roundWinnerTeam;
   const isTeamWin = teamsEnabled && winningTeam !== null && winningTeam !== undefined;
   const isMeWinner = isTeamWin
     ? me?.team === winningTeam
     : winner?.id === playerId;
 
-  // Cómo se llama el ganador en pantalla
+  if (peek) {
+    return (
+      <>
+        {isMeWinner && <ConfettiCanvas />}
+        <button className="end-peek-pill" onClick={() => setPeek(false)}>
+          <Trophy size={14} />
+          {t('end.showResult')}
+        </button>
+      </>
+    );
+  }
+
   const winnerLabel = isTeamWin ? teamLabel(winningTeam) : winner?.name;
 
   const handleNextAction = () => {
@@ -64,6 +136,7 @@ export default function EndGameModal({ gameState, playerId }) {
 
   return (
     <div className="modal-overlay animate-fade-in">
+      {isMeWinner && <ConfettiCanvas />}
       <div className="modal-card glass-panel animate-scale-up">
         
         {/* Luces traseras de victoria */}

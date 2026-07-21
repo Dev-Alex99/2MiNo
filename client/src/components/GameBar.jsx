@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Volume2, VolumeX, LogOut, Layers, Timer } from 'lucide-react';
+import { Volume2, VolumeX, LogOut, Layers, Timer, Trophy, ShoppingBag } from 'lucide-react';
 import { toggleMute, getMuteState } from '../audio';
 import VoiceChat from './VoiceChat';
 import LanguageSwitcher from './LanguageSwitcher';
@@ -17,7 +17,8 @@ import { useT } from '../i18n/LanguageContext';
  */
 export default function GameBar({
   players, playerId, roundNumber, teamsEnabled, teamScores, maxScore, onLeave,
-  currentPlayerId, turnEndsAt, turnSecondsRemaining, turnDurationSeconds = 30
+  currentPlayerId, turnEndsAt, turnSecondsRemaining, turnDurationSeconds = 30,
+  onOpenLeaderboard, onOpenStore
 }) {
   const { t } = useT();
   const [muted, setMuted] = useState(getMuteState());
@@ -79,8 +80,31 @@ export default function GameBar({
       )}
 
       <div className="game-bar-actions">
-        <LanguageSwitcher compact />
+        <div className="game-bar-lang">
+          <LanguageSwitcher compact />
+        </div>
         <VoiceChat playerId={playerId} players={players} />
+
+        {onOpenStore && (
+          <button
+            onClick={onOpenStore}
+            className="mute-btn"
+            title="Tienda de Skins"
+            style={{ color: '#fbbf24' }}
+          >
+            <ShoppingBag size={14} color="#fbbf24" />
+          </button>
+        )}
+
+        {onOpenLeaderboard && (
+          <button
+            onClick={onOpenLeaderboard}
+            className="mute-btn"
+            title="Ver Ranking Supabase"
+          >
+            <Trophy size={14} color="#f59e0b" />
+          </button>
+        )}
 
         <button
           onClick={() => setMuted(toggleMute())}

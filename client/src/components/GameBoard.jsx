@@ -1,6 +1,7 @@
 import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react';
-import { ZoomIn, ZoomOut, Maximize2, Move } from 'lucide-react';
+import { ZoomIn, ZoomOut, Maximize2, Move, ScrollText, Trophy } from 'lucide-react';
 import DominoTile from './DominoTile';
+import MoveLog from './MoveLog';
 import { useT } from '../i18n/LanguageContext';
 
 // Dimensiones reales de una ficha en el tablero (coinciden con el CSS fijado en .board-tile-wrap).
@@ -161,9 +162,10 @@ export default function GameBoard({
   lastPlay,
   lastPlacedTile,
   lastPlacedBy,
-  // Ancho que ocupan los asientos a los lados: se descuenta del auto-encaje
-  // para que la serpiente no acabe pintada por debajo de ellos.
-  seatsPadding = 0
+  seatsPadding = 0,
+  moveLog = [],
+  onOpenBracket,
+  selectedPower
 }) {
   const { t } = useT();
   const containerRef = useRef(null);
@@ -174,8 +176,8 @@ export default function GameBoard({
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
-  // Mientras el usuario no interactúe, el tablero se auto-encaja al contenido.
   const [manualView, setManualView] = useState(false);
+  const [showMoveLog, setShowMoveLog] = useState(false);
 
   // Firma estable del tablero: evita recalcular el layout en ticks de estado
   // que no cambian las fichas (p. ej. cuentas regresivas de poderes).
@@ -312,6 +314,16 @@ export default function GameBoard({
           <Maximize2 size={16} />
           <span className="zoom-btn-text">{t('board.center')}</span>
         </button>
+        <button onClick={() => setShowMoveLog(true)} className="zoom-btn" title={t('log.title')}>
+          <ScrollText size={16} />
+          <span className="zoom-btn-text">{t('log.title')}</span>
+        </button>
+        {onOpenBracket && (
+          <button onClick={onOpenBracket} className="zoom-btn" title={t('tourney.title')}>
+            <Trophy size={16} className="text-amber-400" />
+            <span className="zoom-btn-text">{t('tourney.short')}</span>
+          </button>
+        )}
       </div>
 
       {/* El indicador de turno y el reloj viven en la barra superior: aquí
@@ -350,10 +362,11 @@ export default function GameBoard({
               // evita re-montar y re-animar todas las fichas al jugar a la izquierda.
               const key = tileKey(item.tile);
               const isLast = lastKey !== null && key === lastKey;
+              const isDouble = item.tile[0] === item.tile[1];
               return (
                 <div
                   key={key}
-                  className={`board-tile-wrap ${isLast ? 'last-played' : ''}`}
+                  className={`board-tile-wrap ${isLast ? 'last-played' : ''} ${isLast && isDouble ? 'double-impact' : ''}`}
                   title={isLast && lastPlayerName ? t('board.lastTile', { name: lastPlayerName }) : undefined}
                   style={{
                     position: 'absolute',
@@ -365,9 +378,11 @@ export default function GameBoard({
                     transition: 'left 0.4s ease-out, top 0.4s ease-out'
                   }}
                 >
-                  {/* Envoltorio interno: la animación de caída actúa aquí, sin
-                      pisar el translate(-50%,-50%) de centrado del contenedor. */}
-                  <div className="board-tile-anim animate-tile-drop">
+                  {isLast && isDouble && <div className="shockwave-burst" />}
+
+                  {/* Envoltorio interno: la animación de caída actúa aquí solo para la última ficha jugada,
+                      evitando re-animar todas las fichas del tablero simultáneamente. */}
+                  <div className={`board-tile-anim ${isLast ? 'animate-tile-drop' : ''}`}>
                     <DominoTile
                       tile={item.display}
                       horizontal={item.horizontal}
@@ -408,9 +423,9 @@ export default function GameBoard({
                     onClick={() => onSelectEndTarget('left')}
                     className="board-placeholder-circle"
                     style={{ borderStyle: 'dashed', borderColor: '#818cf8', color: '#a5b4fc' }}
-                    title="Congelar Extremo Izquierdo"
+                    title={selectedPower?.id === 'tile_demolition' ? 'Eliminar Ficha Izquierda' : 'Congelar Extremo Izquierdo'}
                   >
-                    ❄️
+                    {selectedPower?.id === 'tile_demolition' ? '💣' : '❄️'}
                   </button>
                 )}
               </div>
@@ -446,17 +461,30 @@ export default function GameBoard({
                     onClick={() => onSelectEndTarget('right')}
                     className="board-placeholder-circle"
                     style={{ borderStyle: 'dashed', borderColor: '#818cf8', color: '#a5b4fc' }}
-                    title="Congelar Extremo Derecho"
+                    title={selectedPower?.id === 'tile_demolition' ? 'Eliminar Ficha Derecha' : 'Congelar Extremo Derecho'}
                   >
-                    ❄️
+                    {selectedPower?.id === 'tile_demolition' ? '💣' : '❄️'}
                   </button>
                 )}
+              </div>
+            )}
+
+            {/* Target fallback cuando el tablero está vacío */}
+            {isMyTurn && pendingTargetType === 'end_target' && board.length === 0 && (
+              <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', display: 'flex', gap: '16px', zIndex: 30 }}>
+                <button onClick={() => onSelectEndTarget('left')} className="board-placeholder-circle" style={{ borderStyle: 'dashed', borderColor: '#818cf8', color: '#a5b4fc' }}>
+                  {selectedPower?.id === 'tile_demolition' ? '💣' : '❄️'} Izq
+                </button>
+                <button onClick={() => onSelectEndTarget('right')} className="board-placeholder-circle" style={{ borderStyle: 'dashed', borderColor: '#818cf8', color: '#a5b4fc' }}>
+                  {selectedPower?.id === 'tile_demolition' ? '💣' : '❄️'} Der
+                </button>
               </div>
             )}
 
           </div>
         )}
       </div>
+      {showMoveLog && <MoveLog moveLog={moveLog} onClose={() => setShowMoveLog(false)} />}
     </div>
   );
 }

@@ -210,10 +210,24 @@ body {
   animation: tile-drop 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
 }
 
-/* --- BANNER DE TURNO Splash --- */
+/* --- BORDE DE PANTALLA Y ANUNCIO DE TURNO ACTIVO --- */
+.app-container.my-turn-active {
+  box-shadow: inset 0 0 35px rgba(16, 185, 129, 0.45);
+  animation: my-turn-screen-pulse 1.8s ease-in-out infinite alternate;
+}
+
+@keyframes my-turn-screen-pulse {
+  0% {
+    box-shadow: inset 0 0 25px rgba(16, 185, 129, 0.35), inset 0 0 8px rgba(16, 185, 129, 0.2);
+  }
+  100% {
+    box-shadow: inset 0 0 55px rgba(16, 185, 129, 0.65), inset 0 0 16px rgba(52, 211, 153, 0.4);
+  }
+}
+
 .turn-splash-overlay {
   position: absolute;
-  top: 50%;
+  top: 45%;
   left: 50%;
   transform: translate(-50%, -50%);
   z-index: 150;
@@ -223,17 +237,19 @@ body {
   justify-content: center;
 }
 
-/* Sigue siendo un aviso, no un cartel: se reduce pero mantiene el gesto. */
 .turn-splash-text {
-  font-size: 2.2rem;
+  font-size: 2.5rem;
   font-weight: 900;
-  letter-spacing: 0.08em;
-  color: #fff;
-  text-shadow: 0 0 12px var(--primary-glow);
-  animation: splash-in-out 1.4s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
-  background: linear-gradient(90deg, #10b981 0%, #34d399 50%, #10b981 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #ffffff;
+  padding: 16px 36px;
+  background: radial-gradient(circle at center, rgba(16, 185, 129, 0.35), rgba(8, 12, 24, 0.92));
+  border: 2px solid #34d399;
+  border-radius: 20px;
+  box-shadow: 0 0 50px rgba(16, 185, 129, 0.6), inset 0 0 20px rgba(16, 185, 129, 0.4);
+  text-shadow: 0 0 20px rgba(52, 211, 153, 0.9);
+  animation: splash-in-out 1.6s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
 }
 
 /* --- DISEÑO DE LAS FICHAS DE DOMINÓ --- */
@@ -897,9 +913,15 @@ body {
 .seat.targetable {
   pointer-events: auto;
   cursor: pointer;
-  border-color: #818cf8;
-  border-style: dashed;
-  animation: pulse-glow 1.5s infinite;
+  border-color: #34d399;
+  border-style: solid;
+  box-shadow: 0 0 16px rgba(52, 211, 153, 0.4), inset 0 0 8px rgba(52, 211, 153, 0.2);
+  animation: pulse-glow 1.2s ease-in-out infinite alternate;
+}
+.seat.targetable:hover {
+  transform: scale(1.08);
+  border-color: #10b981;
+  box-shadow: 0 0 24px rgba(16, 185, 129, 0.6);
 }
 
 .seat-top   { top: 6px;  left: 50%; transform: translateX(-50%); }
@@ -921,12 +943,64 @@ body {
   width: 92px;
   height: 69px;
   border-radius: 7px;
-  overflow: hidden;
+  overflow: visible;
   background: rgba(255, 255, 255, 0.06);
   display: flex;
   align-items: center;
   justify-content: center;
   transition: box-shadow 0.15s;
+}
+
+/* Corona Dorada de Líder */
+.seat-crown {
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 1.15rem;
+  z-index: 25;
+  filter: drop-shadow(0 2px 6px rgba(251, 191, 36, 0.8));
+  animation: crown-float 2.4s ease-in-out infinite alternate;
+}
+
+@keyframes crown-float {
+  0% { transform: translateX(-50%) translateY(0) scale(1); }
+  100% { transform: translateX(-50%) translateY(-4px) scale(1.1); }
+}
+
+/* Impacto Ficha Doble ("¡Traz!") y Shockwave */
+.board-tile-wrap.last-played.double-impact {
+  animation: double-shake 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+.shockwave-burst {
+  position: absolute;
+  inset: -25px;
+  border-radius: 50%;
+  border: 3px solid var(--primary, #10b981);
+  box-shadow: 0 0 25px var(--primary-glow, rgba(16, 185, 129, 0.6)), inset 0 0 15px var(--primary-glow, rgba(16, 185, 129, 0.4));
+  pointer-events: none;
+  animation: shockwave-expand 0.65s ease-out forwards;
+  z-index: 30;
+}
+
+@keyframes double-shake {
+  10%, 90% { transform: translate(-50%, -50%) scale(1.08) rotate(-1deg); }
+  20%, 80% { transform: translate(-50%, -50%) scale(1.12) rotate(2deg); }
+  30%, 50%, 70% { transform: translate(-50%, -50%) scale(1.05) rotate(-2deg); }
+  40%, 60% { transform: translate(-50%, -50%) scale(1.02) rotate(1deg); }
+  100% { transform: translate(-50%, -50%) scale(1) rotate(0deg); }
+}
+
+@keyframes shockwave-expand {
+  0% {
+    opacity: 1;
+    transform: scale(0.2);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.2);
+  }
 }
 
 .seat-video {
@@ -2925,6 +2999,433 @@ body {
   color: #34d399;
 }
 
+/* ---------- MODAL DE BITÁCORA / MOVE LOG ---------- */
+.move-log-card {
+  position: relative;
+  max-width: 440px;
+  width: 100%;
+  text-align: left;
+}
+
+.move-log-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.move-log-icon {
+  color: var(--primary, #10b981);
+}
+
+.move-log-title {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: white;
+  margin: 0;
+}
+
+.move-log-subtitle {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.move-log-body {
+  max-height: 340px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.move-log-empty {
+  text-align: center;
+  padding: 30px 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.move-log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.move-log-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.move-log-time {
+  font-size: 0.68rem;
+  font-family: monospace;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.move-log-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  flex-shrink: 0;
+}
+
+.move-log-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.move-log-player {
+  font-weight: 800;
+  color: #f8fafc;
+}
+
+.move-log-detail {
+  color: #94a3b8;
+}
+
+/* ---------- FILTROS DE VOZ & ONDAS ESPECTRALES REACTIVAS ---------- */
+.voice-filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 3px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.voice-filter-btn {
+  background: transparent;
+  border: none;
+  font-size: 0.85rem;
+  padding: 3px 6px;
+  border-radius: 999px;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.2s, transform 0.2s, background 0.2s;
+}
+
+.voice-filter-btn:hover {
+  opacity: 0.9;
+  transform: scale(1.1);
+}
+
+.voice-filter-btn.active {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
+}
+
+/* ---------- ONDAS DE VOZ SUTILES Y REDONDEADAS ---------- */
+.voice-spectrum-ring-container {
+  position: absolute;
+  inset: -3px;
+  border-radius: 10px;
+  pointer-events: none;
+  z-index: 1;
+  overflow: visible;
+}
+
+.voice-spectrum-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 10px;
+  border: 1.5px solid rgba(52, 211, 153, 0.7);
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.3);
+  opacity: 0;
+  animation: voice-wave-expand 1.4s ease-out infinite;
+}
+
+.voice-spectrum-ring.ring-2 {
+  animation-delay: 0.5s;
+  border-color: rgba(56, 189, 248, 0.6);
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.3);
+}
+
+.voice-spectrum-ring.ring-3 {
+  animation-delay: 1.0s;
+  border-color: rgba(167, 139, 250, 0.5);
+  box-shadow: 0 0 8px rgba(167, 139, 250, 0.25);
+}
+
+@keyframes voice-wave-expand {
+  0% {
+    transform: scale(0.98);
+    opacity: 0.8;
+  }
+  50% {
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(1.06);
+    opacity: 0;
+  }
+}
+
+.seat-blitz-badge {
+  font-size: 0.65rem;
+  font-weight: 900;
+  font-family: monospace;
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  padding: 1px 5px;
+  border-radius: 6px;
+  margin-left: 4px;
+}
+
+.seat-blitz-badge.critical {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.5);
+  animation: pulse-glow 0.8s infinite alternate;
+}
+
+/* ---------- ANIMACIONES 3D Y VÓRTICE CINEMÁTICO (LEGENDARY FX) ---------- */
+.legendary-vortex-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(5, 5, 12, 0.85);
+  backdrop-filter: blur(12px);
+  pointer-events: auto;
+  animation: fade-in 0.4s ease-out;
+}
+
+.legendary-vortex-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.legendary-content-card {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 36px 44px;
+  background: radial-gradient(circle at center, rgba(167, 139, 250, 0.15), rgba(15, 23, 42, 0.95));
+  border: 2px solid rgba(167, 139, 250, 0.5);
+  border-radius: 24px;
+  box-shadow: 0 0 50px rgba(167, 139, 250, 0.3), inset 0 0 20px rgba(167, 139, 250, 0.2);
+}
+
+.legendary-badge-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+  color: #c084fc;
+  margin-bottom: 18px;
+  text-transform: uppercase;
+}
+
+.legendary-icon-wrapper {
+  color: #a78bfa;
+  margin-bottom: 16px;
+  filter: drop-shadow(0 0 20px rgba(167, 139, 250, 0.8));
+  animation: pulse-glow 1.5s ease-in-out infinite alternate;
+}
+
+.legendary-icon-spin {
+  animation: spin 6s linear infinite;
+}
+
+.legendary-title {
+  font-size: 2rem;
+  font-weight: 900;
+  color: #ffffff;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0;
+  text-shadow: 0 0 25px rgba(167, 139, 250, 0.8);
+}
+
+.legendary-sub {
+  font-size: 0.95rem;
+  color: #94a3b8;
+  margin-top: 8px;
+}
+
+/* ---------- CUADRO DE LLAVES / TORNEO RELÁMPAGO (BRACKET) ---------- */
+.bracket-modal-card {
+  position: relative;
+  max-width: 620px;
+  width: 100%;
+  text-align: left;
+}
+
+.bracket-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.bracket-trophy-icon {
+  color: #f59e0b;
+}
+
+.bracket-title {
+  font-size: 1.25rem;
+  font-weight: 900;
+  color: white;
+  margin: 0;
+}
+
+.bracket-subtitle {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.bracket-grid {
+  display: grid;
+  grid-template-columns: 1fr 30px 1.1fr;
+  gap: 12px;
+  align-items: center;
+}
+
+.bracket-column {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.bracket-phase-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #64748b;
+  letter-spacing: 0.08em;
+}
+
+.bracket-phase-title.gold {
+  color: #f59e0b;
+}
+
+.bracket-match-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  padding: 8px 10px;
+  transition: border-color 0.3s, background 0.3s;
+}
+
+.bracket-match-box.active {
+  border-color: rgba(16, 185, 129, 0.3);
+  background: rgba(16, 185, 129, 0.04);
+}
+
+.bracket-match-box.final-match.active {
+  border-color: rgba(245, 158, 11, 0.4);
+  background: rgba(245, 158, 11, 0.05);
+}
+
+.bracket-player {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: #cbd5e1;
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+
+.bracket-player.winner {
+  font-weight: 800;
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.bracket-seed {
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: #64748b;
+  width: 16px;
+}
+
+.bracket-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bracket-score {
+  font-weight: 800;
+  font-family: monospace;
+  color: #94a3b8;
+}
+
+.bracket-connector {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.bracket-line {
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, rgba(255,255,255,0.1), rgba(245,158,11,0.5));
+}
+
+.bracket-champion-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  background: radial-gradient(circle at center, rgba(245, 158, 11, 0.15), rgba(15, 23, 42, 0.8));
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  text-align: center;
+}
+
+.bracket-champ-label {
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: #f59e0b;
+  letter-spacing: 0.1em;
+  margin-top: 4px;
+}
+
+.bracket-champ-name {
+  font-size: 1.05rem;
+  font-weight: 900;
+  color: #ffffff;
+  margin-top: 2px;
+}
+
 /* ---------- MODAL DE PERFIL / ESTADÍSTICAS ---------- */
 .profile-card {
   position: relative;
@@ -2966,6 +3467,121 @@ body {
   flex-shrink: 0;
 }
 .profile-name { font-size: 1.2rem; font-weight: 800; color: white; }
+
+/* Taunts en Mesa (Burbujas en Asientos) */
+.seat-taunt-bubble {
+  position: absolute;
+  top: -38px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  background: rgba(15, 23, 42, 0.94);
+  border: 1px solid var(--primary, #10b981);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5), 0 0 12px var(--primary-glow);
+  padding: 5px 12px;
+  border-radius: 20px;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: taunt-bounce-float 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+}
+
+.seat-taunt-bubble .taunt-text {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+@keyframes taunt-bounce-float {
+  0% { opacity: 0; transform: translateX(-50%) translateY(12px) scale(0.6); }
+  70% { transform: translateX(-50%) translateY(-4px) scale(1.08); }
+  100% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+}
+
+/* Rango y Títulos en Perfil */
+.profile-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.profile-rank-badge {
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  background: rgba(0, 0, 0, 0.3);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.profile-equipped-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #fbbf24;
+  margin-top: 3px;
+}
+
+.profile-titles-section {
+  margin-bottom: 18px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.profile-section-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.profile-titles-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 6px;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.profile-title-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #cbd5e1;
+  font-size: 0.73rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: left;
+}
+
+.profile-title-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+}
+
+.profile-title-btn.selected {
+  background: rgba(16, 185, 129, 0.18);
+  border-color: var(--primary);
+  color: #34d399;
+  font-weight: 700;
+}
+
+.profile-title-btn.locked {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 .profile-sub {
   font-size: 0.65rem;
   font-weight: 700;
@@ -3959,6 +4575,78 @@ body {
     position: static !important;
     margin-top: 14px;
   }
+
+  /* Ajustes de modales y barras para dispositivos móviles */
+  .modal-card {
+    padding: 20px 16px;
+    max-height: calc(100dvh - 24px);
+    width: calc(100vw - 20px);
+    box-sizing: border-box;
+  }
+  .bracket-modal-card {
+    max-width: 100%;
+  }
+  .move-log-card {
+    max-width: 100%;
+  }
+  .move-log-body {
+    max-height: 55dvh;
+  }
+  .game-bar {
+    padding: 4px 8px;
+    gap: 6px;
+    font-size: 0.75rem;
+  }
+  .game-bar-turn-name {
+    max-width: 80px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Ocultar elementos redundantes en la cabecera móvil para evitar solapamientos */
+  .desktop-only-filters {
+    display: none !important;
+  }
+  .game-bar-lang {
+    display: none !important;
+  }
+  .game-bar {
+    padding: 5px 8px calc(5px + env(safe-area-inset-top, 0px));
+    gap: 4px;
+    justify-content: space-between;
+  }
+  .game-bar-round {
+    font-size: 0.62rem;
+  }
+  .game-bar-score {
+    font-size: 0.72rem;
+  }
+  .game-bar-turn {
+    padding: 2px 6px;
+    gap: 4px;
+    font-size: 0.62rem;
+    max-width: 105px;
+    overflow: hidden;
+  }
+  .game-bar-turn-name {
+    max-width: 45px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .game-bar-actions {
+    gap: 3px;
+    margin-left: 0;
+  }
+  .game-bar-actions .mute-btn {
+    width: 28px;
+    height: 28px;
+  }
+  .voice-mic-btn, .voice-cam-btn {
+    width: 28px !important;
+    height: 28px !important;
+  }
 }
 
 /* Pantallas muy bajas (móvil en horizontal): el titular decorativo se come
@@ -3995,15 +4683,16 @@ body {
   align-items: center;
   width: 100%;
   flex-shrink: 0;
+  overflow: visible;
 }
 
 .power-cards-title {
-  font-size: 0.7rem;
+  font-size: 0.72rem;
   font-weight: 800;
   color: var(--primary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  margin-bottom: 3px;
+  margin-bottom: 2px;
 }
 
 .power-cards-container {
@@ -4012,63 +4701,81 @@ body {
   justify-content: safe center;
   gap: 12px;
   width: 100%;
-  /* Espacio arriba para que la carta elevada en hover/selección no se recorte
-     (el contenedor scrollea en X, y eso fuerza overflow-y a recortar). */
-  padding: 20px 8px 8px;
+  padding: 16px 10px 8px;
   box-sizing: border-box;
-  /* El nº de cartas puede crecer (p. ej. Robo del Destino): que scrollee
-     en vez de comprimirse o salirse de pantalla. */
   overflow-x: auto;
-  overflow-y: hidden;
+  overflow-y: visible;
   overscroll-behavior-x: contain;
   touch-action: pan-x;
   flex-shrink: 0;
 }
 
-/* Contenedor de detección: fijo, no se transforma → el hover no parpadea. */
+/* El SLOT es más alto que la carta (124px vs 104px).
+   Al elevar la carta -10px en hover, permanece 100% DENTRO del slot,
+   eliminando el parpadeo del cursor y el recorte superior. */
 .power-card-slot {
-  width: 78px;
-  height: 106px;
+  width: 82px;
+  height: 124px;
   flex-shrink: 0;
   position: relative;
   cursor: pointer;
+  display: flex;
+  align-items: flex-end;
 }
 
 .power-card-item {
-  position: relative;
-  width: 78px;
-  height: 106px;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 82px;
+  height: 104px;
   flex-shrink: 0;
   border-radius: 12px;
   border: 1px solid var(--glass-border);
-  padding: 8px;
+  padding: 8px 6px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   align-items: center;
   text-align: center;
   cursor: pointer;
-  transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
-  box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-  background: rgba(13, 18, 30, 0.85);
-  backdrop-filter: blur(8px);
+  transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.22s ease, border-color 0.22s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  background: rgba(13, 18, 30, 0.92);
+  backdrop-filter: blur(10px);
+  will-change: transform;
 }
-/* El hover se detecta sobre el slot (estable): la carta se eleva sin que el
-   cursor "pierda" el elemento, evitando el parpadeo. */
+
 .power-card-slot:hover .power-card-item {
-  transform: translateY(-10px) scale(1.05);
-  box-shadow: 0 10px 20px rgba(0,0,0,0.4);
+  transform: translateY(-10px);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.5), 0 0 14px rgba(16, 185, 129, 0.3);
 }
+
 .power-card-item.selected,
 .power-card-slot:hover .power-card-item.selected {
-  transform: translateY(-15px) scale(1.08);
-  border-color: var(--primary);
-  box-shadow: 0 10px 25px rgba(16, 185, 129, 0.25), 0 0 12px var(--primary);
+  transform: translateY(-12px);
+  border-color: #34d399 !important;
+  box-shadow: 0 12px 28px rgba(16, 185, 129, 0.35), 0 0 18px var(--primary);
 }
+
 .power-card-item.disabled {
   filter: brightness(0.4) saturate(0.5);
+  cursor: not-allowed;
 }
-/* Acento de rareza: punto en la esquina (común = sin punto). */
+
+.power-card-item.rarity-common {
+  border-color: rgba(16, 185, 129, 0.4);
+}
+.power-card-item.rarity-rare {
+  border-color: rgba(129, 140, 248, 0.7);
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.25);
+}
+.power-card-item.rarity-legendary {
+  border-color: rgba(245, 158, 11, 0.9);
+  box-shadow: 0 4px 22px rgba(245, 158, 11, 0.4);
+  background: radial-gradient(circle at top, rgba(245, 158, 11, 0.16), rgba(13, 18, 30, 0.95));
+}
+
 .power-card-item.rarity-rare::after,
 .power-card-item.rarity-legendary::after {
   content: '';
@@ -4080,7 +4787,7 @@ body {
   border-radius: 50%;
 }
 .power-card-item.rarity-rare::after { background: #818cf8; box-shadow: 0 0 6px #6366f1; }
-.power-card-item.rarity-legendary::after { background: #fbbf24; box-shadow: 0 0 8px #f59e0b; }
+.power-card-item.rarity-legendary::after { background: #fbbf24; box-shadow: 0 0 10px #f59e0b; }
 
 /* --- REVELACIÓN DE ESPÍA (Ojo Soplón / Ojo Total) --- */
 .spy-overlay {
@@ -4268,33 +4975,39 @@ body {
   .power-cards-container {
     gap: 8px;
     margin-top: 0;
-    padding: 4px;
+    padding: 12px 6px 4px;
+    overflow-y: visible;
   }
-  /* Las cartas se llevaban ~145px de alto (tarjeta 75x110 + cabecera +
-     etiqueta). Aquí van a lo mínimo: icono y nombre. */
   .power-cards-title {
     display: none;
   }
+  .power-card-slot {
+    width: 66px;
+    height: 92px;
+  }
   .power-card-item {
-    width: 56px;
-    height: 72px;
-    padding: 4px;
+    width: 66px;
+    height: 80px;
+    padding: 5px 3px;
     border-radius: 9px;
   }
   .power-card-icon {
-    font-size: 1.35rem;
+    margin-top: 2px;
   }
   .power-card-title {
-    font-size: 0.5rem;
-    line-height: 1.05;
+    font-size: 0.52rem;
+    line-height: 1.1;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
-  /* "BENEFICIO"/"ATAQUE": el color de la carta ya lo dice. */
   .power-card-type-label {
     display: none;
   }
   .power-card-svg-icon {
-    width: 20px;
-    height: 20px;
+    width: 22px;
+    height: 22px;
   }
 
   /* La mano gastaba ~44px solo en padding. */
@@ -4534,6 +5247,97 @@ body {
   0% { opacity: 0; transform: scale(1.8); }
   60% { opacity: 1; }
   100% { opacity: 1; transform: scale(1); }
+}
+
+/* --- EMOTICONOS FLOTANTES SOBRE ASIENTOS DE JUGADORES --- */
+.floating-emote-bubble {
+  position: absolute;
+  top: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 2.2rem;
+  z-index: 50;
+  pointer-events: none;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.5));
+  animation: emote-float-up 2.2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+@keyframes emote-float-up {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 10px) scale(0.5);
+  }
+  20% {
+    opacity: 1;
+    transform: translate(-50%, -20px) scale(1.3);
+  }
+  80% {
+    opacity: 1;
+    transform: translate(-50%, -45px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -65px) scale(0.8);
+  }
+}
+
+.seat-emote-picker {
+  position: absolute;
+  bottom: 105%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 8px;
+  background: rgba(13, 18, 30, 0.95);
+  border: 1px solid var(--glass-border);
+  border-radius: 20px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.6), 0 0 15px rgba(16, 185, 129, 0.3);
+  backdrop-filter: blur(12px);
+  animation: pop-in 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.seat-emote-trigger-btn,
+.hand-emote-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: rgba(13, 18, 30, 0.9);
+  border: 1px solid var(--primary);
+  font-size: 0.85rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5), 0 0 6px rgba(16, 185, 129, 0.3);
+  transition: transform 0.15s ease, background 0.15s ease;
+  padding: 0;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+.seat-emote-trigger-btn:hover,
+.hand-emote-btn:hover {
+  transform: scale(1.25);
+  background: rgba(16, 185, 129, 0.25);
+  border-color: #34d399;
+}
+
+.seat-emote-btn {
+  background: transparent;
+  border: none;
+  font-size: 1.25rem;
+  padding: 3px 5px;
+  cursor: pointer;
+  border-radius: 50%;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.seat-emote-btn:hover {
+  transform: scale(1.35);
+  background: rgba(255, 255, 255, 0.12);
 }
 @media (prefers-reduced-motion: reduce) {
   .epic-overlay, .epic-spotlight, .epic-banner, .epic-sub, .epic-capture { animation: none; }

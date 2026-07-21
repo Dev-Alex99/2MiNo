@@ -1,21 +1,26 @@
 import React, { useState } from 'react';
-import { X, Trophy, Flame, RotateCcw } from 'lucide-react';
+import { X, Trophy, Flame, RotateCcw, Award, ShieldCheck } from 'lucide-react';
 import { useT } from '../i18n/LanguageContext';
-import { loadStats, ACHIEVEMENTS, winRate } from '../stats';
+import { loadStats, ACHIEVEMENTS, winRate, getRank, TITLES, getEquippedTitle, setEquippedTitle } from '../stats';
 
-// Perfil del jugador: estadísticas y logros guardados localmente.
 export default function ProfileModal({ name, onClose }) {
   const { t } = useT();
-  // El estado se relee al abrir; un reinicio fuerza un re-render.
   const [stats, setStats] = useState(() => loadStats());
+  const [equippedTitle, setEquippedTitleState] = useState(() => getEquippedTitle());
 
   const initials = (name || '?').trim().slice(0, 2).toUpperCase();
   const unlockedCount = ACHIEVEMENTS.filter(a => stats.achievements[a.id]).length;
+  const rank = getRank(stats);
 
   const resetStats = () => {
     if (!window.confirm(t('profile.resetConfirm'))) return;
     try { localStorage.removeItem('domino_stats'); } catch { /* noop */ }
     setStats(loadStats());
+  };
+
+  const handleSelectTitle = (titleId) => {
+    setEquippedTitle(titleId);
+    setEquippedTitleState(titleId);
   };
 
   return (
@@ -25,12 +30,47 @@ export default function ProfileModal({ name, onClose }) {
           <X size={18} />
         </button>
 
-        {/* Cabecera: avatar + nombre */}
+        {/* Cabecera: avatar + nombre + rango */}
         <div className="profile-head">
           <div className="profile-avatar">{initials}</div>
           <div>
-            <div className="profile-name">{name || t('common.you')}</div>
-            <div className="profile-sub">{t('profile.title')}</div>
+            <div className="profile-name-row">
+              <span className="profile-name">{name || t('common.you')}</span>
+              <span className="profile-rank-badge" style={{ borderColor: rank.color, color: rank.color }}>
+                {t(`rank.${rank.id}`)}
+              </span>
+            </div>
+            {equippedTitle !== 'none' && (
+              <div className="profile-equipped-title">
+                {t(`title.${equippedTitle}`)}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Selector de Títulos */}
+        <div className="profile-titles-section">
+          <div className="profile-section-label">
+            <Award size={14} />
+            {t('profile.titles')}
+          </div>
+          <div className="profile-titles-grid">
+            {TITLES.map((title) => {
+              const isUnlocked = stats.wins >= title.reqWins;
+              const isSelected = equippedTitle === title.id;
+              return (
+                <button
+                  key={title.id}
+                  disabled={!isUnlocked}
+                  onClick={() => handleSelectTitle(title.id)}
+                  className={`profile-title-btn ${isSelected ? 'selected' : ''} ${!isUnlocked ? 'locked' : ''}`}
+                  title={!isUnlocked ? `Requiere ${title.reqWins} victoria(s)` : undefined}
+                >
+                  <span className="title-icon">{title.icon}</span>
+                  <span className="title-text">{t(`title.${title.id}`)}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
 

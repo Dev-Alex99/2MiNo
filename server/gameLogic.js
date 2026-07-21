@@ -55,7 +55,7 @@ class DominoGame {
   constructor(roomId, maxScore = null, options = {}) {
     const {
       powersEnabled = true, maxPip = 6, teamsEnabled = false, drawEnabled = true,
-      isPublic = true, powerIntensity = 'normal', onePowerPerTurn = false
+      isPublic = true, powerIntensity = 'normal', onePowerPerTurn = false, isBlitzMode = false
     } = options;
 
     // Pública: aparece en la lista del lobby mientras espera jugadores.
@@ -77,6 +77,8 @@ class DominoGame {
     // Límite opcional de un poder por turno (evita encadenar combos).
     this.onePowerPerTurn = onePowerPerTurn === true;
     this.powerUsedThisTurn = false;
+    this.isBlitzMode = isBlitzMode === true;
+    this.blitzTimeRemaining = {};
     // Parejas: exige exactamente 4 jugadores. Se sientan alternados (0,2) vs (1,3),
     // así los compañeros nunca juegan seguidos.
     this.teamsEnabled = teamsEnabled === true;
@@ -107,10 +109,9 @@ class DominoGame {
     this.passedTurns = 0; // Contador de turnos seguidos pasados para detectar bloqueo
     this.roundNumber = 0;
     this.startingPlayerId = null; // Quien inicia la ronda
-    // playerId -> números sobre los que ya pasó. Es información pública (todos
-    // ven el pase) y permite a los bots difíciles deducir y bloquear.
     this.playerPassedOn = {};
-    
+    this.moveLog = []; // Bitácora de jugadas
+
     // Estados activos para cartas de poderes
     this.powerDeck = [];
     this.activeEffects = {
@@ -155,6 +156,19 @@ class DominoGame {
 
   // El administrador de la sala: por defecto quien la creó (primer humano).
   // Si se va, lo hereda el siguiente humano presente.
+  addMoveLog(playerName, action, detail, tile = null) {
+    if (!this.moveLog) this.moveLog = [];
+    this.moveLog.push({
+      id: `${Date.now()}_${Math.random()}`,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      player: playerName,
+      action,
+      detail,
+      tile
+    });
+    if (this.moveLog.length > 50) this.moveLog.shift();
+  }
+
   ensureHost() {
     const current = this.players.find(p => p.id === this.hostId);
     if (current && !current.isBot) return;
@@ -664,6 +678,8 @@ class DominoGame {
     this.lastPlacedBy = playerId;
     this.passedTurns = 0; // Reseteamos contador de pases
 
+    this.addMoveLog(player.name, 'play', `[${playedTile[0]}|${playedTile[1]}] (${side === 'left' ? 'Izq' : 'Der'})`, playedTile);
+
     this.checkRoundEnd();
     if (this.status === 'playing') {
       if (this.activeEffects.doubleTurnActive) {
@@ -688,6 +704,8 @@ class DominoGame {
     player.hand.push(drawnTile);
     this.passedTurns = 0; // Un robo no cuenta como pase trancado
 
+    this.addMoveLog(player.name, 'draw', 'Robó 1 ficha del pozo');
+
     return { success: true, tile: drawnTile };
   }
 
@@ -700,6 +718,8 @@ class DominoGame {
       return { success: false, error: 'srv.err.mustDraw' };
     }
     if (this.hasValidMove(playerId)) return { success: false, error: 'srv.err.hasMovesNoPass' };
+
+    this.addMoveLog(player.name, 'pass', 'Pasó turno');
 
     // Un pase es información pública: revela que ese jugador no tiene NINGUNO
     // de los dos extremos. Lo guardamos para que los bots difíciles bloqueen.
@@ -1182,6 +1202,9 @@ class DominoGame {
       lastPlacedTile: this.lastPlacedTile,
       lastPlacedBy: this.lastPlacedBy,
       roundNumber: this.roundNumber,
+      moveLog: (this.moveLog || []).slice(-40),
+      isBlitzMode: this.isBlitzMode,
+      blitzTimeRemaining: this.blitzTimeRemaining,
       activeEffects: {
         ...this.activeEffects,
         spyEyeActive: isSpyActive,

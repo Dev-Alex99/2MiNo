@@ -20,7 +20,6 @@ function hexToRgba(hex, a) {
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
 }
 
-// Dibuja un vídeo/imagen recortado tipo "cover" dentro de un rectángulo.
 function drawCover(ctx, media, dx, dy, dw, dh) {
   const mw = media.videoWidth || media.width;
   const mh = media.videoHeight || media.height;
@@ -32,20 +31,15 @@ function drawCover(ctx, media, dx, dy, dw, dh) {
   return true;
 }
 
-/**
- * Cinemática de "momento épico": foco sobre el protagonista (su cámara si está
- * encendida, o su avatar), banner grande, y un botón para capturar y compartir
- * el instante. No bloquea el juego (pointer-events: none salvo el botón).
- */
 export default function EpicMoment({ moment, gameState, playerId }) {
   const { t } = useT();
   const voice = useVoice();
   const videoRef = useRef(null);
+  const confettiCanvasRef = useRef(null);
 
   const star = moment ? (gameState.players || []).find(p => p.id === moment.starId) : null;
   const accent = ACCENTS[moment?.kind] || '#10b981';
 
-  // Stream del protagonista: el mío es localVideo; el de otro, remoteVideos.
   const stream = star && voice
     ? (star.id === playerId ? voice.localVideo : (voice.remoteVideos || {})[star.id])
     : null;
@@ -59,6 +53,87 @@ export default function EpicMoment({ moment, gameState, playerId }) {
     }
   }, [showVideo, stream]);
 
+  // Sistema de partículas / Confeti Neón en Canvas
+  useEffect(() => {
+    const canvas = confettiCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let width = (canvas.width = window.innerWidth);
+    let height = (canvas.height = window.innerHeight);
+
+    const handleResize = () => {
+      width = canvas.width = window.innerWidth;
+      height = canvas.height = window.innerHeight;
+    };
+    window.addEventListener('resize', handleResize);
+
+    const colors = [accent, '#ffffff', '#34d399', '#fbbf24', '#818cf8', '#f43f5e', '#60a5fa'];
+    const particleCount = 120;
+    const particles = [];
+
+    for (let i = 0; i < particleCount; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 3 + Math.random() * 14;
+      particles.push({
+        x: width / 2,
+        y: height * 0.38,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed - 4,
+        size: Math.random() * 9 + 4,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        rotation: Math.random() * Math.PI * 2,
+        vRot: (Math.random() - 0.5) * 0.25,
+        opacity: 1,
+        gravity: 0.16 + Math.random() * 0.12,
+        shape: Math.random() > 0.35 ? 'rect' : 'circle'
+      });
+    }
+
+    let animId;
+    const render = () => {
+      ctx.clearRect(0, 0, width, height);
+
+      particles.forEach((p) => {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += p.gravity;
+        p.vx *= 0.98;
+        p.rotation += p.vRot;
+        p.opacity -= 0.006;
+
+        if (p.opacity <= 0) return;
+
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, p.opacity);
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rotation);
+        ctx.fillStyle = p.color;
+        ctx.shadowColor = p.color;
+        ctx.shadowBlur = 12;
+
+        if (p.shape === 'rect') {
+          ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.55);
+        } else {
+          ctx.beginPath();
+          ctx.arc(0, 0, p.size / 2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      });
+
+      animId = requestAnimationFrame(render);
+    };
+
+    render();
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      cancelAnimationFrame(animId);
+    };
+  }, [accent]);
+
   if (!moment) return null;
 
   const captureMoment = async () => {
@@ -68,7 +143,6 @@ export default function EpicMoment({ moment, gameState, playerId }) {
       canvas.width = S; canvas.height = S;
       const ctx = canvas.getContext('2d');
 
-      // Fondo + resplandor del color del evento.
       const bg = ctx.createLinearGradient(0, 0, S, S);
       bg.addColorStop(0, '#0b1222'); bg.addColorStop(1, '#02040a');
       ctx.fillStyle = bg; ctx.fillRect(0, 0, S, S);
@@ -76,7 +150,6 @@ export default function EpicMoment({ moment, gameState, playerId }) {
       glow.addColorStop(0, hexToRgba(accent, 0.38)); glow.addColorStop(1, 'transparent');
       ctx.fillStyle = glow; ctx.fillRect(0, 0, S, S);
 
-      // Protagonista: círculo con su vídeo o su avatar.
       const cx = S / 2, cy = S * 0.4, r = 210;
       ctx.save();
       ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.closePath(); ctx.clip();
@@ -98,7 +171,6 @@ export default function EpicMoment({ moment, gameState, playerId }) {
       ctx.strokeStyle = accent; ctx.lineWidth = 8;
       ctx.beginPath(); ctx.arc(cx, cy, r + 6, 0, Math.PI * 2); ctx.stroke();
 
-      // Título, subtítulo y marca.
       ctx.textAlign = 'center';
       ctx.fillStyle = accent;
       ctx.font = '800 104px Outfit, Arial, sans-serif';
@@ -119,7 +191,7 @@ export default function EpicMoment({ moment, gameState, playerId }) {
           try {
             await navigator.share({ files: [file], title: '2MiNo', text: `${moment.title} · 2mino.lat` });
             return;
-          } catch { /* usuario canceló: caemos a descargar */ }
+          } catch { /* noop */ }
         }
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -127,11 +199,12 @@ export default function EpicMoment({ moment, gameState, playerId }) {
         document.body.appendChild(a); a.click(); a.remove();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
       }, 'image/png');
-    } catch { /* si algo falla, no romper la partida */ }
+    } catch { /* noop */ }
   };
 
   return (
     <div className="epic-overlay" style={{ '--epic': accent }}>
+      <canvas ref={confettiCanvasRef} className="epic-confetti-canvas" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 0 }} />
       <div className="epic-vignette" />
 
       <div className="epic-stage">

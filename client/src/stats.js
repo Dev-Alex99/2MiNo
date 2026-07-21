@@ -3,6 +3,7 @@
 // entre dispositivos (esa sería una Fase 2 con cuentas + base de datos).
 
 const KEY = 'domino_stats';
+const TITLE_KEY = 'domino_title';
 
 const EMPTY = {
   played: 0,
@@ -13,6 +14,33 @@ const EMPTY = {
   roundsWon: 0,
   achievements: {} // id -> fecha ISO de desbloqueo
 };
+
+export const TITLES = [
+  { id: 'none', icon: '👤', reqWins: 0 },
+  { id: 'maestro', icon: '👑', reqWins: 1 },
+  { id: 'rey_doble', icon: '🎴', reqWins: 3 },
+  { id: 'invicto', icon: '🔥', reqWins: 5 },
+  { id: 'cazador', icon: '🕵️', reqWins: 10 },
+  { id: 'estratega', icon: '🧠', reqWins: 15 },
+  { id: 'leyenda', icon: '🏆', reqWins: 25 }
+];
+
+export function getRank(s) {
+  const w = s ? s.wins || 0 : 0;
+  if (w >= 50) return { id: 'legend', icon: '💎', color: '#38bdf8' };
+  if (w >= 25) return { id: 'gold', icon: '🥇', color: '#fbbf24' };
+  if (w >= 10) return { id: 'silver', icon: '🥈', color: '#cbd5e1' };
+  if (w >= 3)  return { id: 'bronze', icon: '🥉', color: '#d97706' };
+  return { id: 'rookie', icon: '🟢', color: '#34d399' };
+}
+
+export function getEquippedTitle() {
+  try { return localStorage.getItem(TITLE_KEY) || 'none'; } catch { return 'none'; }
+}
+
+export function setEquippedTitle(titleId) {
+  try { localStorage.setItem(TITLE_KEY, titleId); } catch { /* noop */ }
+}
 
 export function loadStats() {
   try {
@@ -29,10 +57,6 @@ function save(s) {
   try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* modo privado */ }
 }
 
-// Orden en que se muestran en el perfil. `check(stats, ctx)` se evalúa tras
-// actualizar el contador de la partida; ctx = { won, teams, powers, d9 }.
-// El nombre y la descripción de cada logro viven en el diccionario i18n
-// como ach.<id>.n / ach.<id>.d
 export const ACHIEVEMENTS = [
   { id: 'first_win',  icon: '🥇', check: (s) => s.wins >= 1 },
   { id: 'winner10',   icon: '👑', check: (s) => s.wins >= 10 },
@@ -50,7 +74,6 @@ function todayISO() {
   try { return new Date().toISOString().slice(0, 10); } catch { return ''; }
 }
 
-// ¿Ganó `myId` esta partida? Sirve tanto para individual como para parejas.
 function didWinGame(state, myId) {
   const me = state.players?.find(p => p.id === myId);
   if (!me) return null;
@@ -59,11 +82,9 @@ function didWinGame(state, myId) {
     : state.gameWinner === myId;
 }
 
-// Registra el fin de una partida y comprueba logros.
-// Devuelve los ids de los logros recién desbloqueados (para avisar al jugador).
 export function recordGame(state, myId) {
   const won = didWinGame(state, myId);
-  if (won === null) return []; // no estábamos en la partida
+  if (won === null) return [];
 
   const s = loadStats();
   s.played += 1;
@@ -95,7 +116,6 @@ export function recordGame(state, myId) {
   return unlocked;
 }
 
-// Registra que ganaste una ronda (en partidas a varias rondas).
 export function recordRoundWin(state, myId) {
   const me = state.players?.find(p => p.id === myId);
   if (!me) return;

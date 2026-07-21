@@ -50,8 +50,24 @@ export default function PlayerHand({
     const { left, right } = getPlayableSides(tile);
     if (!left && !right) return; // No es jugable
 
-    // Siempre seleccionar la ficha para que el jugador elija el extremo en el tablero,
-    // garantizando un control de juego premium y previniendo errores accidentales.
+    // Jugada inteligente instantánea si solo encaja en un lado único
+    if (left && !right) {
+      onPlay(index, 'left');
+      setSelectedTileIndex(null);
+      return;
+    }
+    if (right && !left) {
+      onPlay(index, 'right');
+      setSelectedTileIndex(null);
+      return;
+    }
+    if (boardIsEmpty) {
+      onPlay(index, 'left');
+      setSelectedTileIndex(null);
+      return;
+    }
+
+    // Si la ficha pega por ambos lados, se selecciona para elegir extremo
     if (selectedTileIndex === index) {
       setSelectedTileIndex(null);
     } else {
@@ -59,9 +75,17 @@ export default function PlayerHand({
     }
   };
 
+  const handleDoubleClick = (index, tile) => {
+    if (!isMyTurn || onTileClickOverride) return;
+    const { left, right } = getPlayableSides(tile);
+    if (left || right) {
+      onPlay(index, left ? 'left' : 'right');
+      setSelectedTileIndex(null);
+    }
+  };
+
   return (
     <div className="player-hand-container">
-      
       {/* Indicador de Estado / Acciones Rápidas */}
       <div className="hand-status-row">
         {isMyTurn ? (
@@ -114,7 +138,7 @@ export default function PlayerHand({
           const { left, right } = getPlayableSides(tile);
           const isPlayable = left || right;
           const isSelected = selectedTileIndex === index;
-          const tileKey = `${tile[0]}-${tile[1]}`;
+          const tileKey = `${tile[0]}-${tile[1]}-${index}`;
 
           return (
             <div 
@@ -128,6 +152,7 @@ export default function PlayerHand({
               <DominoTile
                 tile={tile}
                 onClick={() => handleTileClick(index, tile)}
+                onDoubleClick={() => handleDoubleClick(index, tile)}
                 selected={isSelected}
                 playable={isMyTurn && isPlayable}
                 disabled={isMyTurn && !isPlayable && !onTileClickOverride}

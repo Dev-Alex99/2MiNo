@@ -36,7 +36,8 @@ function Row({ icon, title, devices, value, onChange, disabled, hint, defaultLab
 
 export default function DeviceSelector({
   devices, selected, switching, camOn,
-  onMic, onCam, onSpeaker, canPickSpeaker
+  onMic, onCam, onSpeaker, canPickSpeaker,
+  voiceFilter, onVoiceFilter
 }) {
   const { t } = useT();
   const nothing =
@@ -44,6 +45,69 @@ export default function DeviceSelector({
 
   return (
     <div className="device-panel">
+      {/* Selector de Filtros de Voz */}
+      <div className="device-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '6px' }}>
+        <span className="device-label" style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 700 }}>
+          🎤 Filtro de Voz FX
+        </span>
+        <div className="voice-filter-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '4px', width: '100%' }}>
+          <button
+            type="button"
+            onClick={() => onVoiceFilter && onVoiceFilter('normal')}
+            className={`voice-filter-btn ${voiceFilter === 'normal' ? 'active' : ''}`}
+            title="Voz Normal"
+            style={{ textAlign: 'center', padding: '4px 2px', fontSize: '0.7rem' }}
+          >
+            🎤 Normal
+          </button>
+          <button
+            type="button"
+            onClick={() => onVoiceFilter && onVoiceFilter('megaphone')}
+            className={`voice-filter-btn ${voiceFilter === 'megaphone' ? 'active' : ''}`}
+            title="Filtro Megáfono / Anunciador"
+            style={{ textAlign: 'center', padding: '4px 2px', fontSize: '0.7rem' }}
+          >
+            📢 Megáfono
+          </button>
+          <button
+            type="button"
+            onClick={() => onVoiceFilter && onVoiceFilter('robot')}
+            className={`voice-filter-btn ${voiceFilter === 'robot' ? 'active' : ''}`}
+            title="Filtro Robot Cyborg"
+            style={{ textAlign: 'center', padding: '4px 2px', fontSize: '0.7rem' }}
+          >
+            🤖 Robot
+          </button>
+          <button
+            type="button"
+            onClick={() => onVoiceFilter && onVoiceFilter('alien')}
+            className={`voice-filter-btn ${voiceFilter === 'alien' ? 'active' : ''}`}
+            title="Filtro Alienígena"
+            style={{ textAlign: 'center', padding: '4px 2px', fontSize: '0.7rem' }}
+          >
+            👾 Alien
+          </button>
+          <button
+            type="button"
+            onClick={() => onVoiceFilter && onVoiceFilter('monster')}
+            className={`voice-filter-btn ${voiceFilter === 'monster' ? 'active' : ''}`}
+            title="Filtro Monstruo Ogro"
+            style={{ textAlign: 'center', padding: '4px 2px', fontSize: '0.7rem' }}
+          >
+            👹 Monstruo
+          </button>
+          <button
+            type="button"
+            onClick={() => onVoiceFilter && onVoiceFilter('radio')}
+            className={`voice-filter-btn ${voiceFilter === 'radio' ? 'active' : ''}`}
+            title="Filtro Walkie-Talkie Piloto"
+            style={{ textAlign: 'center', padding: '4px 2px', fontSize: '0.7rem' }}
+          >
+            📻 Radio
+          </button>
+        </div>
+      </div>
+
       <Row
         icon={<Mic size={11} />}
         title={t('dev.mic')}

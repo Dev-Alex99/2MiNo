@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { socket } from './socket';
 import { playGameSound } from './audio';
 import Lobby from './components/Lobby';
@@ -17,14 +17,17 @@ import useIsMobile from './hooks/useIsMobile';
 import { Wifi, AlertCircle } from 'lucide-react';
 import ProfileModal from './components/ProfileModal';
 import SpectatorView from './components/SpectatorView';
-import ThemeModal from './components/ThemeModal';
+
 import SpyReveal from './components/SpyReveal';
 import EpicMoment from './components/EpicMoment';
+import LegendaryEffect from './components/LegendaryEffect';
+import TournamentBracket from './components/TournamentBracket';
+import LeaderboardModal from './components/LeaderboardModal';
+import SkinStoreModal from './components/SkinStoreModal';
 import { recordGame, recordRoundWin } from './stats';
-import { initTheme } from './theme';
+import { initTheme, applySkin, applyTable } from './theme';
+import { useGameStore, getOrCreatePersistentPlayerId } from './store/useGameStore';
 
-// Lee un código de sala de la URL de invitación: www.2mino.lat/ABCD (o
-// ?room=ABCD / ?code=ABCD como respaldo). Los códigos son 4 letras A-Z.
 function readInviteCode() {
   try {
     const path = window.location.pathname.replace(/^\/+/, '').trim();
@@ -41,100 +44,90 @@ export default function App() {
   const { t } = useT();
   const isMobile = useIsMobile();
 
-  // Traduce un mensaje que el servidor envía como { key, params }. El servidor
-  // no conoce el idioma de cada jugador (una sala puede ser mixta), así que
-  // manda claves y cada cliente las resuelve aquí. '@opponent' es un centinela
-  // para "un oponente" cuando el poder no apuntó a nadie concreto.
+  const {
+    name, setName,
+    playerId, setPlayerId,
+    roomId, setRoomId,
+    gameState, setGameState,
+    error, setError,
+    isConnected, setIsConnected,
+    selectedTileIndex, setSelectedTileIndex,
+    quickNotifications, setQuickNotifications,
+    publicRooms, setPublicRooms,
+    roomsLoading, setRoomsLoading,
+    lobbyStats, setLobbyStats,
+    showTurnBanner, setShowTurnBanner,
+    selectedPower, setSelectedPower,
+    pendingTargetType, setPendingTargetType,
+    smuggleTileIdx, setSmuggleTileIdx,
+    showProfile, setShowProfile,
+    spectating, setSpectating,
+    liveGames, setLiveGames,
+    epicMoment, setEpicMoment,
+    invitedCode, setInvitedCode,
+    resetPowerState
+  } = useGameStore();
+
+  const [legendaryEffect, setLegendaryEffect] = React.useState(null);
+  const [showBracket, setShowBracket] = React.useState(false);
+  const [showLeaderboard, setShowLeaderboard] = React.useState(false);
+  const [showStore, setShowStore] = React.useState(false);
+
   const tMsg = (key, params) => {
     if (!params) return t(key);
     const p = { ...params };
     for (const k in p) if (p[k] === '@opponent') p[k] = t('srv.opponent');
     return t(key, p);
   };
-  // El error puede ser un string (fijado en cliente) o { key, params } (servidor).
+
   const renderError = (e) =>
     typeof e === 'string' ? e : (e && e.key ? tMsg(e.key, e.params) : '');
-  const [name, setName] = useState(localStorage.getItem('domino_username') || '');
-  const [playerId, setPlayerId] = useState(sessionStorage.getItem('domino_player_id') || '');
-  const [roomId, setRoomId] = useState(sessionStorage.getItem('domino_room_id') || '');
-  const [gameState, setGameState] = useState(null);
-  const [error, setError] = useState('');
-  const [isConnected, setIsConnected] = useState(socket.connected);
-  const [selectedTileIndex, setSelectedTileIndex] = useState(null);
-  const [quickNotifications, setQuickNotifications] = useState([]);
-  const [publicRooms, setPublicRooms] = useState([]);
-  const [roomsLoading, setRoomsLoading] = useState(true);
-  const [lobbyStats, setLobbyStats] = useState(null);
-  const [showTurnBanner, setShowTurnBanner] = useState(false);
-  
-  // Estados para cartas de poderes
-  const [selectedPower, setSelectedPower] = useState(null);
-  const [pendingTargetType, setPendingTargetType] = useState(null);
-  const [smuggleTileIdx, setSmuggleTileIdx] = useState(null);
-   
+
   const prevGameStatusRef = useRef(null);
   const prevIsMyTurnRef = useRef(false);
 
-  // Invitación por enlace: código leído de la URL al cargar. Sirve para
-  // pre-rellenar el lobby y para auto-unirse si ya hay nombre guardado.
-  const [invitedCode, setInvitedCode] = useState(() => readInviteCode());
+  useEffect(() => {
+    const code = readInviteCode();
+    if (code) setInvitedCode(code);
+  }, [setInvitedCode]);
+
   const invitedCodeRef = useRef(invitedCode);
   invitedCodeRef.current = invitedCode;
   const autoJoinedRef = useRef(false);
 
-  // Perfil / estadísticas (locales). Refs para leer valores frescos dentro del
-  // handler de socket, que se registra una sola vez (deps []).
-  const [showProfile, setShowProfile] = useState(false);
-  const [showTheme, setShowTheme] = useState(false);
   const playerIdRef = useRef(playerId);
   playerIdRef.current = playerId;
   const tRef = useRef(t);
   tRef.current = t;
 
-  // Modo espectador: sala que se está viendo (o null) y lista de partidas en
-  // vivo del lobby.
-  const [spectating, setSpectating] = useState(null);
-  const [liveGames, setLiveGames] = useState([]);
   const spectatingRef = useRef(spectating);
   spectatingRef.current = spectating;
 
-  // Momentos épicos (cinemática). gameStateRef permite leer el estado actual
-  // desde handlers de socket registrados una sola vez (deps []).
-  const [epicMoment, setEpicMoment] = useState(null);
   const gameStateRef = useRef(gameState);
   gameStateRef.current = gameState;
- 
-   useEffect(() => {
-     if (name) {
-       localStorage.setItem('domino_username', name);
-     }
-   }, [name]);
 
-  // Aplica el tema de mesa / skin de fichas guardado, al cargar la app.
+  useEffect(() => {
+    if (name) {
+      localStorage.setItem('domino_username', name);
+    }
+  }, [name]);
+
   useEffect(() => { initTheme(); }, []);
 
-  // Al dispararse un momento épico: suena el "sting" y se auto-descarta. Los de
-  // poder son más breves (interrumpen menos el juego en curso).
   useEffect(() => {
     if (!epicMoment) return undefined;
     playGameSound('epic');
-    const dur = epicMoment.kind === 'power' ? 2400 : 4200;
+    const dur = 4000;
     const id = setTimeout(() => setEpicMoment(null), dur);
     return () => clearTimeout(id);
-  }, [epicMoment && epicMoment.id]);
+  }, [epicMoment, setEpicMoment]);
 
-  // Al cargar con un enlace de invitación, limpiamos la URL a "/" para que un
-  // refresh no vuelva a disparar el auto-join y la barra de direcciones quede
-  // limpia. El código ya se capturó en el estado `invitedCode`.
   useEffect(() => {
     if (window.location.pathname !== '/' || window.location.search) {
       try { window.history.replaceState({}, '', '/'); } catch { /* noop */ }
     }
   }, []);
 
-  // Auto-unirse a la sala invitada en cuanto haya conexión, pero solo si ya
-  // tenemos nombre. Si no, el Lobby muestra el banner con el código listo para
-  // que el jugador escriba su nombre y entre.
   useEffect(() => {
     if (!isConnected || !invitedCode || roomId || autoJoinedRef.current) return;
     if (name && name.trim()) {
@@ -149,43 +142,51 @@ export default function App() {
     function onConnect() {
       setIsConnected(true);
       setError('');
-      // Si venimos de un enlace de invitación, ese destino manda: dejamos que
-      // el efecto de invitación decida, en vez de reconectar a la sala vieja.
+
+      // Sincronizar skins del perfil guardado en BD
+      const persistId = getOrCreatePersistentPlayerId();
+      const savedName = localStorage.getItem('domino_username');
+      socket.emit('get_profile', { playerId: persistId, username: savedName || 'Jugador' });
+
       if (invitedCodeRef.current) return;
-      // Si el cliente se desconectó temporalmente y tiene datos guardados, re-unirse automáticamente
       const savedRoom = sessionStorage.getItem('domino_room_id');
       const savedPlayer = sessionStorage.getItem('domino_player_id');
-      const savedName = localStorage.getItem('domino_username');
       if (savedRoom && savedPlayer && savedName) {
         socket.emit('join_room', { roomId: savedRoom, name: savedName, playerId: savedPlayer });
       }
+    }
+
+    function onProfileBoot(data) {
+      if (!data) return;
+      // Aplicar skins guardadas en la BD al CSS del cliente
+      if (data.equipped_tile_skin) applySkin(data.equipped_tile_skin);
+      if (data.equipped_board_theme) applyTable(data.equipped_board_theme);
     }
 
     function onDisconnect() {
       setIsConnected(false);
     }
 
-    function onRoomCreated({ roomId, playerId }) {
-      setRoomId(roomId);
-      setPlayerId(playerId);
-      sessionStorage.setItem('domino_room_id', roomId);
-      sessionStorage.setItem('domino_player_id', playerId);
+    function onRoomCreated({ roomId: newRoomId, playerId: newPlayerId }) {
+      setRoomId(newRoomId);
+      setPlayerId(newPlayerId);
+      sessionStorage.setItem('domino_room_id', newRoomId);
+      sessionStorage.setItem('domino_player_id', newPlayerId);
       setError('');
     }
 
-    function onRoomJoined({ roomId, playerId }) {
-      setRoomId(roomId);
-      setPlayerId(playerId);
-      sessionStorage.setItem('domino_room_id', roomId);
-      sessionStorage.setItem('domino_player_id', playerId);
+    function onRoomJoined({ roomId: newRoomId, playerId: newPlayerId }) {
+      setRoomId(newRoomId);
+      setPlayerId(newPlayerId);
+      sessionStorage.setItem('domino_room_id', newRoomId);
+      sessionStorage.setItem('domino_player_id', newPlayerId);
       setError('');
-      setInvitedCode(''); // invitación consumida
+      setInvitedCode('');
     }
 
     function onGameState(state) {
       setGameState(state);
 
-      // Reproducción reactiva de sonidos basados en transiciones de estado
       const prevStatus = prevGameStatusRef.current;
       const currentStatus = state.status;
 
@@ -196,10 +197,8 @@ export default function App() {
           } else {
             playGameSound('win_round');
           }
-          // Estadística local: rondas ganadas (los espectadores no cuentan).
           if (!state.isSpectator) recordRoundWin(state, playerIdRef.current);
 
-          // Momento épico: ¡DOMINÓ! (mano vacía) o ¡TRANCA! (bloqueo).
           if (!state.isSpectator && state.roundWinner !== 'tie') {
             const winP = state.players.find(p => p.id === state.roundWinner);
             const sub = state.teamsEnabled
@@ -216,9 +215,6 @@ export default function App() {
           }
         } else if (currentStatus === 'game_ended') {
           playGameSound('win_game');
-          // Estadística local: W/L, rachas y logros. Se registra una sola vez
-          // gracias a que esto solo corre en la transición de estado. Un
-          // espectador no juega, así que no registra nada.
           const unlocked = state.isSpectator ? [] : recordGame(state, playerIdRef.current);
           for (const id of unlocked) {
             const nid = `ach_${id}_${Date.now()}`;
@@ -234,7 +230,6 @@ export default function App() {
             }, 4000);
           }
 
-          // Momento épico: ¡VICTORIA! (o ¡REMONTADA! si el final fue apretado).
           if (!state.isSpectator) {
             const maxScore = state.maxScore || 100;
             const winP = state.players.find(p => p.id === state.gameWinner);
@@ -269,13 +264,17 @@ export default function App() {
     }
 
     function onReceiveQuickMessage(msg) {
-      // Momento épico al usar un poder LEGENDARIO.
       const LEGENDARY = { 'srv.pw.mind_swap': 1, 'srv.pw.russian_roulette': 1, 'srv.pw.block_both': 1 };
       if (msg.key && LEGENDARY[msg.key] && !spectatingRef.current) {
         const casterName = msg.params && msg.params.name;
         const gs = gameStateRef.current;
         const caster = casterName && gs ? gs.players.find(p => p.name === casterName) : null;
         const powerId = msg.key.slice('srv.pw.'.length);
+        setLegendaryEffect({
+          id: powerId,
+          casterName: casterName || '',
+          title: tRef.current(`pw.${powerId}.n`)
+        });
         setEpicMoment({
           id: `${Date.now()}_${Math.random()}`,
           kind: 'power',
@@ -289,29 +288,22 @@ export default function App() {
       const newNotification = {
         id,
         playerName: msg.playerName,
-        // Los toasts del sistema llegan como clave i18n; los mensajes de
-        // jugador llegan como texto literal (ya en su idioma).
         text: msg.text,
         msgKey: msg.key,
         params: msg.params,
         type: msg.type,
-        // Posicionamiento horizontal aleatorio para los emojis flotantes
-        xOffset: Math.floor(Math.random() * 60) - 30 // -30px a +30px
+        xOffset: Math.floor(Math.random() * 60) - 30
       };
       
       setQuickNotifications(prev => [...prev, newNotification]);
 
-      // Remover notificación después de que termine su animación
       setTimeout(() => {
         setQuickNotifications(prev => prev.filter(n => n.id !== id));
       }, msg.type === 'emoji' ? 2500 : 3500);
     }
 
     function onErrorMsg(payload) {
-      // El servidor manda { key, params }; conservamos el objeto y traducimos
-      // al renderizar (así el idioma correcto se aplica aunque cambie después).
       setError(payload);
-      // Ocultar error después de 5 segundos
       setTimeout(() => setError(''), 5000);
     }
 
@@ -324,13 +316,11 @@ export default function App() {
       setLiveGames(Array.isArray(list) ? list : []);
     }
 
-    // Confirmación de que empezamos a espectar una sala.
-    function onSpectating({ roomId }) {
-      setSpectating(roomId);
+    function onSpectating({ roomId: specRoomId }) {
+      setSpectating(specRoomId);
       setError('');
     }
 
-    // La sala que veíamos (o jugábamos) se cerró: volvemos al lobby.
     function onRoomClosed() {
       if (spectatingRef.current) {
         setSpectating(null);
@@ -345,7 +335,6 @@ export default function App() {
       setLobbyStats(stats);
     }
 
-    // Nos expulsó el administrador: volvemos al lobby (el servidor ya nos sacó).
     function onKicked({ by }) {
       sessionStorage.removeItem('domino_room_id');
       sessionStorage.removeItem('domino_player_id');
@@ -370,6 +359,7 @@ export default function App() {
     socket.on('kicked', onKicked);
     socket.on('spectating', onSpectating);
     socket.on('room_closed', onRoomClosed);
+    socket.on('profile_data', onProfileBoot);
 
     return () => {
       socket.off('connect', onConnect);
@@ -386,17 +376,21 @@ export default function App() {
       socket.off('kicked', onKicked);
       socket.off('spectating', onSpectating);
       socket.off('room_closed', onRoomClosed);
+      socket.off('profile_data', onProfileBoot);
     };
-  }, []);
+  }, [
+    setError, setIsConnected, setInvitedCode, setPlayerId, setRoomId, setGameState,
+    setEpicMoment, setQuickNotifications, setPublicRooms, setRoomsLoading,
+    setLiveGames, setSpectating, setLobbyStats, t
+  ]);
 
-  // Suscripción a la lista de salas: solo mientras se está en el lobby.
   const inLobby = !spectating && (!gameState || !roomId);
   useEffect(() => {
     if (!isConnected || !inLobby) return undefined;
     setRoomsLoading(true);
     socket.emit('lobby_subscribe');
     return () => socket.emit('lobby_unsubscribe');
-  }, [isConnected, inLobby]);
+  }, [isConnected, inLobby, setRoomsLoading]);
 
   const handleCreateRoom = (options = {}) => {
     const {
@@ -436,11 +430,7 @@ export default function App() {
   };
 
   const handleLeaveRoom = () => {
-    // Salida explícita: el servidor libera la silla en vez de reservarla
-    // esperando una reconexión que no va a llegar. No hace falta tirar el
-    // socket: sigue vivo y listo para crear o unirse a otra sala.
     socket.emit('leave_room');
-
     sessionStorage.removeItem('domino_room_id');
     sessionStorage.removeItem('domino_player_id');
 
@@ -448,8 +438,7 @@ export default function App() {
     setPlayerId('');
     setGameState(null);
     setSelectedTileIndex(null);
-    setSelectedPower(null);
-    setPendingTargetType(null);
+    resetPowerState();
     prevGameStatusRef.current = null;
     setError('');
   };
@@ -459,17 +448,20 @@ export default function App() {
   const leftEnd = gameState && gameState.board.length > 0 ? gameState.board[0][0] : null;
   const rightEnd = gameState && gameState.board.length > 0 ? gameState.board[gameState.board.length - 1][1] : null;
 
-  // Disparar banner animado cuando es el turno del jugador local
   useEffect(() => {
     if (isMyTurn && !prevIsMyTurnRef.current) {
       setShowTurnBanner(true);
+      playGameSound('turn_alert');
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        try { navigator.vibrate([120, 80, 120]); } catch (e) {}
+      }
       const timer = setTimeout(() => {
         setShowTurnBanner(false);
-      }, 1500);
+      }, 1600);
       return () => clearTimeout(timer);
     }
     prevIsMyTurnRef.current = isMyTurn;
-  }, [isMyTurn]);
+  }, [isMyTurn, setShowTurnBanner]);
 
   const selectedTile = me && selectedTileIndex !== null ? me.hand[selectedTileIndex] : null;
   
@@ -496,7 +488,6 @@ export default function App() {
     socket.emit('pass_turn', { roomId, playerId });
   };
 
-  // Handlers para Cartas de Poderes
   const handleUsePower = (cardId, targetId, tileIndex) => {
     if (!roomId) return;
     socket.emit('use_power_card', { roomId, playerId, cardId, targetId, tileIndex });
@@ -509,32 +500,25 @@ export default function App() {
     } else {
       handleUsePower(selectedPower.id, targetPlayerId, null);
     }
-    // Limpiar estados
-    setSelectedPower(null);
-    setPendingTargetType(null);
-    setSmuggleTileIdx(null);
+    resetPowerState();
   };
 
   const handleEndTargetSelected = (side) => {
     if (!selectedPower) return;
     handleUsePower(selectedPower.id, side, null);
-    setSelectedPower(null);
-    setPendingTargetType(null);
+    resetPowerState();
   };
 
   const handleTileClickOverride = (tileIndex, tile) => {
     if (pendingTargetType === 'hand_tile_target') {
       handleUsePower(selectedPower.id, null, tileIndex);
-      setSelectedPower(null);
-      setPendingTargetType(null);
+      resetPowerState();
     } else if (pendingTargetType === 'smuggle_select_tile') {
       setSmuggleTileIdx(tileIndex);
       setPendingTargetType('smuggle_select_player');
     }
   };
 
-  // Renderizado del contenido principal
-  // Modo espectador: tiene prioridad y va fuera del VoiceProvider (no hay voz).
   if (spectating) {
     return gameState
       ? <SpectatorView gameState={gameState} onLeave={handleLeaveSpectate} />
@@ -559,19 +543,20 @@ export default function App() {
           stats={lobbyStats}
           invitedCode={invitedCode}
           onOpenProfile={() => setShowProfile(true)}
-          onOpenTheme={() => setShowTheme(true)}
+
+          onOpenLeaderboard={() => setShowLeaderboard(true)}
+          onOpenStore={() => setShowStore(true)}
           liveGames={liveGames}
           onSpectate={handleSpectate}
         />
         {showProfile && <ProfileModal name={name} onClose={() => setShowProfile(false)} />}
-        {showTheme && <ThemeModal onClose={() => setShowTheme(false)} />}
+
+        {showLeaderboard && <LeaderboardModal onClose={() => setShowLeaderboard(false)} />}
+        {showStore && <SkinStoreModal playerId={getOrCreatePersistentPlayerId()} name={name} onClose={() => setShowStore(false)} />}
       </>
     );
   }
 
-  // UN SOLO provider de voz envolviendo sala de espera Y tablero. Si hubiera uno
-  // por pantalla, React desmontaría el hook al empezar la partida y la llamada
-  // se cortaría justo en ese momento.
   return (
     <VoiceProvider roomId={roomId} playerId={playerId}>
       {gameState.status === 'waiting' ? (
@@ -581,22 +566,21 @@ export default function App() {
           onLeave={handleLeaveRoom}
         />
       ) : (
-    <div className="app-container">
-      
-      {/* Banner flotante de Tu Turno */}
+    <div className={`app-container ${isMyTurn ? 'my-turn-active' : ''}`}>
       {showTurnBanner && (
         <div className="turn-splash-overlay">
           <h2 className="turn-splash-text">{t('game.yourTurn')}</h2>
         </div>
       )}
 
-      {/* Ojo Soplón / Ojo Total: manos reveladas al espía, temporalmente */}
       <SpyReveal gameState={gameState} playerId={playerId} />
 
-      {/* Momento épico: cinemática sobre el protagonista + captura compartible */}
+      {legendaryEffect && <LegendaryEffect effect={legendaryEffect} onClose={() => setLegendaryEffect(null)} />}
+
       {epicMoment && <EpicMoment moment={epicMoment} gameState={gameState} playerId={playerId} />}
 
-      {/* Indicador de Desconexión de Red */}
+      {showBracket && <TournamentBracket gameState={gameState} onClose={() => setShowBracket(false)} />}
+
       {!isConnected && (
         <div className="network-alert">
           <Wifi size={12} />
@@ -604,7 +588,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Banner de error temporal */}
       {error && (
         <div className="error-toast">
           <AlertCircle size={12} />
@@ -612,7 +595,6 @@ export default function App() {
         </div>
       )}
 
-      {/* Emojis flotantes y frases rápidas en pantalla */}
       {quickNotifications.map((notif) => {
         if (notif.type === 'emoji') {
           return (
@@ -631,8 +613,6 @@ export default function App() {
           );
         } else {
           return (
-            // Una sola línea: nombre discreto + mensaje. Antes iba en dos
-            // líneas, en negrita y a 1rem, y tapaba media mesa.
             <div key={notif.id} className="floating-toast">
               <span className="floating-toast-sender">
                 {notif.playerName === 'SISTEMA' ? t('game.system') : notif.playerName}
@@ -645,8 +625,6 @@ export default function App() {
         }
       })}
 
-      {/* Una sola barra, en móvil y escritorio. La lateral de 320px repetía lo
-          que ya dicen los asientos alrededor del tablero. */}
       <GameBar
         players={gameState.players}
         playerId={playerId}
@@ -659,11 +637,19 @@ export default function App() {
         turnEndsAt={gameState.turnEndsAt}
         turnSecondsRemaining={gameState.turnSecondsRemaining}
         turnDurationSeconds={gameState.turnDurationSeconds}
+        onOpenLeaderboard={() => setShowLeaderboard(true)}
+        onOpenStore={() => setShowStore(true)}
       />
 
-      {/* Área de Juego Principal */}
+      {showLeaderboard && (
+        <LeaderboardModal onClose={() => setShowLeaderboard(false)} />
+      )}
+
+      {showStore && (
+        <SkinStoreModal playerId={getOrCreatePersistentPlayerId()} name={name} onClose={() => setShowStore(false)} />
+      )}
+
       <div className="game-area">
-        {/* Tablero + chat: el botón flotante se ancla aquí para no tapar la mano */}
         <div className="board-region">
           <GameBoard
             board={gameState.board}
@@ -681,18 +667,15 @@ export default function App() {
             lastPlacedTile={gameState.lastPlacedTile}
             lastPlacedBy={gameState.lastPlacedBy}
             seatsPadding={isMobile ? 170 : 240}
+            moveLog={gameState.moveLog || []}
+            onOpenBracket={() => setShowBracket(true)}
+            selectedPower={selectedPower}
           />
 
-          {/* Chat rápido de Emojis y Frases */}
           <Chat roomId={roomId} playerId={playerId} />
 
-          {/* Miniaturas de cámara flotando sobre el tablero: aquí no le quitan
-              altura, cosa que en móvil dejaba el tablero sin espacio.
-              En móvil solo se muestra la tuya: los rivales salen en su asiento. */}
-          {/* Tu propia cámara: los rivales salen en su asiento, no aquí. */}
           <VideoGrid players={gameState.players} playerId={playerId} selfOnly />
 
-          {/* Los rivales alrededor de la mesa, en su sitio según el turno */}
           <PlayerSeats
             players={gameState.players}
             playerId={playerId}
@@ -701,10 +684,11 @@ export default function App() {
             powersEnabled={gameState.powersEnabled}
             pendingTargetType={pendingTargetType}
             onSelectPlayerTarget={handlePlayerTargetSelected}
+            quickNotifications={quickNotifications}
+            blitzTimeRemaining={gameState.blitzTimeRemaining}
           />
         </div>
 
-        {/* Cartas de Poderes del Jugador (ocultas en modo clásico) */}
         {me && gameState.status === 'playing' && gameState.powersEnabled !== false && (
           <PowerCards
             powers={me.powers}
@@ -717,7 +701,6 @@ export default function App() {
           />
         )}
 
-        {/* Mano del Jugador Local */}
         {me && (
           <PlayerHand
             hand={me.hand}
@@ -742,8 +725,6 @@ export default function App() {
         )}
       </div>
 
-      {/* Modal de Finalización de Ronda / Partida. La key lo re-monta en cada
-          ronda/estado, reseteando el "ver tablero" y el margen inicial. */}
       <EndGameModal
         key={`end-${gameState.status}-${gameState.roundNumber}`}
         gameState={gameState}

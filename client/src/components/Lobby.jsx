@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { Play, Plus, ArrowRight, User, Zap, Layers, Settings2, Users, Download, Medal, ChevronDown, Zap as Bolt, Globe, Lock, Eye, Palette } from 'lucide-react';
+import { Play, Plus, ArrowRight, User, Zap, Layers, Settings2, Users, Download, Medal, ChevronDown, Zap as Bolt, Globe, Lock, Eye, Palette, Trophy, ShoppingBag } from 'lucide-react';
 import { socket } from '../socket';
 import RoomList from './RoomList';
 import LiveGames from './LiveGames';
 import LanguageSwitcher from './LanguageSwitcher';
 import { useT } from '../i18n/LanguageContext';
 
-export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuickPlay, publicRooms = [], roomsLoading, stats, invitedCode = '', onOpenProfile, onOpenTheme, liveGames = [], onSpectate }) {
+export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuickPlay, publicRooms = [], roomsLoading, stats, invitedCode = '', onOpenProfile, onOpenLeaderboard, onOpenStore, liveGames = [], onSpectate }) {
   const { t } = useT();
   const VARIANT_INFO = {
     6: { label: t('opt.double', { n: 6 }), desc: t('opt.d6desc') },
@@ -25,6 +25,7 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
   const [drawEnabled, setDrawEnabled] = useState(true);
   const [maxScore, setMaxScore] = useState(null); // null => el propio de la variante
   const [isPublic, setIsPublic] = useState(true);
+  const [isBlitzMode, setIsBlitzMode] = useState(false);
 
   const requireName = () => {
     if (!name.trim()) { setError(t('lobby.nameRequired')); return false; }
@@ -58,7 +59,7 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
       return;
     }
     setError('');
-    onCreateRoom({ powersEnabled, maxPip, teamsEnabled, drawEnabled, maxScore, isPublic, powerIntensity, onePowerPerTurn });
+    onCreateRoom({ powersEnabled, maxPip, teamsEnabled, drawEnabled, maxScore, isPublic, powerIntensity, onePowerPerTurn, isBlitzMode });
   };
 
   const handleJoin = (e) => {
@@ -83,12 +84,30 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
 
       {/* Perfil + selector de idioma, esquina superior */}
       <div className="lobby-topbar">
-        {onOpenTheme && (
-          <button type="button" className="lobby-profile-btn" onClick={onOpenTheme} title={t('theme.title')}>
-            <Palette size={16} />
-            <span className="lobby-btn-label">{t('theme.button')}</span>
+        <button
+          type="button"
+          className="lobby-profile-btn store-btn-highlight"
+          onClick={onOpenStore}
+          title="Tienda de Skins"
+          style={{
+            background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(217, 119, 6, 0.35))',
+            border: '1px solid rgba(251, 191, 36, 0.6)',
+            boxShadow: '0 0 12px rgba(245, 158, 11, 0.4)',
+            color: '#fbbf24',
+            fontWeight: 'bold'
+          }}
+        >
+          <ShoppingBag size={16} color="#fbbf24" />
+          <span className="lobby-btn-label">Tienda</span>
+        </button>
+
+        {onOpenLeaderboard && (
+          <button type="button" className="lobby-profile-btn" onClick={onOpenLeaderboard} title="Ranking">
+            <Trophy size={16} />
+            <span className="lobby-btn-label">Ranking</span>
           </button>
         )}
+
         {onOpenProfile && (
           <button type="button" className="lobby-profile-btn" onClick={onOpenProfile} title={t('profile.title')}>
             <Medal size={16} />
@@ -257,6 +276,27 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
                 </span>
                 <span className="option-toggle-desc">
                   {powersEnabled ? t('opt.powersOn') : t('opt.powersOff')}
+                </span>
+              </span>
+              <span className="switch" aria-hidden="true">
+                <span className="switch-knob" />
+              </span>
+            </button>
+
+            {/* Modo Relámpago Blitz */}
+            <button
+              type="button"
+              onClick={() => setIsBlitzMode((v) => !v)}
+              aria-pressed={isBlitzMode}
+              className={`option-toggle ${isBlitzMode ? 'on' : ''}`}
+            >
+              <span className="option-toggle-text">
+                <span className="option-toggle-title">
+                  <Zap size={14} style={{ color: '#f59e0b' }} />
+                  Modo Relámpago Blitz (60s)
+                </span>
+                <span className="option-toggle-desc">
+                  {isBlitzMode ? 'Bolsa de 60s por jugador' : 'Reloj estándar de turno'}
                 </span>
               </span>
               <span className="switch" aria-hidden="true">

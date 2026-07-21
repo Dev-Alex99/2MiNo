@@ -1,12 +1,9 @@
 // IA de los bots. Funciones puras sobre el estado del juego: reciben la partida
-// y devuelven qué hacer, sin tocar sockets ni temporizadores. Así se puede
-// probar la estrategia sin levantar un servidor.
+// y devuelven qué hacer, sin tocar sockets ni temporizadores.
 
 const BOT_NAMES = ['Rita', 'Chema', 'Yuri', 'Nando', 'Pilar', 'Bruno', 'Tere', 'Iván'];
 
-// Poderes que un bot puede usar sin elegir objetivo: se benefician solos y no
-// pueden fallar por una selección inválida.
-const SAFE_BOT_POWERS = ['shield', 'double_shot'];
+const SAFE_BOT_POWERS = ['shield', 'double_shot', 'skip', 'freeze', 'wildcard'];
 
 function pickBotName(takenNames) {
   const taken = new Set(takenNames.map(n => n.toLowerCase()));
@@ -23,18 +20,14 @@ function scoreMove(game, player, move, difficulty) {
 
   const isDouble = tile[0] === tile[1];
 
-  // Base común: soltar cuanto antes las fichas que más puntos cuestan si te
-  // quedas con ellas, y los dobles, que son los más difíciles de colocar.
   let score = tile[0] + tile[1];
-  if (isDouble) score += 6;
+  if (isDouble) score += (difficulty === 'maestro' ? 12 : 6);
 
-  if (difficulty !== 'dificil') return score;
+  if (difficulty === 'facil') return score;
 
   const openEnd = game.resultingEnd(player.id, move);
   if (openEnd === null) return score;
 
-  // En parejas, el de enfrente es rival y el compañero no. Sin equipos, todos
-  // son rivales.
   const rivals = game.players.filter(p =>
     p.id !== player.id && (!game.teamsEnabled || p.team !== player.team)
   );
@@ -42,27 +35,43 @@ function scoreMove(game, player, move, difficulty) {
     ? game.players.filter(p => p.id !== player.id && p.team === player.team)
     : [];
 
-  // Bloquear: si un rival ya pasó sobre ese número, dejárselo otra vez es oro.
+  const weightPass = difficulty === 'maestro' ? 22 : 14;
+
+  // Bloquear: si un rival pasó sobre este extremo, dejárselo es de máxima prioridad.
   for (const opp of rivals) {
     const passedOn = game.playerPassedOn[opp.id] || [];
-    if (passedOn.includes(openEnd)) score += 14;
+    if (passedOn.includes(openEnd)) score += weightPass;
   }
 
-  // Y no ahogar al compañero: dejarle un palo sobre el que ya pasó es tirar
-  // piedras contra tu propio tejado.
+  // No ahogar al compañero
   for (const mate of partners) {
     const passedOn = game.playerPassedOn[mate.id] || [];
-    if (passedOn.includes(openEnd)) score -= 14;
+    if (passedOn.includes(openEnd)) score -= weightPass;
   }
 
-  // Flexibilidad: mejor dejar expuesto un número que yo todavía pueda servir.
+  // Flexibilidad: mejor dejar expuesto un número del que tengo reserva en mano
   const rest = player.hand.filter((_, i) => i !== move.tileIndex);
-  if (rest.some(t => t[0] === openEnd || t[1] === openEnd)) score += 4;
+  const countInHand = rest.filter(t => t[0] === openEnd || t[1] === openEnd).length;
+  if (countInHand > 0) score += (difficulty === 'maestro' ? 8 * countInHand : 4);
+
+  // IA Maestro: Conteo de Fichas en Tablero
+  if (difficulty === 'maestro') {
+    let playedCount = 0;
+    (game.board || []).forEach(t => {
+      if (t[0] === openEnd) playedCount++;
+      if (t[1] === openEnd) playedCount++;
+    });
+
+    // Si ya salieron 5 o más fichas de este palo, el extremo está muy ahorcado (bloqueo táctico).
+    if (playedCount >= 5) score += 20;
+
+    // Si al bot le queda solo 1 o 2 fichas en mano, priorizar cierre directo.
+    if (player.hand.length <= 2) score += 30;
+  }
 
   return score;
 }
 
-// Elige la jugada del bot, o null si no tiene ninguna legal.
 function chooseMove(game, playerId) {
   const player = game.players.find(p => p.id === playerId);
   if (!player) return null;
@@ -72,7 +81,6 @@ function chooseMove(game, playerId) {
 
   const difficulty = player.difficulty || 'normal';
 
-  // Fácil: cualquier jugada legal. Se equivoca, y de eso se trata.
   if (difficulty === 'facil') {
     return moves[Math.floor(Math.random() * moves.length)];
   }
@@ -89,19 +97,18 @@ function chooseMove(game, playerId) {
   return best;
 }
 
-// Elige un poder sin objetivo que al bot le convenga usar ahora, o null.
-// Los bots fáciles no usan poderes.
 function choosePower(game, playerId, random = Math.random) {
   const player = game.players.find(p => p.id === playerId);
   if (!player || !game.powersEnabled) return null;
-  if ((player.difficulty || 'normal') === 'facil') return null;
+  const diff = player.difficulty || 'normal';
+  if (diff === 'facil') return null;
   if (!player.powers || player.powers.length === 0) return null;
 
   const usable = player.powers.filter(c => SAFE_BOT_POWERS.includes(c.id));
   if (usable.length === 0) return null;
 
-  // No en todos los turnos: si los gastara siempre, resultaría mecánico.
-  if (random() > 0.3) return null;
+  const threshold = diff === 'maestro' ? 0.6 : 0.3;
+  if (random() > threshold) return null;
 
   return usable[Math.floor(random() * usable.length)].id;
 }

@@ -213,7 +213,7 @@ export default function WaitingRoom({ gameState, playerId, onLeave }) {
                     <span className="player-row-name">
                       {player.name}
                       {player.id === gameState.hostId && (
-                        <Crown size={12} className="host-crown" aria-label="Administrador" />
+                        <Crown size={12} className="host-crown" aria-label={t('wait.host')} />
                       )}
                       {player.id === playerId && (
                         <span className="player-badge-me">{t('common.you')}</span>
@@ -298,7 +298,7 @@ export default function WaitingRoom({ gameState, playerId, onLeave }) {
               {t('wait.addBot')}
             </span>
             <div className="bot-add-controls">
-              <div className="bot-level-group" role="group" aria-label="Dificultad del bot">
+              <div className="bot-level-group" role="group" aria-label={t('wait.botDifficulty')}>
                 {BOT_LEVELS.map((lvl) => (
                   <button
                     key={lvl.id}

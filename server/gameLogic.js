@@ -55,7 +55,8 @@ class DominoGame {
   constructor(roomId, maxScore = null, options = {}) {
     const {
       powersEnabled = true, maxPip = 6, teamsEnabled = false, drawEnabled = true,
-      isPublic = true, powerIntensity = 'normal', onePowerPerTurn = false, isBlitzMode = false
+      isPublic = true, powerIntensity = 'normal', onePowerPerTurn = false, isBlitzMode = false,
+      ranked = false
     } = options;
 
     // Pública: aparece en la lista del lobby mientras espera jugadores.
@@ -79,6 +80,9 @@ class DominoGame {
     this.powerUsedThisTurn = false;
     this.isBlitzMode = isBlitzMode === true;
     this.blitzTimeRemaining = {};
+    // Clasificatoria: solo estas partidas afectan al ELO. Requiere sin poderes
+    // para que el ranking mida habilidad pura (se fuerza en createRoomFor).
+    this.ranked = ranked === true;
     // Parejas: exige exactamente 4 jugadores. Se sientan alternados (0,2) vs (1,3),
     // así los compañeros nunca juegan seguidos.
     this.teamsEnabled = teamsEnabled === true;
@@ -156,7 +160,7 @@ class DominoGame {
 
   // El administrador de la sala: por defecto quien la creó (primer humano).
   // Si se va, lo hereda el siguiente humano presente.
-  addMoveLog(playerName, action, detail, tile = null) {
+  addMoveLog(playerName, action, detail, tile = null, side = null) {
     if (!this.moveLog) this.moveLog = [];
     this.moveLog.push({
       id: `${Date.now()}_${Math.random()}`,
@@ -164,7 +168,8 @@ class DominoGame {
       player: playerName,
       action,
       detail,
-      tile
+      tile,
+      side // 'left' | 'right' | null — necesario para reconstruir el tablero en las repeticiones
     });
     if (this.moveLog.length > 50) this.moveLog.shift();
   }
@@ -678,7 +683,7 @@ class DominoGame {
     this.lastPlacedBy = playerId;
     this.passedTurns = 0; // Reseteamos contador de pases
 
-    this.addMoveLog(player.name, 'play', `[${playedTile[0]}|${playedTile[1]}] (${side === 'left' ? 'Izq' : 'Der'})`, playedTile);
+    this.addMoveLog(player.name, 'play', `[${playedTile[0]}|${playedTile[1]}] (${side === 'left' ? 'Izq' : 'Der'})`, playedTile, side);
 
     this.checkRoundEnd();
     if (this.status === 'playing') {
@@ -1183,6 +1188,7 @@ class DominoGame {
       teamsEnabled: this.teamsEnabled,
       drawEnabled: this.drawEnabled,
       isPublic: this.isPublic,
+      ranked: this.ranked,
       hostId: this.hostId,
       teamScores: this.teamScores,
       teamNames: this.teamNames,

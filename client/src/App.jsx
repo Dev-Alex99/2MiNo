@@ -22,6 +22,10 @@ import SpyReveal from './components/SpyReveal';
 import EpicMoment from './components/EpicMoment';
 import LegendaryEffect from './components/LegendaryEffect';
 import TournamentBracket from './components/TournamentBracket';
+import TournamentHub from './components/TournamentHub';
+import TournamentEntry from './components/TournamentEntry';
+import RankedSearch from './components/RankedSearch';
+import FriendsModal from './components/FriendsModal';
 import LeaderboardModal from './components/LeaderboardModal';
 import SkinStoreModal from './components/SkinStoreModal';
 import { recordGame, recordRoundWin } from './stats';
@@ -72,6 +76,14 @@ export default function App() {
   const [showBracket, setShowBracket] = React.useState(false);
   const [showLeaderboard, setShowLeaderboard] = React.useState(false);
   const [showStore, setShowStore] = React.useState(false);
+  const [showFriends, setShowFriends] = React.useState(false);
+  const [incomingInvite, setIncomingInvite] = React.useState(null);
+  const [friendNotice, setFriendNotice] = React.useState('');
+  const [tournament, setTournament] = React.useState(null);
+  const [showTournamentEntry, setShowTournamentEntry] = React.useState(false);
+  const [searchingRanked, setSearchingRanked] = React.useState(false);
+  const tournamentRef = useRef(null);
+  tournamentRef.current = tournament;
 
   const tMsg = (key, params) => {
     if (!params) return t(key);
@@ -161,6 +173,19 @@ export default function App() {
       // Aplicar skins guardadas en la BD al CSS del cliente
       if (data.equipped_tile_skin) applySkin(data.equipped_tile_skin);
       if (data.equipped_board_theme) applyTable(data.equipped_board_theme);
+
+      // Recompensa por racha de login (solo el primer login del día).
+      if (data.daily && data.daily.loginReward) {
+        const nid = `login_${Date.now()}`;
+        setQuickNotifications(prev => [...prev, {
+          id: nid,
+          playerName: '',
+          text: tRef.current('mission.loginReward', { n: data.daily.streak || 1, reward: data.daily.loginReward }),
+          type: 'phrase',
+          xOffset: 0
+        }]);
+        setTimeout(() => setQuickNotifications(prev => prev.filter(n => n.id !== nid)), 5000);
+      }
     }
 
     function onDisconnect() {
@@ -328,7 +353,39 @@ export default function App() {
         prevGameStatusRef.current = null;
         setError(tRef.current('spec.closed'));
         setTimeout(() => setError(''), 4000);
+        return;
       }
+      // En un torneo, cerrar la sala de la partida devuelve al cuadro (no al lobby).
+      if (tournamentRef.current) {
+        sessionStorage.removeItem('domino_room_id');
+        setRoomId('');
+        setGameState(null);
+        prevGameStatusRef.current = null;
+      }
+    }
+
+    function onTournamentState(state) {
+      setTournament(state);
+      setShowTournamentEntry(false);
+    }
+
+    function onTournamentError(payload) {
+      setError(payload && payload.key ? { key: payload.key } : payload);
+      setTimeout(() => setError(''), 4000);
+    }
+
+    function onMatchFound({ roomId: mmRoomId, playerId: mmPlayerId }) {
+      setSearchingRanked(false);
+      socket.emit('join_room', { roomId: mmRoomId, playerId: mmPlayerId });
+    }
+
+    function onFriendInvited({ fromName, roomId: invRoom }) {
+      if (invRoom) setIncomingInvite({ fromName: fromName || '—', roomId: invRoom });
+    }
+
+    function onFriendIncoming(data) {
+      setFriendNotice(tRef.current(data && data.accepted ? 'friend.accepted' : 'friend.incoming'));
+      setTimeout(() => setFriendNotice(''), 4000);
     }
 
     function onLobbyStats(stats) {
@@ -360,6 +417,11 @@ export default function App() {
     socket.on('spectating', onSpectating);
     socket.on('room_closed', onRoomClosed);
     socket.on('profile_data', onProfileBoot);
+    socket.on('tournament_state', onTournamentState);
+    socket.on('tournament_error', onTournamentError);
+    socket.on('match_found', onMatchFound);
+    socket.on('friend_invited', onFriendInvited);
+    socket.on('friend_incoming', onFriendIncoming);
 
     return () => {
       socket.off('connect', onConnect);
@@ -377,6 +439,11 @@ export default function App() {
       socket.off('spectating', onSpectating);
       socket.off('room_closed', onRoomClosed);
       socket.off('profile_data', onProfileBoot);
+      socket.off('tournament_state', onTournamentState);
+      socket.off('tournament_error', onTournamentError);
+      socket.off('match_found', onMatchFound);
+      socket.off('friend_invited', onFriendInvited);
+      socket.off('friend_incoming', onFriendIncoming);
     };
   }, [
     setError, setIsConnected, setInvitedCode, setPlayerId, setRoomId, setGameState,
@@ -416,6 +483,59 @@ export default function App() {
 
   const handleJoinRoom = (code) => {
     socket.emit('join_room', { roomId: code, name, playerId: getOrCreatePersistentPlayerId() });
+  };
+
+  // ─── Torneo (1–4 humanos + bots) ───
+  const requireNameForTourney = () => {
+    if (!name || !name.trim()) {
+      setError(t('lobby.nameRequired'));
+      setTimeout(() => setError(''), 4000);
+      return false;
+    }
+    return true;
+  };
+  const handleOpenTournament = () => {
+    if (requireNameForTourney()) setShowTournamentEntry(true);
+  };
+  const handleCreateTournament = () => {
+    if (!requireNameForTourney()) return;
+    socket.emit('create_tournament', { playerId: getOrCreatePersistentPlayerId(), name: name.trim() });
+  };
+  const handleJoinTournament = (code) => {
+    if (!requireNameForTourney()) return;
+    socket.emit('join_tournament', { playerId: getOrCreatePersistentPlayerId(), name: name.trim(), code });
+  };
+  const handleStartTournament = () => {
+    if (tournament?.id) socket.emit('start_tournament', { tournamentId: tournament.id });
+  };
+  const handlePlayTournamentMatch = () => {
+    if (tournament?.yourMatchRoomId) {
+      socket.emit('join_room', { roomId: tournament.yourMatchRoomId, name, playerId: getOrCreatePersistentPlayerId() });
+    }
+  };
+  const handleExitTournament = () => {
+    socket.emit('leave_tournament', { playerId: getOrCreatePersistentPlayerId() });
+    setTournament(null);
+    sessionStorage.removeItem('domino_room_id');
+    setRoomId('');
+    setGameState(null);
+  };
+
+  // ─── Emparejamiento clasificatorio (cola por ELO) ───
+  const handleFindRanked = () => {
+    if (!requireNameForTourney()) return;
+    socket.emit('join_queue', { playerId: getOrCreatePersistentPlayerId(), name: name.trim() });
+    setSearchingRanked(true);
+  };
+  const handleCancelQueue = () => {
+    socket.emit('leave_queue');
+    setSearchingRanked(false);
+  };
+
+  const handleAcceptInvite = () => {
+    if (!incomingInvite) return;
+    socket.emit('join_room', { roomId: incomingInvite.roomId, name, playerId: getOrCreatePersistentPlayerId() });
+    setIncomingInvite(null);
   };
 
   const handleSpectate = (code) => {
@@ -531,6 +651,17 @@ export default function App() {
   }
 
   if (!gameState || !roomId) {
+    // Modo torneo: mientras no estés dentro de una partida, se muestra el cuadro.
+    if (tournament) {
+      return (
+        <TournamentHub
+          tournament={tournament}
+          onStart={handleStartTournament}
+          onPlayMatch={handlePlayTournamentMatch}
+          onExit={handleExitTournament}
+        />
+      );
+    }
     return (
       <>
         <Lobby
@@ -547,13 +678,41 @@ export default function App() {
 
           onOpenLeaderboard={() => setShowLeaderboard(true)}
           onOpenStore={() => setShowStore(true)}
+          onOpenTournament={handleOpenTournament}
+          onFindRanked={handleFindRanked}
+          onOpenFriends={() => setShowFriends(true)}
           liveGames={liveGames}
           onSpectate={handleSpectate}
         />
+        {searchingRanked && <RankedSearch onCancel={handleCancelQueue} />}
+        {incomingInvite && (
+          <div className="friend-invite-toast animate-scale-up">
+            <span className="friend-invite-text">
+              {tRef.current('invite.text', { name: incomingInvite.fromName })}
+            </span>
+            <div className="friend-invite-actions">
+              <button className="btn-premium btn-primary" onClick={handleAcceptInvite}>{t('invite.accept')}</button>
+              <button className="btn-premium btn-secondary" onClick={() => setIncomingInvite(null)}>{t('invite.dismiss')}</button>
+            </div>
+          </div>
+        )}
+        {friendNotice && (
+          <div className="friend-invite-toast animate-scale-up">
+            <span className="friend-invite-text">{friendNotice}</span>
+          </div>
+        )}
+        {showFriends && <FriendsModal name={name} onClose={() => setShowFriends(false)} />}
         {showProfile && <ProfileModal name={name} onClose={() => setShowProfile(false)} />}
 
         {showLeaderboard && <LeaderboardModal onClose={() => setShowLeaderboard(false)} />}
         {showStore && <SkinStoreModal playerId={getOrCreatePersistentPlayerId()} name={name} onClose={() => setShowStore(false)} />}
+        {showTournamentEntry && (
+          <TournamentEntry
+            onCreate={handleCreateTournament}
+            onJoin={handleJoinTournament}
+            onClose={() => setShowTournamentEntry(false)}
+          />
+        )}
       </>
     );
   }
@@ -730,6 +889,7 @@ export default function App() {
         key={`end-${gameState.status}-${gameState.roundNumber}`}
         gameState={gameState}
         playerId={playerId}
+        tournamentMatch={!!tournament}
       />
     </div>
       )}

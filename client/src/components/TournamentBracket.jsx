@@ -7,10 +7,10 @@ export default function TournamentBracket({ gameState, onClose }) {
   if (!gameState) return null;
 
   const players = gameState.players || [];
-  const p1 = players[0] ? players[0].name : 'Esperando...';
-  const p2 = players[1] ? players[1].name : 'Esperando...';
-  const p3 = players[2] ? players[2].name : 'Esperando...';
-  const p4 = players[3] ? players[3].name : 'Esperando...';
+  const p1 = players[0] ? players[0].name : t('tourney.waiting');
+  const p2 = players[1] ? players[1].name : t('tourney.waiting');
+  const p3 = players[2] ? players[2].name : t('tourney.waiting');
+  const p4 = players[3] ? players[3].name : t('tourney.waiting');
 
   // Si no hay torneo activo o estado de llaves, calculamos el estado por marcador
   const sorted = players.slice().sort((a, b) => (b.score || 0) - (a.score || 0));
@@ -38,7 +38,7 @@ export default function TournamentBracket({ gameState, onClose }) {
           {/* Columna Semifinales */}
           <div className="bracket-column">
             <div className="bracket-phase-title">
-              <Swords size={14} /> SEMIFINALES
+              <Swords size={14} /> {t('tourney.semis')}
             </div>
 
             {/* Llave 1 */}
@@ -78,18 +78,18 @@ export default function TournamentBracket({ gameState, onClose }) {
           {/* Columna Gran Final */}
           <div className="bracket-column final-column">
             <div className="bracket-phase-title gold">
-              <Crown size={14} /> GRAN FINAL
+              <Crown size={14} /> {t('tourney.final')}
             </div>
 
             <div className={`bracket-match-box final-match ${isFinalPhase ? 'active' : ''}`}>
               <div className={`bracket-player ${champion && champion.id === sorted[0]?.id ? 'winner' : ''}`}>
                 <span className="bracket-seed">🏆</span>
-                <span className="bracket-name">{sorted[0] ? sorted[0].name : 'Finalista 1'}</span>
+                <span className="bracket-name">{sorted[0] ? sorted[0].name : t('tourney.finalist', { n: 1 })}</span>
                 <span className="bracket-score">{sorted[0]?.score || 0}</span>
               </div>
               <div className={`bracket-player ${champion && champion.id === sorted[1]?.id ? 'winner' : ''}`}>
                 <span className="bracket-seed">🥈</span>
-                <span className="bracket-name">{sorted[1] ? sorted[1].name : 'Finalista 2'}</span>
+                <span className="bracket-name">{sorted[1] ? sorted[1].name : t('tourney.finalist', { n: 2 })}</span>
                 <span className="bracket-score">{sorted[1]?.score || 0}</span>
               </div>
             </div>
@@ -97,7 +97,7 @@ export default function TournamentBracket({ gameState, onClose }) {
             {champion && (
               <div className="bracket-champion-box animate-scale-up">
                 <Crown size={22} className="text-amber-400" />
-                <span className="bracket-champ-label">CAMPEÓN DEL TORNEO</span>
+                <span className="bracket-champ-label">{t('tourney.champion')}</span>
                 <span className="bracket-champ-name">{champion.name}</span>
               </div>
             )}

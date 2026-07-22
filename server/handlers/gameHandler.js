@@ -23,6 +23,13 @@ const {
   validate
 } = require('../schemas');
 
+// ¿El socket es dueño de ese playerId en la sala? Evita que otro socket
+// manipule el turno/poderes/chat de un jugador ajeno.
+function ownsPlayer(game, playerId, socketId) {
+  const p = game.players.find(x => x.id === playerId);
+  return !!p && p.socketId === socketId;
+}
+
 function registerGameHandlers(io, socket) {
   // Lobby Subscripción
   socket.on('lobby_subscribe', () => {
@@ -71,6 +78,7 @@ function registerGameHandlers(io, socket) {
     const { roomId, playerId, tileIndex, side } = v.data;
     const game = rooms.get(roomId);
     if (!game) return;
+    if (!ownsPlayer(game, playerId, socket.id)) return;
 
     const result = game.playTile(playerId, tileIndex, side);
     if (result.success) {
@@ -91,6 +99,7 @@ function registerGameHandlers(io, socket) {
     const { roomId, playerId } = v.data;
     const game = rooms.get(roomId);
     if (!game) return;
+    if (!ownsPlayer(game, playerId, socket.id)) return;
 
     const result = game.drawTile(playerId);
     if (result.success) {
@@ -110,6 +119,7 @@ function registerGameHandlers(io, socket) {
     const { roomId, playerId } = v.data;
     const game = rooms.get(roomId);
     if (!game) return;
+    if (!ownsPlayer(game, playerId, socket.id)) return;
 
     const result = game.passTurn(playerId);
     if (result.success) {
@@ -132,6 +142,7 @@ function registerGameHandlers(io, socket) {
 
     const player = game.players.find(p => p.id === playerId);
     if (!player) return;
+    if (player.socketId !== socket.id) return; // solo tu propio socket puede usar tus poderes
 
     const result = game.usePowerCard(playerId, cardId, targetId, tileIndex);
     if (result.success) {
@@ -237,7 +248,7 @@ function registerGameHandlers(io, socket) {
     if (!game) return;
 
     const player = game.players.find(p => p.id === playerId);
-    if (!player) return;
+    if (!player || player.socketId !== socket.id) return; // no suplantar a otro jugador
 
     io.to(roomId).emit('receive_quick_message', {
       playerId,

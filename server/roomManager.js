@@ -113,7 +113,8 @@ function publicRoomsList() {
       maxScore: game.maxScore,
       powersEnabled: game.powersEnabled,
       teamsEnabled: game.teamsEnabled,
-      drawEnabled: game.drawEnabled
+      drawEnabled: game.drawEnabled,
+      ranked: game.ranked
     });
   }
   return list.sort((a, b) => b.players - a.players);
@@ -268,7 +269,12 @@ function advanceRoom(io, roomId) {
     game._matchRecorded = true;
     const winnerId = game.gameWinner;
     const winner = game.players.find(p => p.id === winnerId);
-    
+
+    // El ELO solo se mueve en clasificatoria y con al menos 2 humanos (nada de
+    // farmear puntos ganando a los bots).
+    const humanCount = game.players.filter(p => !p.isBot).length;
+    const applyElo = !!game.ranked && humanCount >= 2;
+
     recordMatchEnd({
       id: `${roomId}_${Date.now()}`,
       roomId,
@@ -276,10 +282,25 @@ function advanceRoom(io, roomId) {
       teamsEnabled: game.teamsEnabled,
       winnerName: winner ? winner.name : (game.teamsEnabled && winnerId ? `Equipo ${winnerId.replace('team_', '') === '0' ? 'A' : 'B'}` : 'Empate'),
       winnerId: winnerId || null,
-      finalScores: game.players.map(p => ({ id: p.id, name: p.name, score: p.score })),
+      finalScores: game.players.map(p => ({ id: p.id, name: p.name, score: p.score, team: p.team ?? null, isBot: !!p.isBot })),
       moveLog: game.moveLog || [],
-      players: game.players
+      players: game.players,
+      applyElo
     });
+
+    // Torneo: tras un breve respiro para ver el resultado, avanzar el cuadro
+    // (la sala de esta partida se destruye dentro de onMatchEnd).
+    if (game.tournamentId && !game._tournamentHandled) {
+      game._tournamentHandled = true;
+      const winnerId = game.gameWinner;
+      setTimeout(() => {
+        try {
+          require('./tournamentManager').onMatchEnd(io, roomId, winnerId);
+        } catch (e) {
+          console.warn('[Torneo onMatchEnd]', e.message);
+        }
+      }, 3500);
+    }
   }
 
   armTurnTimer(io, roomId);
@@ -296,17 +317,21 @@ function createRoomFor(io, socket, name, playerId, opts = {}) {
   const safeIntensity = ['light', 'normal', 'chaos'].includes(opts.powerIntensity) ? opts.powerIntensity : 'normal';
   const safeOnePerTurn = opts.onePowerPerTurn === true;
   const safeBlitz = opts.isBlitzMode === true;
+  const safeRanked = opts.ranked === true;
+  // Clasificatoria = sin poderes (habilidad pura). Los poderes se desactivan.
+  const effectivePowers = safeRanked ? false : safePowers;
 
   const roomId = generateRoomId();
   const game = new DominoGame(roomId, safeScore, {
-    powersEnabled: safePowers,
+    powersEnabled: effectivePowers,
     maxPip: safeMaxPip,
     teamsEnabled: safeTeams,
     drawEnabled: safeDraw,
     isPublic: safePublic,
     powerIntensity: safeIntensity,
     onePowerPerTurn: safeOnePerTurn,
-    isBlitzMode: safeBlitz
+    isBlitzMode: safeBlitz,
+    ranked: safeRanked
   });
   game.turnDurationMs = TURN_SECONDS * 1000;
 
@@ -321,6 +346,55 @@ function createRoomFor(io, socket, name, playerId, opts = {}) {
     `poderes: ${safePowers ? 'sí' : 'no'}, ${safeTeams ? 'parejas' : 'individual'}, ${game.maxScore} pts)`);
 
   return { roomId, playerId: actualPlayerId };
+}
+
+// Crea una sala 1v1 para una partida de torneo y la arranca. `seats` son dos
+// plazas { seedIdx, id, name, isHuman, socketId }; cada humano se añade como
+// jugador y cada bot con addBot. Devuelve el mapa playerId -> seedIdx.
+// La sala es privada, sin poderes, y queda etiquetada con tournamentId/slot.
+function createMatchRoom(io, { seats, maxScore, maxPip, tournamentId, slot }) {
+  const roomId = generateRoomId();
+  const game = new DominoGame(roomId, maxScore, {
+    powersEnabled: false, maxPip, teamsEnabled: false, drawEnabled: true, isPublic: false
+  });
+  game.turnDurationMs = TURN_SECONDS * 1000;
+  game.tournamentId = tournamentId;
+  game.tournamentSlot = slot;
+
+  const seedByPlayerId = {};
+  for (const seat of seats) {
+    if (seat.isHuman) {
+      game.addPlayer(seat.id, seat.name, seat.socketId || null);
+      const p = game.players.find(x => x.id === seat.id);
+      if (p) p.ready = true;
+      seedByPlayerId[seat.id] = seat.seedIdx;
+    } else {
+      const bot = game.addBot(seat.name, 'dificil');
+      if (bot) seedByPlayerId[bot.id] = seat.seedIdx;
+    }
+  }
+
+  game.startNewGame();
+  rooms.set(roomId, game);
+
+  return { roomId, seedByPlayerId };
+}
+
+// Crea una sala clasificatoria 1v1 (2 humanos, sin poderes, afecta al ELO).
+function createRankedMatch(io, players) {
+  const roomId = generateRoomId();
+  const game = new DominoGame(roomId, null, {
+    powersEnabled: false, maxPip: 6, teamsEnabled: false, drawEnabled: true, isPublic: false, ranked: true
+  });
+  game.turnDurationMs = TURN_SECONDS * 1000;
+  for (const p of players) {
+    game.addPlayer(p.id, p.name, p.socketId || null);
+    const pl = game.players.find(x => x.id === p.id);
+    if (pl) pl.ready = true;
+  }
+  game.startNewGame();
+  rooms.set(roomId, game);
+  return { roomId };
 }
 
 function findMe(socketId) {
@@ -355,6 +429,8 @@ module.exports = {
   scheduleBotTurn,
   advanceRoom,
   createRoomFor,
+  createMatchRoom,
+  createRankedMatch,
   findMe,
   pickBotName
 };

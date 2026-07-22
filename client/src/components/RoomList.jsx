@@ -1,5 +1,5 @@
 import React from 'react';
-import { Users, Bot, Zap, Layers, RefreshCw, Globe } from 'lucide-react';
+import { Users, Bot, Zap, Layers, RefreshCw, Globe, Trophy } from 'lucide-react';
 import { useT } from '../i18n/LanguageContext';
 
 /**
@@ -38,6 +38,12 @@ export default function RoomList({ rooms, onJoin, loading }) {
                 <Layers size={9} />
                 {t('opt.double', { n: r.maxPip })}
               </span>
+              {r.ranked && (
+                <span className="room-tag ranked">
+                  <Trophy size={9} />
+                  {t('lobby.rankedBadge')}
+                </span>
+              )}
               {r.teamsEnabled && <span className="room-tag">{t('rooms.teams')}</span>}
               {r.powersEnabled && (
                 <span className="room-tag accent">

@@ -11,7 +11,8 @@ const createRoomSchema = z.object({
   maxScore: z.number().nullable().optional(),
   powerIntensity: z.enum(['light', 'normal', 'chaos']).optional(),
   onePowerPerTurn: z.boolean().optional(),
-  isBlitzMode: z.boolean().optional()
+  isBlitzMode: z.boolean().optional(),
+  ranked: z.boolean().optional()
 });
 
 const quickPlaySchema = z.object({

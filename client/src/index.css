@@ -5342,3 +5342,206 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .epic-overlay, .epic-spotlight, .epic-banner, .epic-sub, .epic-capture { animation: none; }
 }
+
+/* ─── Historial de partidas + repeticiones (perfil) ─── */
+.profile-history-section { margin-top: 16px; }
+.profile-history-list {
+  display: flex; flex-direction: column; gap: 6px;
+  margin-top: 8px; max-height: 210px; overflow-y: auto; padding-right: 2px;
+}
+.profile-history-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 10px; border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.history-result-badge {
+  flex-shrink: 0; font-size: 0.66rem; font-weight: 800; letter-spacing: 0.02em;
+  padding: 3px 8px; border-radius: 7px; text-transform: uppercase;
+}
+.history-result-badge.win  { background: rgba(16, 185, 129, 0.18); color: #34d399; }
+.history-result-badge.loss { background: rgba(239, 68, 68, 0.16);  color: #f87171; }
+.history-result-badge.tie  { background: rgba(148, 163, 184, 0.16); color: #cbd5e1; }
+.history-row-main { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.history-row-opp {
+  font-size: 0.82rem; color: #e2e8f0; font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.history-row-meta { font-size: 0.68rem; color: #6b7280; }
+.history-watch-btn {
+  flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px;
+  padding: 5px 11px; border-radius: 8px; cursor: pointer;
+  font-size: 0.72rem; font-weight: 700; color: #fbbf24;
+  background: rgba(245, 158, 11, 0.14); border: 1px solid rgba(245, 158, 11, 0.3);
+  transition: background 0.15s ease;
+}
+.history-watch-btn:hover { background: rgba(245, 158, 11, 0.26); }
+.replay-scrubber { height: 5px; }
+
+/* ─── Misiones diarias (perfil) ─── */
+.profile-missions-section { margin-top: 14px; }
+.mission-streak-badge {
+  margin-left: auto; display: inline-flex; align-items: center; gap: 3px;
+  font-size: 0.68rem; font-weight: 800; color: #fb923c;
+  background: rgba(251, 146, 60, 0.14); padding: 2px 8px; border-radius: 8px;
+}
+.mission-list { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.mission-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.mission-row.done { border-color: rgba(16, 185, 129, 0.35); background: rgba(16, 185, 129, 0.06); }
+.mission-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.mission-name { font-size: 0.8rem; color: #e2e8f0; font-weight: 600; }
+.mission-bar {
+  height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.08); overflow: hidden;
+}
+.mission-bar-fill {
+  height: 100%; border-radius: 3px;
+  background: linear-gradient(90deg, #10b981, #34d399); transition: width 0.4s ease;
+}
+.mission-progress-txt { font-size: 0.66rem; color: #6b7280; }
+.mission-claim-btn {
+  flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px;
+  padding: 6px 12px; border-radius: 9px; cursor: pointer;
+  font-size: 0.76rem; font-weight: 800; color: #052e16;
+  background: linear-gradient(135deg, #fbbf24, #f59e0b); border: none;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+  transition: transform 0.12s ease, filter 0.12s ease;
+}
+.mission-claim-btn:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.08); }
+.mission-claim-btn:disabled {
+  opacity: 0.4; cursor: not-allowed; background: rgba(255, 255, 255, 0.08);
+  color: #9ca3af; box-shadow: none;
+}
+.mission-claimed {
+  flex-shrink: 0; display: inline-flex; align-items: center; gap: 4px;
+  font-size: 0.72rem; font-weight: 700; color: #34d399;
+}
+
+/* ─── Clasificatoria (insignias) ─── */
+.room-tag.ranked {
+  color: #052e16; background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  border-color: transparent; font-weight: 800;
+}
+.option-toggle.ranked.on { border-color: rgba(245, 158, 11, 0.5); }
+.profile-division-badge {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 0.62rem; font-weight: 800; padding: 1px 6px; border-radius: 6px;
+  border: 1px solid currentColor;
+}
+
+/* ─── Hub de torneo ─── */
+.tournament-btn-highlight {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(139, 92, 246, 0.35)) !important;
+  border: 1px solid rgba(139, 92, 246, 0.6) !important;
+  color: #c4b5fd !important; font-weight: bold;
+}
+.tourney-cta { margin-top: 16px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.tourney-cta-btn { width: 100%; max-width: 320px; padding: 14px; font-size: 0.95rem; }
+.tourney-resolving {
+  display: inline-flex; align-items: center; gap: 8px;
+  color: #9ca3af; font-size: 0.85rem; padding: 12px;
+}
+.tourney-result { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.tourney-result-banner {
+  width: 100%; max-width: 360px; text-align: center; font-weight: 800; font-size: 1rem;
+  padding: 14px; border-radius: 12px;
+}
+.tourney-result-banner.win {
+  background: rgba(16, 185, 129, 0.16); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.5);
+}
+.tourney-result-banner.lose {
+  background: rgba(148, 163, 184, 0.12); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.35);
+}
+.tourney-result-banner.runner {
+  background: rgba(245, 158, 11, 0.14); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.45);
+}
+.bracket-player.is-human { border-left: 3px solid #818cf8; }
+.tourney-advance-note {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  color: #c4b5fd; font-weight: 700; font-size: 0.9rem;
+  background: rgba(99, 102, 241, 0.12); border: 1px solid rgba(99, 102, 241, 0.3);
+  border-radius: 12px;
+}
+
+/* ─── Lobby del torneo (código + jugadores) ─── */
+.tourney-code-box {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  width: 100%; margin: 14px 0; padding: 12px; border-radius: 12px; cursor: pointer;
+  background: rgba(99, 102, 241, 0.1); border: 1px dashed rgba(139, 92, 246, 0.5);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.tourney-code-box:hover { background: rgba(99, 102, 241, 0.18); border-color: rgba(139, 92, 246, 0.8); }
+.tourney-code-label {
+  font-size: 0.72rem; color: #9ca3af;
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.tourney-code {
+  font-size: 1.8rem; font-weight: 900; letter-spacing: 0.25em;
+  color: #c4b5fd; font-family: monospace; padding-left: 0.25em;
+}
+.tourney-players { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.tourney-player-slot {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px; border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.05);
+}
+.tourney-player-slot.filled { background: rgba(16, 185, 129, 0.08); border-color: rgba(16, 185, 129, 0.25); }
+.tourney-slot-num {
+  width: 20px; height: 20px; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 0.7rem; font-weight: 800; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08); color: #9ca3af;
+}
+.tourney-player-slot.filled .tourney-slot-num { background: rgba(16, 185, 129, 0.25); color: #34d399; }
+.tourney-slot-name { flex: 1; font-size: 0.88rem; color: #e2e8f0; font-weight: 600; }
+.tourney-player-slot:not(.filled) .tourney-slot-name { color: #6b7280; font-style: italic; font-weight: 400; }
+.tourney-fill-note { font-size: 0.7rem; color: #6b7280; text-align: center; margin-top: 6px; }
+
+/* ─── Botón de partida clasificatoria ─── */
+.ranked-find-btn {
+  width: 100%; margin-top: 8px;
+  background: linear-gradient(135deg, #6366f1, #4f46e5);
+  color: #fff; border: 1px solid rgba(129, 140, 248, 0.5);
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.3);
+}
+.ranked-find-btn:hover { filter: brightness(1.08); transform: translateY(-1px); }
+
+/* ─── Amigos ─── */
+.friend-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 8px 10px; margin-top: 6px; border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.friend-name { display: flex; align-items: center; gap: 8px; font-size: 0.88rem; color: #e2e8f0; font-weight: 600; min-width: 0; }
+.friend-dot { width: 8px; height: 8px; border-radius: 50%; background: #6b7280; flex-shrink: 0; }
+.friend-dot.online { background: #34d399; box-shadow: 0 0 6px rgba(52, 211, 153, 0.7); }
+.friend-elo { display: inline-flex; align-items: center; gap: 3px; font-size: 0.78rem; font-weight: 700; color: #818cf8; }
+.friend-accept, .friend-decline {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border-radius: 8px; cursor: pointer; border: none;
+}
+.friend-accept { background: rgba(16, 185, 129, 0.18); color: #34d399; }
+.friend-accept:hover { background: rgba(16, 185, 129, 0.3); }
+.friend-decline { background: rgba(239, 68, 68, 0.14); color: #f87171; }
+.friend-decline:hover { background: rgba(239, 68, 68, 0.26); }
+.friend-challenge-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border-radius: 8px; cursor: pointer; border: none;
+  background: linear-gradient(135deg, #6366f1, #4f46e5); color: #fff;
+}
+.friend-challenge-btn:hover { filter: brightness(1.1); }
+
+/* ─── Toast de invitación de amigo ─── */
+.friend-invite-toast {
+  position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+  z-index: 1400; display: flex; flex-direction: column; align-items: center; gap: 10px;
+  padding: 14px 20px; border-radius: 14px; max-width: 90%;
+  background: var(--glass, rgba(13, 18, 30, 0.94));
+  border: 1px solid rgba(99, 102, 241, 0.5);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+.friend-invite-text { font-size: 0.92rem; font-weight: 700; color: #e2e8f0; text-align: center; }
+.friend-invite-actions { display: flex; gap: 10px; }
+.friend-invite-actions .btn-premium { padding: 8px 18px; font-size: 0.85rem; }

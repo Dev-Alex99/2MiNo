@@ -5,18 +5,30 @@ import { useT } from '../i18n/LanguageContext';
 export default function MoveLog({ moveLog = [], onClose }) {
   const { t } = useT();
 
+  // El detalle se reconstruye en el cliente desde los datos estructurados
+  // (acción/ficha/lado) para localizarlo, en vez de usar el string del servidor.
+  const detailText = (entry) => {
+    if (entry.action === 'play' && Array.isArray(entry.tile)) {
+      const side = entry.side === 'left' ? t('board.left') : t('board.right');
+      return `[${entry.tile[0]}|${entry.tile[1]}] (${side})`;
+    }
+    if (entry.action === 'draw') return t('log.drewDetail');
+    if (entry.action === 'pass') return t('log.passedDetail');
+    return entry.detail || '';
+  };
+
   const getActionBadge = (action) => {
     switch (action) {
       case 'play':
-        return { icon: '🎴', label: 'Jugada', color: '#10b981' };
+        return { icon: '🎴', label: t('log.play'), color: '#10b981' };
       case 'draw':
-        return { icon: '📦', label: 'Robo', color: '#3b82f6' };
+        return { icon: '📦', label: t('log.draw'), color: '#3b82f6' };
       case 'pass':
-        return { icon: '🪵', label: 'Paso', color: '#f59e0b' };
+        return { icon: '🪵', label: t('log.pass'), color: '#f59e0b' };
       case 'power':
-        return { icon: '⚡', label: 'Poder', color: '#a78bfa' };
+        return { icon: '⚡', label: t('log.power'), color: '#a78bfa' };
       default:
-        return { icon: '📢', label: 'Sistema', color: '#94a3b8' };
+        return { icon: '📢', label: t('log.system'), color: '#94a3b8' };
     }
   };
 
@@ -52,7 +64,7 @@ export default function MoveLog({ moveLog = [], onClose }) {
                     </span>
                     <div className="move-log-info">
                       <span className="move-log-player">{entry.player}:</span>
-                      <span className="move-log-detail">{entry.detail}</span>
+                      <span className="move-log-detail">{detailText(entry)}</span>
                     </div>
                   </div>
                 );

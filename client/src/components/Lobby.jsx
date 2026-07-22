@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { Play, Plus, ArrowRight, User, Zap, Layers, Settings2, Users, Download, Medal, ChevronDown, Zap as Bolt, Globe, Lock, Eye, Palette, Trophy, ShoppingBag } from 'lucide-react';
+import { Play, Plus, ArrowRight, User, Zap, Layers, Settings2, Users, Download, Medal, ChevronDown, Zap as Bolt, Globe, Lock, Eye, Palette, Trophy, ShoppingBag, Swords } from 'lucide-react';
 import { socket } from '../socket';
 import RoomList from './RoomList';
 import LiveGames from './LiveGames';
 import LanguageSwitcher from './LanguageSwitcher';
 import { useT } from '../i18n/LanguageContext';
 
-export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuickPlay, publicRooms = [], roomsLoading, stats, invitedCode = '', onOpenProfile, onOpenLeaderboard, onOpenStore, liveGames = [], onSpectate }) {
+export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuickPlay, publicRooms = [], roomsLoading, stats, invitedCode = '', onOpenProfile, onOpenLeaderboard, onOpenStore, onOpenTournament, onFindRanked, onOpenFriends, liveGames = [], onSpectate }) {
   const { t } = useT();
   const VARIANT_INFO = {
     6: { label: t('opt.double', { n: 6 }), desc: t('opt.d6desc') },
@@ -26,6 +26,8 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
   const [maxScore, setMaxScore] = useState(null); // null => el propio de la variante
   const [isPublic, setIsPublic] = useState(true);
   const [isBlitzMode, setIsBlitzMode] = useState(false);
+  // Clasificatoria: afecta al ELO y fuerza modo clásico (excluyente con poderes).
+  const [ranked, setRanked] = useState(false);
 
   const requireName = () => {
     if (!name.trim()) { setError(t('lobby.nameRequired')); return false; }
@@ -59,7 +61,7 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
       return;
     }
     setError('');
-    onCreateRoom({ powersEnabled, maxPip, teamsEnabled, drawEnabled, maxScore, isPublic, powerIntensity, onePowerPerTurn, isBlitzMode });
+    onCreateRoom({ powersEnabled, maxPip, teamsEnabled, drawEnabled, maxScore, isPublic, powerIntensity, onePowerPerTurn, isBlitzMode, ranked });
   };
 
   const handleJoin = (e) => {
@@ -88,7 +90,7 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
           type="button"
           className="lobby-profile-btn store-btn-highlight"
           onClick={onOpenStore}
-          title="Tienda de Skins"
+          title={t('store.title')}
           style={{
             background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(217, 119, 6, 0.35))',
             border: '1px solid rgba(251, 191, 36, 0.6)',
@@ -98,13 +100,27 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
           }}
         >
           <ShoppingBag size={16} color="#fbbf24" />
-          <span className="lobby-btn-label">Tienda</span>
+          <span className="lobby-btn-label">{t('lobby.store')}</span>
         </button>
 
+        {onOpenTournament && (
+          <button type="button" className="lobby-profile-btn tournament-btn-highlight" onClick={onOpenTournament} title={t('lobby.tournament')}>
+            <Swords size={16} />
+            <span className="lobby-btn-label">{t('lobby.tournament')}</span>
+          </button>
+        )}
+
         {onOpenLeaderboard && (
-          <button type="button" className="lobby-profile-btn" onClick={onOpenLeaderboard} title="Ranking">
+          <button type="button" className="lobby-profile-btn" onClick={onOpenLeaderboard} title={t('lobby.ranking')}>
             <Trophy size={16} />
-            <span className="lobby-btn-label">Ranking</span>
+            <span className="lobby-btn-label">{t('lobby.ranking')}</span>
+          </button>
+        )}
+
+        {onOpenFriends && (
+          <button type="button" className="lobby-profile-btn" onClick={onOpenFriends} title={t('friend.title')}>
+            <Users size={16} />
+            <span className="lobby-btn-label">{t('friend.title')}</span>
           </button>
         )}
 
@@ -178,6 +194,18 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
             <Bolt size={18} fill="currentColor" />
             {t('lobby.playNow')}
           </button>
+
+          {/* Emparejamiento clasificatorio por ELO */}
+          {onFindRanked && (
+            <button
+              type="button"
+              onClick={() => { if (!name.trim()) { setError(t('lobby.nameRequired')); return; } onFindRanked(); }}
+              className="btn-premium ranked-find-btn"
+            >
+              <Trophy size={16} />
+              {t('mm.find')}
+            </button>
+          )}
 
           {/* Salas públicas abiertas, en vivo */}
           <div className="lobby-form-field">
@@ -262,10 +290,39 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
               ))}
             </div>
 
+            {/* Partida clasificatoria (afecta al ELO) */}
+            <button
+              type="button"
+              onClick={() => setRanked((v) => {
+                const next = !v;
+                if (next) setPowersEnabled(false); // clasificatoria = sin poderes
+                return next;
+              })}
+              aria-pressed={ranked}
+              className={`option-toggle ranked ${ranked ? 'on' : ''}`}
+            >
+              <span className="option-toggle-text">
+                <span className="option-toggle-title">
+                  <Trophy size={14} style={{ color: '#f59e0b' }} />
+                  {t('opt.ranked')}
+                </span>
+                <span className="option-toggle-desc">
+                  {t('opt.ranked_desc')}
+                </span>
+              </span>
+              <span className="switch" aria-hidden="true">
+                <span className="switch-knob" />
+              </span>
+            </button>
+
             {/* Cartas de poder on/off */}
             <button
               type="button"
-              onClick={() => setPowersEnabled((v) => !v)}
+              onClick={() => setPowersEnabled((v) => {
+                const next = !v;
+                if (next) setRanked(false); // activar poderes desactiva clasificatoria
+                return next;
+              })}
               aria-pressed={powersEnabled}
               className={`option-toggle ${powersEnabled ? 'on' : ''}`}
             >
@@ -293,10 +350,10 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
               <span className="option-toggle-text">
                 <span className="option-toggle-title">
                   <Zap size={14} style={{ color: '#f59e0b' }} />
-                  Modo Relámpago Blitz (60s)
+                  {t('opt.blitz')}
                 </span>
                 <span className="option-toggle-desc">
-                  {isBlitzMode ? 'Bolsa de 60s por jugador' : 'Reloj estándar de turno'}
+                  {isBlitzMode ? t('opt.blitzOn') : t('opt.blitzOff')}
                 </span>
               </span>
               <span className="switch" aria-hidden="true">
@@ -444,7 +501,7 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
               />
               <button
                 onClick={handleJoin}
-                type="submit"
+                type="button"
                 className="btn-premium btn-secondary"
                 style={{ padding: '0 20px' }}
               >

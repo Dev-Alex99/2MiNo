@@ -21,23 +21,147 @@ const {
   toggleReadySchema,
   validate
 } = require('../schemas');
-const { getGlobalLeaderboard, getOrCreateUser, getUserProfile, equipItem } = require('../db');
+const {
+  getGlobalLeaderboard,
+  getWeeklyLeaderboard,
+  getOrCreateUser,
+  getUserProfile,
+  getUserMatchHistory,
+  getMatchReplay,
+  rollDaily,
+  getDailyState,
+  claimMission,
+  sendFriendRequest,
+  respondFriendRequest,
+  getFriends,
+  getFriendRequests,
+  equipItem
+} = require('../db');
+const tournamentManager = require('../tournamentManager');
+const matchmaking = require('../matchmaking');
+const presence = require('../presence');
+const { pushFriendsList, notifyFriendsOfPresence } = require('../friendService');
 
 function registerRoomHandlers(io, socket, leaveVoiceFn) {
-  // 0. Clasificación Global y Perfil Supabase
-  socket.on('get_leaderboard', async () => {
-    const leaderboard = await getGlobalLeaderboard(15);
-    socket.emit('leaderboard_data', leaderboard);
+  // Emparejamiento clasificatorio (cola 1v1 por ELO)
+  socket.on('join_queue', ({ playerId, name } = {}) => {
+    if (!playerId) return;
+    matchmaking.joinQueue(io, socket, { id: playerId, name: String(name || 'Jugador').trim().slice(0, 20) });
+  });
+  socket.on('leave_queue', () => matchmaking.leaveQueue(socket.id));
+
+  // ─── Amigos ───
+  socket.on('get_friends', async ({ playerId } = {}) => {
+    if (!playerId) return;
+    const { becameOnline } = presence.register(socket.id, playerId);
+    if (becameOnline) notifyFriendsOfPresence(io, playerId);
+    await pushFriendsList(io, playerId);
   });
 
-  socket.on('get_profile', async ({ playerId, username }) => {
+  socket.on('friend_add', async ({ playerId, code } = {}) => {
+    if (!playerId || !code) return;
+    const res = await sendFriendRequest(playerId, code);
+    socket.emit('friend_action', res);
+    if (res.success) {
+      await pushFriendsList(io, playerId);
+      if (res.target && res.target.id) {
+        await pushFriendsList(io, res.target.id);
+        const set = presence.socketsOf(res.target.id);
+        if (set) for (const sid of set) io.to(sid).emit('friend_incoming', { accepted: !!res.accepted });
+      }
+    }
+  });
+
+  socket.on('friend_respond', async ({ playerId, otherId, accept } = {}) => {
+    if (!playerId || !otherId) return;
+    const res = await respondFriendRequest(playerId, otherId, !!accept);
+    await pushFriendsList(io, playerId);
+    if (res.success && accept) await pushFriendsList(io, otherId);
+  });
+
+  // Retar a un amigo: crea una sala privada y le envía una invitación.
+  socket.on('friend_challenge', ({ playerId, name, friendId } = {}) => {
+    if (!playerId || !friendId) return;
+    const set = presence.socketsOf(friendId);
+    if (!set || !set.size) {
+      socket.emit('friend_action', { success: false, error: 'friend.err.offline' });
+      return;
+    }
+    const safeName = String(name || 'Jugador').trim().slice(0, 20);
+    const created = createRoomFor(io, socket, safeName, playerId, { isPublic: false, powersEnabled: false });
+    getOrCreateUser(created.playerId, safeName);
+    socket.emit('room_created', created);
+    broadcastGameState(io, created.roomId);
+    for (const sid of set) io.to(sid).emit('friend_invited', { fromName: safeName, roomId: created.roomId });
+  });
+
+  // Torneos (individual vs IA)
+  socket.on('create_tournament', ({ playerId, name } = {}) => {
     if (!playerId) return;
+    tournamentManager.createTournament(io, socket, { id: playerId, name: String(name || 'Jugador').trim().slice(0, 20) });
+  });
+
+  socket.on('join_tournament', ({ playerId, name, code } = {}) => {
+    if (!playerId || !code) return;
+    tournamentManager.joinTournament(io, socket, code, { id: playerId, name: String(name || 'Jugador').trim().slice(0, 20) });
+  });
+
+  socket.on('start_tournament', ({ tournamentId } = {}) => {
+    if (!tournamentId) return;
+    tournamentManager.startTournament(io, tournamentId, socket.id);
+  });
+
+  socket.on('leave_tournament', ({ playerId } = {}) => {
+    if (!playerId) return;
+    tournamentManager.endTournamentFor(playerId);
+  });
+
+  // 0. Clasificación Global y Perfil Supabase
+  socket.on('get_leaderboard', async (data) => {
+    const scope = data && data.scope === 'weekly' ? 'weekly' : 'global';
+    const leaderboard = scope === 'weekly'
+      ? await getWeeklyLeaderboard(15)
+      : await getGlobalLeaderboard(15);
+    socket.emit('leaderboard_data', { scope, rows: leaderboard });
+  });
+
+  socket.on('get_profile', async ({ playerId, username } = {}) => {
+    if (!playerId) return;
+    const { becameOnline } = presence.register(socket.id, playerId);
+    if (becameOnline) notifyFriendsOfPresence(io, playerId); // avisar a mis amigos
     await getOrCreateUser(playerId, username || 'Jugador');
+    const roll = await rollDaily(playerId); // renueva misiones + racha si es día nuevo
     const profile = await getUserProfile(playerId);
+    if (profile) {
+      profile.daily = await getDailyState(playerId);
+      // La recompensa de login solo se adjunta el primer login del día.
+      if (roll && roll.rolled && roll.loginReward && profile.daily) {
+        profile.daily.loginReward = roll.loginReward;
+      }
+    }
     socket.emit('profile_data', profile);
   });
 
-  socket.on('equip_skin', async ({ playerId, category, itemId, username }) => {
+  socket.on('claim_mission', async ({ playerId, missionId } = {}) => {
+    if (!playerId || !missionId) return;
+    const result = await claimMission(playerId, missionId);
+    socket.emit('mission_claimed', result);
+  });
+
+  // Historial de partidas y repeticiones
+  socket.on('get_match_history', async ({ playerId } = {}) => {
+    if (!playerId) return;
+    const history = await getUserMatchHistory(playerId, 12);
+    socket.emit('match_history_data', history);
+  });
+
+  socket.on('get_match_replay', async ({ matchId } = {}) => {
+    if (!matchId) return;
+    const replay = await getMatchReplay(matchId);
+    socket.emit('match_replay_data', replay);
+  });
+
+  socket.on('equip_skin', async ({ playerId, category, itemId, username } = {}) => {
     if (!playerId || !category || !itemId) return;
     // El precio lo decide el servidor (storeCatalog); ignoramos cualquier coste del cliente.
     const result = await equipItem(playerId, category, itemId, username || 'Jugador');
@@ -109,6 +233,9 @@ function registerRoomHandlers(io, socket, leaveVoiceFn) {
       socket.emit('room_joined', { roomId, playerId: actualPlayerId });
       broadcastGameState(io, roomId);
       broadcastLobby(io);
+      // En un torneo, reiniciar el reloj de turno al entrar el humano a su
+      // partida (evita que se auto-juegue un turno mientras estaba en el hub).
+      if (game.tournamentId) advanceRoom(io, roomId);
       console.log(`Jugador reconectado: ${existingPlayer.name} a sala ${roomId}`);
       return;
     }

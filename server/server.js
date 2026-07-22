@@ -130,6 +130,13 @@ io.on('connection', (socket) => {
     leaveVoice(io, socket, findMe(socket.id));
     console.log(`Cliente desconectado: ${socket.id}`);
 
+    try { require('./tournamentManager').handleDisconnect(io, socket.id); } catch (e) { /* noop */ }
+    try { require('./matchmaking').leaveQueue(socket.id); } catch (e) { /* noop */ }
+    try {
+      const { becameOffline, playerId } = require('./presence').unregister(socket.id);
+      if (becameOffline) require('./friendService').notifyFriendsOfPresence(io, playerId);
+    } catch (e) { /* noop */ }
+
     if (removeSpectatorEverywhere(socket.id)) broadcastLobby(io);
 
     for (const [roomId, game] of rooms.entries()) {
@@ -151,7 +158,10 @@ io.on('connection', (socket) => {
           broadcastGameState(io, roomId);
           console.log(`Jugador ${player.name} se desconectó temporalmente de la sala activa ${roomId}`);
 
-          const allOffline = game.players.every(p => p.socketId === null);
+          // Las salas de torneo NO se destruyen por "todos offline": el reloj de
+          // turno las termina y onMatchEnd avanza el cuadro (destruyéndolas). Si
+          // las matáramos aquí, el torneo quedaría colgado sin ganador.
+          const allOffline = !game.tournamentId && game.players.every(p => p.socketId === null);
           if (allOffline) {
             setTimeout(() => {
               const checkGame = rooms.get(roomId);

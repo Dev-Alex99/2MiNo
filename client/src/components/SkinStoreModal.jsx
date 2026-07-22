@@ -119,6 +119,7 @@ export default function SkinStoreModal({ playerId, name, onClose }) {
 
     function onSkinEquipped(res) {
       setPurchasing(null);
+      if (!res) return;
       if (res.success && res.user) {
         setUserCoins(res.user.coins);
 
@@ -141,12 +142,13 @@ export default function SkinStoreModal({ playerId, name, onClose }) {
 
         if (res.purchased) {
           playGameSound('win_round');
-          showMessage('¡Skin comprada y equipada! El cambio visual ya está activo.', 'success');
+          showMessage(t('store.boughtMsg'), 'success');
         } else {
-          showMessage('Skin equipada. ¡El cambio se aplica al instante!', 'success');
+          showMessage(t('store.equippedMsg'), 'success');
         }
       } else {
-        showMessage(res.error || 'Error al procesar la operación.', 'error');
+        // res.error es una clave i18n (p. ej. 'store.insufficient').
+        showMessage(res.error ? t(res.error) : t('store.errorMsg'), 'error');
       }
     }
 
@@ -156,7 +158,7 @@ export default function SkinStoreModal({ playerId, name, onClose }) {
       socket.off('profile_data', onProfileData);
       socket.off('skin_equipped', onSkinEquipped);
     };
-  }, [playerId, name, showMessage]);
+  }, [playerId, name, showMessage, t]);
 
   const items = activeTab === 'tile' ? TILE_CATALOG : BOARD_CATALOG;
 
@@ -170,7 +172,7 @@ export default function SkinStoreModal({ playerId, name, onClose }) {
 
     // Chequeo de solvencia solo para UX; el precio real y el cobro los valida el servidor.
     if (!isOwned && userCoins < item.cost) {
-      showMessage('¡Doblones insuficientes! Gana más partidas para obtener monedas.', 'error');
+      showMessage(t('store.insufficient'), 'error');
       return;
     }
 
@@ -181,7 +183,7 @@ export default function SkinStoreModal({ playerId, name, onClose }) {
       category: activeTab,
       itemId: item.id
     });
-  }, [activeTab, equippedTile, equippedBoard, ownedSkins, userCoins, purchasing, playerId, name, showMessage]);
+  }, [activeTab, equippedTile, equippedBoard, ownedSkins, userCoins, purchasing, playerId, name, showMessage, t]);
 
   /* ─── Conteo de skins poseídas por pestaña ─── */
   const ownedTileCount = TILE_CATALOG.filter(i => ownedSkins.has(i.id) || i.cost === 0).length;
@@ -207,10 +209,10 @@ export default function SkinStoreModal({ playerId, name, onClose }) {
             <div>
               <h2 className="modal-title" style={{ fontSize: '1.25rem', margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <Palette size={16} style={{ opacity: 0.6 }} />
-                Tienda & Apariencia
+                {t('store.title')}
               </h2>
               <span style={{ fontSize: '0.76rem', color: '#9ca3af' }}>
-                Compra, equipa y previsualiza al instante
+                {t('store.subtitle')}
               </span>
             </div>
           </div>
@@ -234,15 +236,15 @@ export default function SkinStoreModal({ playerId, name, onClose }) {
           border: '1px solid rgba(255,255,255,0.06)',
           fontSize: '0.78rem', color: '#9ca3af', flexShrink: 0
         }}>
-          <span>Equipado:</span>
+          <span>{t('store.equipped')}</span>
           <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#e2e8f0' }}>
             <TilePreview skinId={equippedTile} />
-            {TILE_CATALOG.find(i => i.id === equippedTile)?.name || equippedTile}
+            {TILE_CATALOG.some(i => i.id === equippedTile) ? t(`store.${equippedTile}.n`) : equippedTile}
           </span>
           <span style={{ color: '#4b5563' }}>·</span>
           <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#e2e8f0' }}>
             <BoardPreview tableId={equippedBoard} />
-            {BOARD_CATALOG.find(i => i.id === equippedBoard)?.name || equippedBoard}
+            {BOARD_CATALOG.some(i => i.id === equippedBoard) ? t(`store.${equippedBoard}.n`) : equippedBoard}
           </span>
         </div>
 
@@ -267,13 +269,13 @@ export default function SkinStoreModal({ playerId, name, onClose }) {
             onClick={() => setActiveTab('tile')}
             className={`chat-tab-btn ${activeTab === 'tile' ? 'active' : ''}`}
           >
-            🀌 Fichas ({ownedTileCount}/{TILE_CATALOG.length})
+            🀌 {t('store.tabTiles')} ({ownedTileCount}/{TILE_CATALOG.length})
           </button>
           <button
             onClick={() => setActiveTab('board')}
             className={`chat-tab-btn ${activeTab === 'board' ? 'active' : ''}`}
           >
-            🌿 Tapetes ({ownedBoardCount}/{BOARD_CATALOG.length})
+            🌿 {t('store.tabBoards')} ({ownedBoardCount}/{BOARD_CATALOG.length})
           </button>
         </div>
 
@@ -281,7 +283,7 @@ export default function SkinStoreModal({ playerId, name, onClose }) {
         {loading ? (
           <div style={{ textAlign: 'center', padding: '40px 0', color: '#9ca3af', fontSize: '0.9rem' }}>
             <Sparkles size={24} style={{ marginBottom: 8, opacity: 0.5 }} />
-            <div>Cargando tu inventario...</div>
+            <div>{t('store.loading')}</div>
           </div>
         ) : (
           <div style={{
@@ -334,7 +336,7 @@ export default function SkinStoreModal({ playerId, name, onClose }) {
                     <div style={{ minWidth: 0, flex: 1 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <h3 style={{ fontSize: '0.9rem', fontWeight: 700, margin: 0, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {item.name}
+                          {t(`store.${item.id}.n`)}
                         </h3>
                         {/* Mini preview visual */}
                         {activeTab === 'tile'
@@ -343,7 +345,7 @@ export default function SkinStoreModal({ playerId, name, onClose }) {
                         }
                       </div>
                       <span style={{ fontSize: '0.72rem', color: '#9ca3af', lineHeight: 1.3, display: 'block' }}>
-                        {item.desc}
+                        {t(`store.${item.id}.d`)}
                       </span>
                     </div>
                   </div>
@@ -351,7 +353,7 @@ export default function SkinStoreModal({ playerId, name, onClose }) {
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '2px' }}>
                     {isOwned ? (
                       <span style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <ShieldCheck size={13} /> Adquirido
+                        <ShieldCheck size={13} /> {t('store.owned')}
                       </span>
                     ) : (
                       <span style={{
@@ -373,13 +375,13 @@ export default function SkinStoreModal({ playerId, name, onClose }) {
                       {isBuying ? (
                         '...'
                       ) : isEquipped ? (
-                        <><Check size={11} /> Equipado</>
+                        <><Check size={11} /> {t('store.equippedBtn')}</>
                       ) : isOwned ? (
-                        'Equipar'
+                        t('store.equip')
                       ) : canAfford ? (
-                        'Comprar'
+                        t('store.buy')
                       ) : (
-                        'Bloqueado'
+                        t('store.locked')
                       )}
                     </button>
                   </div>
@@ -396,7 +398,7 @@ export default function SkinStoreModal({ playerId, name, onClose }) {
           fontSize: '0.72rem', color: '#6b7280',
           textAlign: 'center', flexShrink: 0
         }}>
-          Gana Doblones jugando · Victoria: +50 · Derrota: +10 · Los cambios se aplican al instante
+          {t('store.footer')}
         </div>
       </div>
     </div>

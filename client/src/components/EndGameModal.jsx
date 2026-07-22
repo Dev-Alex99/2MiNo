@@ -83,7 +83,7 @@ function ConfettiCanvas() {
   );
 }
 
-export default function EndGameModal({ gameState, playerId }) {
+export default function EndGameModal({ gameState, playerId, tournamentMatch = false }) {
   const { t } = useT();
   const [peek, setPeek] = useState(false);
   const [ready, setReady] = useState(false);
@@ -224,30 +224,37 @@ export default function EndGameModal({ gameState, playerId }) {
                       {isWinner && <Award size={14} style={{ color: '#f59e0b' }} />}
                       {p.name} {p.id === playerId && `(${t('common.you')})`}
                     </span>
-                    <span className="modal-row-score">{p.score} pts</span>
+                    <span className="modal-row-score">{p.score} {t('common.points')}</span>
                   </div>
                 );
               })}
         </div>
 
-        {/* Botón de acción */}
-        <button
-          onClick={handleNextAction}
-          className="btn-premium btn-primary"
-          style={{ width: '100%', padding: '16px', fontSize: '1rem', marginTop: '10px' }}
-        >
-          {isGameEnd ? (
-            <>
-              <RefreshCw size={18} />
-              {t('end.playAgain')}
-            </>
-          ) : (
-            <>
-              {t('end.nextRound')}
-              <ChevronRight size={18} />
-            </>
-          )}
-        </button>
+        {/* Botón de acción. En torneo, al terminar el juego el servidor avanza el
+            cuadro automáticamente, así que se muestra un aviso en vez de "jugar de nuevo". */}
+        {tournamentMatch && isGameEnd ? (
+          <div className="tourney-advance-note" style={{ width: '100%', padding: '14px', marginTop: '10px', textAlign: 'center' }}>
+            <RefreshCw size={16} className="voice-spin" /> {t('tourney.advancing')}
+          </div>
+        ) : (
+          <button
+            onClick={handleNextAction}
+            className="btn-premium btn-primary"
+            style={{ width: '100%', padding: '16px', fontSize: '1rem', marginTop: '10px' }}
+          >
+            {isGameEnd ? (
+              <>
+                <RefreshCw size={18} />
+                {t('end.playAgain')}
+              </>
+            ) : (
+              <>
+                {t('end.nextRound')}
+                <ChevronRight size={18} />
+              </>
+            )}
+          </button>
+        )}
 
         {/* Ver el tablero final sin cerrar la partida */}
         <button className="end-view-board" onClick={() => setPeek(true)}>

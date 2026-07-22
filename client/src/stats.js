@@ -34,6 +34,19 @@ export function getRank(s) {
   return { id: 'rookie', icon: '🟢', color: '#34d399' };
 }
 
+// División competitiva a partir del ELO (server-authoritative en clasificatoria).
+// Traducción de la etiqueta con la clave i18n `div.<id>`.
+export function getDivision(elo) {
+  const e = Number(elo) || 1200;
+  if (e >= 2100) return { id: 'legend',   icon: '👑', color: '#f43f5e', min: 2100 };
+  if (e >= 1850) return { id: 'diamond',  icon: '💎', color: '#38bdf8', min: 1850 };
+  if (e >= 1600) return { id: 'platinum', icon: '🛡️', color: '#22d3ee', min: 1600 };
+  if (e >= 1400) return { id: 'gold',     icon: '🥇', color: '#fbbf24', min: 1400 };
+  if (e >= 1250) return { id: 'silver',   icon: '🥈', color: '#cbd5e1', min: 1250 };
+  if (e >= 1100) return { id: 'bronze',   icon: '🥉', color: '#d97706', min: 1100 };
+  return { id: 'wood', icon: '🪵', color: '#78716c', min: 0 };
+}
+
 export function getEquippedTitle() {
   try { return localStorage.getItem(TITLE_KEY) || 'none'; } catch { return 'none'; }
 }

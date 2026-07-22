@@ -71,6 +71,27 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.3);
 }
+/* Firefox: scrollbar fino a juego con el de WebKit. */
+* { scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.15) transparent; }
+
+/* --- PULIDO GLOBAL DE INTERACCIÓN (tacto + accesibilidad) --- */
+/* Sin destello azul al tocar en móvil. */
+button, a, input, [role="button"], .domino-tile, .power-card-slot {
+  -webkit-tap-highlight-color: transparent;
+}
+/* Foco visible SOLO con teclado (no en clics de ratón). */
+button:focus-visible, a:focus-visible, input:focus-visible,
+[role="button"]:focus-visible, [tabindex]:focus-visible {
+  outline: 2px solid var(--accent, #34d399);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+button:focus:not(:focus-visible) { outline: none; }
+/* Feedback táctil al pulsar (se siente más vivo en móvil). */
+.btn-premium:active:not(:disabled),
+.lobby-profile-btn:active,
+.ranked-find-btn:active,
+.quick-play-btn:active { transform: scale(0.97); }
 
 /* --- GLASSMORPHISM CARD --- */
 .glass-panel {
@@ -3827,7 +3848,20 @@ body {
 /* Con dos botones + idioma arriba, en móvil ocultamos el texto y dejamos icono. */
 @media (max-width: 420px) {
   .lobby-btn-label { display: none; }
-  .lobby-profile-btn { padding: 6px 9px; }
+  /* Icono centrado en un objetivo táctil de 40px (antes ~30px, difícil de tocar). */
+  .lobby-profile-btn {
+    padding: 0;
+    width: 40px;
+    height: 40px;
+    justify-content: center;
+  }
+  .lobby-topbar { gap: 6px; top: 10px; right: 10px; }
+  .lobby-topbar .lang-btn { height: 40px; }
+}
+/* Pantallas muy estrechas: ajustar para que quepa la fila con el selector de idioma. */
+@media (max-width: 360px) {
+  .lobby-profile-btn { width: 36px; height: 36px; }
+  .lobby-topbar { gap: 4px; }
 }
 
 .theme-card { max-width: 440px; width: 100%; text-align: left; }

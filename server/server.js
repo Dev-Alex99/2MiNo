@@ -1,3 +1,8 @@
+// Cargar variables de entorno ANTES que cualquier otro require (db.js lee
+// process.env.DATABASE_URL al cargarse). Se apunta explícitamente a server/.env
+// para que funcione arranques node desde donde arranques.
+require('dotenv').config({ path: require('path').join(__dirname, '.env') });
+
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');

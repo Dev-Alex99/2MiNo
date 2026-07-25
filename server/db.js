@@ -13,10 +13,23 @@ function dayNumber() { return Math.floor(Date.now() / 86400000); }
 const DATABASE_URL = process.env.DATABASE_URL || '';
 const DB_ENABLED = !!DATABASE_URL;
 
+// TLS de la conexión a Postgres. Por defecto se mantiene el comportamiento
+// histórico (rejectUnauthorized:false) porque el pooler de Supabase/Render usa
+// certificados que no validan contra las CA del sistema y verificar rompería la
+// conexión. Para endurecerlo (recomendado en producción) hay dos opciones:
+//   · DB_SSL_CA = certificado CA en PEM (o \n escapados) → se valida contra él.
+//   · DB_SSL_STRICT=1 → valida contra las CA del sistema.
+function buildSslConfig() {
+  const caRaw = (process.env.DB_SSL_CA || '').trim();
+  if (caRaw) return { rejectUnauthorized: true, ca: caRaw.replace(/\\n/g, '\n') };
+  if (/^(1|true|yes)$/i.test(process.env.DB_SSL_STRICT || '')) return { rejectUnauthorized: true };
+  return { rejectUnauthorized: false }; // por defecto: compatible con Supabase/Render
+}
+
 const pool = DB_ENABLED
   ? new Pool({
       connectionString: DATABASE_URL,
-      ssl: { rejectUnauthorized: false },
+      ssl: buildSslConfig(),
       // Límites conservadores pensados para Render 512 MB + Supabase.
       max: Number(process.env.DB_POOL_MAX) || 5,
       idleTimeoutMillis: 30000,

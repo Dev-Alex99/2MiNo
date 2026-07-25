@@ -31,6 +31,13 @@ import SkinStoreModal from './components/SkinStoreModal';
 import { recordGame, recordRoundWin } from './stats';
 import { initTheme, applySkin, applyTable } from './theme';
 import { useGameStore, getOrCreatePersistentPlayerId } from './store/useGameStore';
+import { useHubStore } from './hub/stores/useHubStore';
+import HubDashboard from './hub/HubDashboard';
+// Nota: GlobalVoiceOverlay se importaba aquí pero NUNCA se renderizaba (la UI de
+// voz la cubre UnifiedVoiceWidget). Import eliminado para no arrastrarlo al
+// bundle; el archivo del componente se conserva por si se retoma.
+import UnifiedVoiceWidget from './components/UnifiedVoiceWidget';
+import TicTacToeBoard from './games/tictactoe/TicTacToeBoard';
 
 function readInviteCode() {
   try {
@@ -71,6 +78,11 @@ export default function App() {
     invitedCode, setInvitedCode,
     resetPowerState
   } = useGameStore();
+
+  // Hub multijuego: qué juego está seleccionado. DEBE llamarse aquí arriba,
+  // junto al resto de hooks, nunca después de un return condicional (rompería
+  // las Reglas de Hooks al entrar/salir del modo espectador).
+  const { selectedGameId } = useHubStore();
 
   const [legendaryEffect, setLegendaryEffect] = React.useState(null);
   const [showBracket, setShowBracket] = React.useState(false);
@@ -155,9 +167,15 @@ export default function App() {
       setIsConnected(true);
       setError('');
 
-      // Sincronizar skins del perfil guardado en BD
+      // Handshake de sesión: presenta la identidad + token guardado para que el
+      // servidor VINCULE el socket a este jugador antes de cualquier operación
+      // social/económica. Si no hay token (o es la 1ª vez) el servidor emitirá
+      // uno en 'session' y lo guardamos para el próximo arranque.
       const persistId = getOrCreatePersistentPlayerId();
       const savedName = localStorage.getItem('domino_username');
+      socket.emit('hello', { playerId: persistId, token: localStorage.getItem('domino_session_token') || undefined });
+
+      // Sincronizar skins del perfil guardado en BD
       socket.emit('get_profile', { playerId: persistId, username: savedName || 'Jugador' });
 
       if (invitedCodeRef.current) return;
@@ -190,6 +208,14 @@ export default function App() {
 
     function onDisconnect() {
       setIsConnected(false);
+    }
+
+    // El servidor confirma la sesión y (si hacía falta) emite un token de
+    // sesión firmado: lo guardamos para reenviarlo en el próximo 'hello'.
+    function onSession(data) {
+      if (data && data.token) {
+        try { localStorage.setItem('domino_session_token', data.token); } catch (e) {}
+      }
     }
 
     function onRoomCreated({ roomId: newRoomId, playerId: newPlayerId }) {
@@ -376,7 +402,12 @@ export default function App() {
 
     function onMatchFound({ roomId: mmRoomId, playerId: mmPlayerId }) {
       setSearchingRanked(false);
-      socket.emit('join_room', { roomId: mmRoomId, playerId: mmPlayerId });
+      // Se envía `name` como respaldo: normalmente el jugador ya está sentado en
+      // la sala clasificatoria y esto es una reconexión, pero si no se le
+      // encontrara el servidor rechazaría el join por falta de nombre.
+      // Se lee de localStorage (no del estado) para no capturar un valor viejo.
+      const savedName = localStorage.getItem('domino_username') || undefined;
+      socket.emit('join_room', { roomId: mmRoomId, playerId: mmPlayerId, name: savedName });
     }
 
     function onFriendInvited({ fromName, roomId: invRoom }) {
@@ -398,12 +429,16 @@ export default function App() {
       setRoomId('');
       setGameState(null);
       prevGameStatusRef.current = null;
-      setError(t('end.kicked', { name: by || '—' }));
+      // tRef (no `t`) para que este efecto NO dependa del idioma: si dependiera,
+      // cambiar de idioma desmontaría y volvería a montar los ~21 listeners de
+      // socket (con riesgo de perder eventos en el hueco) y re-invocaría connect().
+      setError(tRef.current('end.kicked', { name: by || '—' }));
       setTimeout(() => setError(''), 6000);
     }
 
     socket.on('connect', onConnect);
     socket.on('disconnect', onDisconnect);
+    socket.on('session', onSession);
     socket.on('room_created', onRoomCreated);
     socket.on('room_joined', onRoomJoined);
     socket.on('game_state', onGameState);
@@ -426,6 +461,7 @@ export default function App() {
     return () => {
       socket.off('connect', onConnect);
       socket.off('disconnect', onDisconnect);
+      socket.off('session', onSession);
       socket.off('room_created', onRoomCreated);
       socket.off('room_joined', onRoomJoined);
       socket.off('game_state', onGameState);
@@ -446,9 +482,12 @@ export default function App() {
       socket.off('friend_incoming', onFriendIncoming);
     };
   }, [
+    // Solo setters estables de zustand. `t` NO va aquí a propósito (los
+    // handlers leen el idioma vivo con tRef.current), para registrar los
+    // listeners de socket UNA sola vez por montaje.
     setError, setIsConnected, setInvitedCode, setPlayerId, setRoomId, setGameState,
     setEpicMoment, setQuickNotifications, setPublicRooms, setRoomsLoading,
-    setLiveGames, setSpectating, setLobbyStats, t
+    setLiveGames, setSpectating, setLobbyStats
   ]);
 
   const inLobby = !spectating && (!gameState || !roomId);
@@ -460,6 +499,8 @@ export default function App() {
   }, [isConnected, inLobby, setRoomsLoading]);
 
   const handleCreateRoom = (options = {}) => {
+    const { selectedGameId } = useHubStore.getState();
+    const gameType = selectedGameId || 'domino';
     const {
       powersEnabled = true,
       maxPip = 6,
@@ -471,6 +512,7 @@ export default function App() {
       onePowerPerTurn = false
     } = options;
     socket.emit('create_room', {
+      gameType,
       name, powersEnabled, maxPip, teamsEnabled, drawEnabled, maxScore, isPublic,
       powerIntensity, onePowerPerTurn,
       playerId: getOrCreatePersistentPlayerId()
@@ -478,7 +520,9 @@ export default function App() {
   };
 
   const handleQuickPlay = () => {
-    socket.emit('quick_play', { name, playerId: getOrCreatePersistentPlayerId() });
+    const { selectedGameId } = useHubStore.getState();
+    const gameType = selectedGameId || 'domino';
+    socket.emit('quick_play', { gameType, name, playerId: getOrCreatePersistentPlayerId() });
   };
 
   const handleJoinRoom = (code) => {
@@ -564,10 +608,11 @@ export default function App() {
     setError('');
   };
 
-  const me = gameState ? gameState.players.find(p => p.id === playerId) : null;
+  const me = gameState && Array.isArray(gameState.players) ? gameState.players.find(p => p.id === playerId) : null;
   const isMyTurn = gameState ? (gameState.currentPlayerId === playerId && gameState.status === 'playing') : false;
-  const leftEnd = gameState && gameState.board.length > 0 ? gameState.board[0][0] : null;
-  const rightEnd = gameState && gameState.board.length > 0 ? gameState.board[gameState.board.length - 1][1] : null;
+  const isDominoBoard = gameState && Array.isArray(gameState.board) && gameState.board.length > 0 && Array.isArray(gameState.board[0]);
+  const leftEnd = isDominoBoard ? gameState.board[0][0] : null;
+  const rightEnd = isDominoBoard ? gameState.board[gameState.board.length - 1][1] : null;
 
   useEffect(() => {
     if (isMyTurn && !prevIsMyTurnRef.current) {
@@ -584,7 +629,7 @@ export default function App() {
     prevIsMyTurnRef.current = isMyTurn;
   }, [isMyTurn, setShowTurnBanner]);
 
-  const selectedTile = me && selectedTileIndex !== null ? me.hand[selectedTileIndex] : null;
+  const selectedTile = me && Array.isArray(me.hand) && selectedTileIndex !== null ? me.hand[selectedTileIndex] : null;
   
   const isLeftFrozen = gameState && gameState.activeEffects?.frozenEnd === 'left' && gameState.activeEffects?.frozenEndOwnerId !== playerId;
   const isRightFrozen = gameState && gameState.activeEffects?.frozenEnd === 'right' && gameState.activeEffects?.frozenEndOwnerId !== playerId;
@@ -650,76 +695,98 @@ export default function App() {
       );
   }
 
-  if (!gameState || !roomId) {
-    // Modo torneo: mientras no estés dentro de una partida, se muestra el cuadro.
-    if (tournament) {
-      return (
+  return (
+    <VoiceProvider roomId={roomId} playerId={playerId} name={name}>
+      <UnifiedVoiceWidget variant="floating" />
+
+      {/* Avisos GLOBALES: antes vivían dentro de la rama de partida, así que una
+          caída de conexión o un error del servidor (sala llena, código inválido)
+          era invisible en el lobby y el hub. */}
+      {!isConnected && (
+        <div className="network-alert">
+          <Wifi size={12} />
+          {t('net.lost')}
+        </div>
+      )}
+
+      {error && (
+        <div className="error-toast">
+          <AlertCircle size={12} />
+          {renderError(error)}
+        </div>
+      )}
+
+      {tournament ? (
         <TournamentHub
           tournament={tournament}
           onStart={handleStartTournament}
           onPlayMatch={handlePlayTournamentMatch}
           onExit={handleExitTournament}
         />
-      );
-    }
-    return (
-      <>
-        <Lobby
-          name={name}
-          setName={setName}
-          onCreateRoom={handleCreateRoom}
-          onJoinRoom={handleJoinRoom}
-          onQuickPlay={handleQuickPlay}
-          publicRooms={publicRooms}
-          roomsLoading={roomsLoading}
-          stats={lobbyStats}
-          invitedCode={invitedCode}
-          onOpenProfile={() => setShowProfile(true)}
-
-          onOpenLeaderboard={() => setShowLeaderboard(true)}
-          onOpenStore={() => setShowStore(true)}
-          onOpenTournament={handleOpenTournament}
-          onFindRanked={handleFindRanked}
-          onOpenFriends={() => setShowFriends(true)}
-          liveGames={liveGames}
-          onSpectate={handleSpectate}
-        />
-        {searchingRanked && <RankedSearch onCancel={handleCancelQueue} />}
-        {incomingInvite && (
-          <div className="friend-invite-toast animate-scale-up">
-            <span className="friend-invite-text">
-              {tRef.current('invite.text', { name: incomingInvite.fromName })}
-            </span>
-            <div className="friend-invite-actions">
-              <button className="btn-premium btn-primary" onClick={handleAcceptInvite}>{t('invite.accept')}</button>
-              <button className="btn-premium btn-secondary" onClick={() => setIncomingInvite(null)}>{t('invite.dismiss')}</button>
-            </div>
-          </div>
-        )}
-        {friendNotice && (
-          <div className="friend-invite-toast animate-scale-up">
-            <span className="friend-invite-text">{friendNotice}</span>
-          </div>
-        )}
-        {showFriends && <FriendsModal name={name} onClose={() => setShowFriends(false)} />}
-        {showProfile && <ProfileModal name={name} onClose={() => setShowProfile(false)} />}
-
-        {showLeaderboard && <LeaderboardModal onClose={() => setShowLeaderboard(false)} />}
-        {showStore && <SkinStoreModal playerId={getOrCreatePersistentPlayerId()} name={name} onClose={() => setShowStore(false)} />}
-        {showTournamentEntry && (
-          <TournamentEntry
-            onCreate={handleCreateTournament}
-            onJoin={handleJoinTournament}
-            onClose={() => setShowTournamentEntry(false)}
+      ) : !selectedGameId ? (
+        <>
+          <HubDashboard
+            onOpenProfile={() => setShowProfile(true)}
+            onOpenStore={() => setShowStore(true)}
+            onOpenFriends={() => setShowFriends(true)}
+            onOpenLeaderboard={() => setShowLeaderboard(true)}
           />
-        )}
-      </>
-    );
-  }
-
-  return (
-    <VoiceProvider roomId={roomId} playerId={playerId}>
-      {gameState.status === 'waiting' ? (
+          {showFriends && <FriendsModal name={name} onClose={() => setShowFriends(false)} />}
+          {showProfile && <ProfileModal name={name} onClose={() => setShowProfile(false)} />}
+          {showLeaderboard && <LeaderboardModal onClose={() => setShowLeaderboard(false)} />}
+          {showStore && <SkinStoreModal playerId={getOrCreatePersistentPlayerId()} name={name} onClose={() => setShowStore(false)} />}
+        </>
+      ) : !roomId || !gameState ? (
+        <>
+          <Lobby
+            name={name}
+            setName={setName}
+            onCreateRoom={handleCreateRoom}
+            onJoinRoom={handleJoinRoom}
+            onQuickPlay={handleQuickPlay}
+            publicRooms={publicRooms}
+            roomsLoading={roomsLoading}
+            stats={lobbyStats}
+            invitedCode={invitedCode}
+            onOpenProfile={() => setShowProfile(true)}
+            onOpenLeaderboard={() => setShowLeaderboard(true)}
+            onOpenStore={() => setShowStore(true)}
+            onOpenTournament={handleOpenTournament}
+            onFindRanked={handleFindRanked}
+            onOpenFriends={() => setShowFriends(true)}
+            liveGames={liveGames}
+            onSpectate={handleSpectate}
+          />
+          {searchingRanked && <RankedSearch onCancel={handleCancelQueue} />}
+          {incomingInvite && (
+            <div className="friend-invite-toast animate-scale-up">
+              <span className="friend-invite-text">
+                {tRef.current('invite.text', { name: incomingInvite.fromName })}
+              </span>
+              <div className="friend-invite-actions">
+                <button className="btn-premium btn-primary" onClick={handleAcceptInvite}>{t('invite.accept')}</button>
+                <button className="btn-premium btn-secondary" onClick={() => setIncomingInvite(null)}>{t('invite.dismiss')}</button>
+              </div>
+            </div>
+          )}
+          {friendNotice && (
+            <div className="friend-invite-toast animate-scale-up">
+              <span className="friend-invite-text">{friendNotice}</span>
+            </div>
+          )}
+          {showFriends && <FriendsModal name={name} onClose={() => setShowFriends(false)} />}
+          {showProfile && <ProfileModal name={name} onClose={() => setShowProfile(false)} />}
+          {showLeaderboard && <LeaderboardModal onClose={() => setShowLeaderboard(false)} />}
+          {showStore && <SkinStoreModal playerId={getOrCreatePersistentPlayerId()} name={name} onClose={() => setShowStore(false)} />}
+          {showTournamentEntry && (
+            <TournamentEntry
+              onCreate={handleCreateTournament}
+              onJoin={handleJoinTournament}
+              onClose={() => setShowTournamentEntry(false)}
+            />
+          )}
+        </>
+      ) : gameState.status === 'waiting' ? (
         <WaitingRoom
           gameState={gameState}
           playerId={playerId}
@@ -740,20 +807,6 @@ export default function App() {
       {epicMoment && <EpicMoment moment={epicMoment} gameState={gameState} playerId={playerId} />}
 
       {showBracket && <TournamentBracket gameState={gameState} onClose={() => setShowBracket(false)} />}
-
-      {!isConnected && (
-        <div className="network-alert">
-          <Wifi size={12} />
-          {t('net.lost')}
-        </div>
-      )}
-
-      {error && (
-        <div className="error-toast">
-          <AlertCircle size={12} />
-          {renderError(error)}
-        </div>
-      )}
 
       {quickNotifications.map((notif) => {
         if (notif.type === 'emoji') {
@@ -809,81 +862,89 @@ export default function App() {
         <SkinStoreModal playerId={getOrCreatePersistentPlayerId()} name={name} onClose={() => setShowStore(false)} />
       )}
 
-      <div className="game-area">
-        <div className="board-region">
-          <GameBoard
-            board={gameState.board}
-            selectedTileIndex={selectedTileIndex}
-            onPlay={handlePlayTile}
-            isMyTurn={isMyTurn}
-            players={gameState.players}
-            currentPlayerId={gameState.currentPlayerId}
-            canPlayLeft={canPlayLeft}
-            canPlayRight={canPlayRight}
-            pendingTargetType={pendingTargetType}
-            onSelectEndTarget={handleEndTargetSelected}
-            activeEffects={gameState.activeEffects}
-            lastPlay={gameState.lastPlay}
-            lastPlacedTile={gameState.lastPlacedTile}
-            lastPlacedBy={gameState.lastPlacedBy}
-            seatsPadding={isMobile ? 170 : 240}
-            moveLog={gameState.moveLog || []}
-            onOpenBracket={() => setShowBracket(true)}
-            selectedPower={selectedPower}
-          />
+      {gameState.gameType === 'tictactoe' ? (
+        <TicTacToeBoard
+          gameState={gameState}
+          playerId={playerId}
+          onLeave={handleLeaveRoom}
+        />
+      ) : (
+        <div className="game-area">
+          <div className="board-region">
+            <GameBoard
+              board={gameState.board}
+              selectedTileIndex={selectedTileIndex}
+              onPlay={handlePlayTile}
+              isMyTurn={isMyTurn}
+              players={gameState.players}
+              currentPlayerId={gameState.currentPlayerId}
+              canPlayLeft={canPlayLeft}
+              canPlayRight={canPlayRight}
+              pendingTargetType={pendingTargetType}
+              onSelectEndTarget={handleEndTargetSelected}
+              activeEffects={gameState.activeEffects}
+              lastPlay={gameState.lastPlay}
+              lastPlacedTile={gameState.lastPlacedTile}
+              lastPlacedBy={gameState.lastPlacedBy}
+              seatsPadding={isMobile ? 170 : 240}
+              moveLog={gameState.moveLog || []}
+              onOpenBracket={() => setShowBracket(true)}
+              selectedPower={selectedPower}
+            />
 
-          <Chat roomId={roomId} playerId={playerId} />
+            <Chat roomId={roomId} playerId={playerId} />
 
-          <VideoGrid players={gameState.players} playerId={playerId} selfOnly />
+            <VideoGrid players={gameState.players} playerId={playerId} selfOnly />
 
-          <PlayerSeats
-            players={gameState.players}
-            playerId={playerId}
-            currentPlayerId={gameState.currentPlayerId}
-            teamsEnabled={gameState.teamsEnabled}
-            powersEnabled={gameState.powersEnabled}
-            pendingTargetType={pendingTargetType}
-            onSelectPlayerTarget={handlePlayerTargetSelected}
-            quickNotifications={quickNotifications}
-            blitzTimeRemaining={gameState.blitzTimeRemaining}
-          />
+            <PlayerSeats
+              players={gameState.players}
+              playerId={playerId}
+              currentPlayerId={gameState.currentPlayerId}
+              teamsEnabled={gameState.teamsEnabled}
+              powersEnabled={gameState.powersEnabled}
+              pendingTargetType={pendingTargetType}
+              onSelectPlayerTarget={handlePlayerTargetSelected}
+              quickNotifications={quickNotifications}
+              blitzTimeRemaining={gameState.blitzTimeRemaining}
+            />
+          </div>
+
+          {me && gameState.status === 'playing' && gameState.powersEnabled !== false && (
+            <PowerCards
+              powers={me.powers}
+              isMyTurn={isMyTurn}
+              onUsePower={handleUsePower}
+              selectedPower={selectedPower}
+              setSelectedPower={setSelectedPower}
+              pendingTargetType={pendingTargetType}
+              setPendingTargetType={setPendingTargetType}
+            />
+          )}
+
+          {me && (
+            <PlayerHand
+              hand={me.hand}
+              isMyTurn={isMyTurn}
+              selectedTileIndex={selectedTileIndex}
+              setSelectedTileIndex={setSelectedTileIndex}
+              leftEnd={leftEnd}
+              rightEnd={rightEnd}
+              onPlay={handlePlayTile}
+              onDraw={handleDrawTile}
+              onPass={handlePassTurn}
+              boneyardCount={gameState.boneyardCount}
+              boardIsEmpty={gameState.board.length === 0}
+              wildcardActive={isWildcardActive}
+              drawEnabled={gameState.drawEnabled !== false}
+              onTileClickOverride={
+                (pendingTargetType === 'hand_tile_target' || pendingTargetType === 'smuggle_select_tile')
+                  ? handleTileClickOverride
+                  : null
+              }
+            />
+          )}
         </div>
-
-        {me && gameState.status === 'playing' && gameState.powersEnabled !== false && (
-          <PowerCards
-            powers={me.powers}
-            isMyTurn={isMyTurn}
-            onUsePower={handleUsePower}
-            selectedPower={selectedPower}
-            setSelectedPower={setSelectedPower}
-            pendingTargetType={pendingTargetType}
-            setPendingTargetType={setPendingTargetType}
-          />
-        )}
-
-        {me && (
-          <PlayerHand
-            hand={me.hand}
-            isMyTurn={isMyTurn}
-            selectedTileIndex={selectedTileIndex}
-            setSelectedTileIndex={setSelectedTileIndex}
-            leftEnd={leftEnd}
-            rightEnd={rightEnd}
-            onPlay={handlePlayTile}
-            onDraw={handleDrawTile}
-            onPass={handlePassTurn}
-            boneyardCount={gameState.boneyardCount}
-            boardIsEmpty={gameState.board.length === 0}
-            wildcardActive={isWildcardActive}
-            drawEnabled={gameState.drawEnabled !== false}
-            onTileClickOverride={
-              (pendingTargetType === 'hand_tile_target' || pendingTargetType === 'smuggle_select_tile')
-                ? handleTileClickOverride
-                : null
-            }
-          />
-        )}
-      </div>
+      )}
 
       <EndGameModal
         key={`end-${gameState.status}-${gameState.roundNumber}`}

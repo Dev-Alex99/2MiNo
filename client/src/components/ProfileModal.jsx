@@ -86,7 +86,7 @@ export default function ProfileModal({ name, onClose }) {
         </button>
 
         {/* Cabecera: avatar + nombre + rango + ELO + monedas */}
-        <div className="profile-head" style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+        <div className="profile-head">
           <div className="profile-avatar">{initials}</div>
           <div style={{ flex: 1 }}>
             <div className="profile-name-row" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
@@ -121,165 +121,167 @@ export default function ProfileModal({ name, onClose }) {
           </div>
         </div>
 
-        {/* Misiones diarias + racha */}
-        {daily && Array.isArray(daily.missions) && daily.missions.length > 0 && (
-          <div className="profile-missions-section">
-            <div className="profile-section-label">
-              <Target size={14} />
-              {t('mission.title')}
-              <span className="mission-streak-badge">
-                <Flame size={12} /> {t('mission.streak', { n: daily.streak || 0 })}
-              </span>
-            </div>
-            <div className="mission-list">
-              {daily.missions.map(m => {
-                const pct = m.target > 0 ? Math.min(100, Math.round((m.progress / m.target) * 100)) : 0;
-                return (
-                  <div key={m.id} className={`mission-row ${m.completed ? 'done' : ''}`}>
-                    <div className="mission-info">
-                      <span className="mission-name">{t(`mission.${m.type}`, { n: m.target })}</span>
-                      <div className="mission-bar">
-                        <div className="mission-bar-fill" style={{ width: `${pct}%` }} />
+        {/* Cuerpo con Scroll Dedicado */}
+        <div className="profile-scroll-body">
+          {/* Misiones diarias + racha */}
+          {daily && Array.isArray(daily.missions) && daily.missions.length > 0 && (
+            <div className="profile-missions-section">
+              <div className="profile-section-label">
+                <Target size={14} />
+                {t('mission.title')}
+                <span className="mission-streak-badge">
+                  <Flame size={12} /> {t('mission.streak', { n: daily.streak || 0 })}
+                </span>
+              </div>
+              <div className="mission-list">
+                {daily.missions.map(m => {
+                  const pct = m.target > 0 ? Math.min(100, Math.round((m.progress / m.target) * 100)) : 0;
+                  return (
+                    <div key={m.id} className={`mission-row ${m.completed ? 'done' : ''}`}>
+                      <div className="mission-info">
+                        <span className="mission-name">{t(`mission.${m.type}`, { n: m.target })}</span>
+                        <div className="mission-bar">
+                          <div className="mission-bar-fill" style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className="mission-progress-txt">{m.progress}/{m.target}</span>
                       </div>
-                      <span className="mission-progress-txt">{m.progress}/{m.target}</span>
+                      {m.claimed ? (
+                        <span className="mission-claimed"><CheckCircle2 size={13} /> {t('mission.claimed')}</span>
+                      ) : (
+                        <button
+                          className="mission-claim-btn"
+                          disabled={!m.completed || claiming === m.id}
+                          onClick={() => claimMission(m.id)}
+                        >
+                          <Gift size={12} /> {m.reward}
+                        </button>
+                      )}
                     </div>
-                    {m.claimed ? (
-                      <span className="mission-claimed"><CheckCircle2 size={13} /> {t('mission.claimed')}</span>
-                    ) : (
-                      <button
-                        className="mission-claim-btn"
-                        disabled={!m.completed || claiming === m.id}
-                        onClick={() => claimMission(m.id)}
-                      >
-                        <Gift size={12} /> {m.reward}
-                      </button>
-                    )}
-                  </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Selector de Títulos */}
+          <div className="profile-titles-section">
+            <div className="profile-section-label">
+              <Award size={14} />
+              {t('profile.titles')}
+            </div>
+            <div className="profile-titles-grid">
+              {TITLES.map((title) => {
+                const isUnlocked = stats.wins >= title.reqWins;
+                const isSelected = equippedTitle === title.id;
+                return (
+                  <button
+                    key={title.id}
+                    disabled={!isUnlocked}
+                    onClick={() => handleSelectTitle(title.id)}
+                    className={`profile-title-btn ${isSelected ? 'selected' : ''} ${!isUnlocked ? 'locked' : ''}`}
+                    title={!isUnlocked ? t('profile.titleReq', { n: title.reqWins }) : undefined}
+                  >
+                    <span className="title-icon">{title.icon}</span>
+                    <span className="title-text">{t(`title.${title.id}`)}</span>
+                  </button>
                 );
               })}
             </div>
           </div>
-        )}
 
-        {/* Selector de Títulos */}
-        <div className="profile-titles-section">
-          <div className="profile-section-label">
-            <Award size={14} />
-            {t('profile.titles')}
+          {/* Estadísticas */}
+          <div className="profile-stats-grid">
+            <div className="profile-stat">
+              <span className="profile-stat-num">{stats.wins}</span>
+              <span className="profile-stat-label">{t('profile.wins')}</span>
+            </div>
+            <div className="profile-stat">
+              <span className="profile-stat-num">{stats.losses}</span>
+              <span className="profile-stat-label">{t('profile.losses')}</span>
+            </div>
+            <div className="profile-stat">
+              <span className="profile-stat-num">{winRate(stats)}%</span>
+              <span className="profile-stat-label">{t('profile.winrate')}</span>
+            </div>
+            <div className="profile-stat">
+              <span className="profile-stat-num"><Flame size={16} /> {stats.streak}</span>
+              <span className="profile-stat-label">{t('profile.streak')}</span>
+            </div>
+            <div className="profile-stat">
+              <span className="profile-stat-num">{stats.bestStreak}</span>
+              <span className="profile-stat-label">{t('profile.best')}</span>
+            </div>
+            <div className="profile-stat">
+              <span className="profile-stat-num">{stats.played}</span>
+              <span className="profile-stat-label">{t('profile.played')}</span>
+            </div>
           </div>
-          <div className="profile-titles-grid">
-            {TITLES.map((title) => {
-              const isUnlocked = stats.wins >= title.reqWins;
-              const isSelected = equippedTitle === title.id;
+
+          {/* Logros */}
+          <div className="profile-ach-header">
+            <Trophy size={14} />
+            {t('profile.achievements')}
+            <span className="profile-ach-count">{unlockedCount}/{ACHIEVEMENTS.length}</span>
+          </div>
+          <div className="profile-ach-grid">
+            {ACHIEVEMENTS.map(a => {
+              const unlocked = !!stats.achievements[a.id];
               return (
-                <button
-                  key={title.id}
-                  disabled={!isUnlocked}
-                  onClick={() => handleSelectTitle(title.id)}
-                  className={`profile-title-btn ${isSelected ? 'selected' : ''} ${!isUnlocked ? 'locked' : ''}`}
-                  title={!isUnlocked ? t('profile.titleReq', { n: title.reqWins }) : undefined}
+                <div
+                  key={a.id}
+                  className={`profile-ach ${unlocked ? 'unlocked' : 'locked'}`}
+                  title={t(`ach.${a.id}.d`) + (unlocked ? ` · ${stats.achievements[a.id]}` : '')}
                 >
-                  <span className="title-icon">{title.icon}</span>
-                  <span className="title-text">{t(`title.${title.id}`)}</span>
-                </button>
+                  <span className="profile-ach-icon">{unlocked ? a.icon : '🔒'}</span>
+                  <span className="profile-ach-name">{t(`ach.${a.id}.n`)}</span>
+                </div>
               );
             })}
           </div>
-        </div>
 
-        {/* Estadísticas */}
-        <div className="profile-stats-grid">
-          <div className="profile-stat">
-            <span className="profile-stat-num">{stats.wins}</span>
-            <span className="profile-stat-label">{t('profile.wins')}</span>
-          </div>
-          <div className="profile-stat">
-            <span className="profile-stat-num">{stats.losses}</span>
-            <span className="profile-stat-label">{t('profile.losses')}</span>
-          </div>
-          <div className="profile-stat">
-            <span className="profile-stat-num">{winRate(stats)}%</span>
-            <span className="profile-stat-label">{t('profile.winrate')}</span>
-          </div>
-          <div className="profile-stat">
-            <span className="profile-stat-num"><Flame size={16} /> {stats.streak}</span>
-            <span className="profile-stat-label">{t('profile.streak')}</span>
-          </div>
-          <div className="profile-stat">
-            <span className="profile-stat-num">{stats.bestStreak}</span>
-            <span className="profile-stat-label">{t('profile.best')}</span>
-          </div>
-          <div className="profile-stat">
-            <span className="profile-stat-num">{stats.played}</span>
-            <span className="profile-stat-label">{t('profile.played')}</span>
-          </div>
-        </div>
-
-        {/* Logros */}
-        <div className="profile-ach-header">
-          <Trophy size={14} />
-          {t('profile.achievements')}
-          <span className="profile-ach-count">{unlockedCount}/{ACHIEVEMENTS.length}</span>
-        </div>
-        <div className="profile-ach-grid">
-          {ACHIEVEMENTS.map(a => {
-            const unlocked = !!stats.achievements[a.id];
-            return (
-              <div
-                key={a.id}
-                className={`profile-ach ${unlocked ? 'unlocked' : 'locked'}`}
-                title={t(`ach.${a.id}.d`) + (unlocked ? ` · ${stats.achievements[a.id]}` : '')}
-              >
-                <span className="profile-ach-icon">{unlocked ? a.icon : '🔒'}</span>
-                <span className="profile-ach-name">{t(`ach.${a.id}.n`)}</span>
+          {/* Historial de partidas + repeticiones */}
+          {history.length > 0 && (
+            <div className="profile-history-section">
+              <div className="profile-ach-header">
+                <History size={14} />
+                {t('history.title')}
               </div>
-            );
-          })}
-        </div>
-
-        {/* Historial de partidas + repeticiones */}
-        {history.length > 0 && (
-          <div className="profile-history-section">
-            <div className="profile-ach-header">
-              <History size={14} />
-              {t('history.title')}
-            </div>
-            <div className="profile-history-list">
-              {history.map(row => {
-                const res = matchResult(row, pid);
-                // Rivales: en parejas excluye a tu compañero (mismo equipo), no solo a ti.
-                const myEntry = (row.final_scores || []).find(e => e.id === pid);
-                const opponents = (row.final_scores || [])
-                  .filter(e => e.id !== pid && (!row.teams_enabled || !myEntry || e.team !== myEntry.team))
-                  .map(e => e.name)
-                  .join(', ');
-                const dateStr = row.played_at
-                  ? new Date(row.played_at).toLocaleDateString(undefined, { day: '2-digit', month: 'short' })
-                  : '';
-                return (
-                  <div key={row.id} className="profile-history-row">
-                    <span className={`history-result-badge ${res}`}>{t(`history.${res}`)}</span>
-                    <div className="history-row-main">
-                      <span className="history-row-opp">{opponents || '—'}</span>
-                      <span className="history-row-meta">
-                        {row.teams_enabled ? t('history.teams') : t('history.solo')} · {dateStr}
-                      </span>
+              <div className="profile-history-list">
+                {history.map(row => {
+                  const res = matchResult(row, pid);
+                  const myEntry = (row.final_scores || []).find(e => e.id === pid);
+                  const opponents = (row.final_scores || [])
+                    .filter(e => e.id !== pid && (!row.teams_enabled || !myEntry || e.team !== myEntry.team))
+                    .map(e => e.name)
+                    .join(', ');
+                  const dateStr = row.played_at
+                    ? new Date(row.played_at).toLocaleDateString(undefined, { day: '2-digit', month: 'short' })
+                    : '';
+                  return (
+                    <div key={row.id} className="profile-history-row">
+                      <span className={`history-result-badge ${res}`}>{t(`history.${res}`)}</span>
+                      <div className="history-row-main">
+                        <span className="history-row-opp">{opponents || '—'}</span>
+                        <span className="history-row-meta">
+                          {row.teams_enabled ? t('history.teams') : t('history.solo')} · {dateStr}
+                        </span>
+                      </div>
+                      <button className="history-watch-btn" onClick={() => setReplayId(row.id)}>
+                        <Play size={12} /> {t('history.watch')}
+                      </button>
                     </div>
-                    <button className="history-watch-btn" onClick={() => setReplayId(row.id)}>
-                      <Play size={12} /> {t('history.watch')}
-                    </button>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {stats.played > 0 && (
-          <button className="profile-reset" onClick={resetStats}>
-            <RotateCcw size={12} /> {t('profile.reset')}
-          </button>
-        )}
+          {stats.played > 0 && (
+            <button className="profile-reset" onClick={resetStats}>
+              <RotateCcw size={12} /> {t('profile.reset')}
+            </button>
+          )}
+        </div>
       </div>
 
       {replayId && <ReplayModal matchId={replayId} onClose={() => setReplayId(null)} />}

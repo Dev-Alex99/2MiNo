@@ -44,6 +44,16 @@ const Seat = React.memo(function Seat({
       } ${targeting ? 'targetable' : ''}`}
       onClick={targeting ? () => onSelect(id) : undefined}
       role={targeting ? 'button' : undefined}
+      // Cuando el asiento es un objetivo seleccionable (poderes) debe poder
+      // usarse con teclado: sin tabIndex/onKeyDown, role="button" es una
+      // promesa que el div no cumple para lectores de pantalla.
+      tabIndex={targeting ? 0 : undefined}
+      onKeyDown={targeting ? (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onSelect(id);
+        }
+      } : undefined}
     >
       {taunt && (
         <div className="seat-taunt-bubble animate-taunt-float">

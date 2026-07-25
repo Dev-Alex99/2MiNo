@@ -1,6 +1,7 @@
 const { z } = require('zod');
 
 const createRoomSchema = z.object({
+  gameType: z.string().optional(),
   name: z.string().trim().min(1, 'srv.err.nameRequired').max(30),
   playerId: z.string().optional(),
   maxPip: z.number().optional(),
@@ -16,6 +17,7 @@ const createRoomSchema = z.object({
 });
 
 const quickPlaySchema = z.object({
+  gameType: z.string().optional(),
   name: z.string().trim().min(1, 'srv.err.nameRequired').max(30),
   playerId: z.string().optional()
 });
@@ -91,8 +93,17 @@ const roomOnlySchema = z.object({
 const sendQuickMessageSchema = z.object({
   roomId: z.string().trim().min(1),
   playerId: z.string().optional(),
-  text: z.string().optional(),
-  type: z.string().optional()
+  // Cota de longitud: evita que el chat se use para inundar ancho de banda o
+  // memoria de los clientes. React ya escapa el contenido (sin XSS).
+  text: z.string().max(200).optional(),
+  type: z.string().max(24).optional()
+});
+
+const sendEmoteSchema = z.object({
+  roomId: z.string().trim().min(1),
+  playerId: z.string().trim().min(1),
+  emoji: z.string().trim().min(1).max(16),
+  targetPlayerId: z.string().max(64).optional().nullable()
 });
 
 const voiceCamSchema = z.object({
@@ -135,6 +146,7 @@ module.exports = {
   usePowerCardSchema,
   roomOnlySchema,
   sendQuickMessageSchema,
+  sendEmoteSchema,
   voiceCamSchema,
   voiceSignalSchema,
   voiceSpeakingSchema,

@@ -1,7 +1,10 @@
 const DominoGame = require('./gameLogic');
-const { chooseMove, choosePower, pickBotName } = require('./botLogic');
+const GameRegistry = require('./core/GameRegistry');
+// La IA de dominó (chooseMove/choosePower) ya NO se usa aquí: cada juego pilota
+// sus bots vía game.playBotTurn(). Solo se conserva el generador de nombres.
+const { pickBotName } = require('./botLogic');
 
-// Almacén de salas activas: roomId -> DominoGame
+// Almacén de salas activas: roomId -> BaseGame (DominoGame, etc.)
 const rooms = new Map();
 
 // Espectadores por sala: roomId -> Set<socketId>
@@ -11,10 +14,18 @@ const spectators = new Map();
 const turnTimers = new Map();   // reloj de turno
 const effectTimers = new Map(); // caducidad de efectos (p. ej. Ojo Soplón)
 const botTimers = new Map();    // "pensar" de los bots antes de jugar
+const roundTimers = new Map();  // auto-avance de round_ended sin humano que pulse "siguiente"
 
 let onlineCount = 0;
 
 const TURN_SECONDS = Math.max(5, Number(process.env.TURN_SECONDS) || 30);
+
+// Tope global de salas simultáneas: cortafuegos anti-DoS por creación masiva.
+// Con 512 MB de RAM en Render, unos pocos miles de salas ya es mucho.
+const MAX_ROOMS = Math.max(50, Number(process.env.MAX_ROOMS) || 3000);
+function roomsAtCapacity() {
+  return rooms.size >= MAX_ROOMS;
+}
 
 function getOnlineCount() {
   return onlineCount;
@@ -56,9 +67,11 @@ function clearRoomTimers(roomId) {
   clearTimeout(turnTimers.get(roomId));
   clearTimeout(effectTimers.get(roomId));
   clearTimeout(botTimers.get(roomId));
+  clearTimeout(roundTimers.get(roomId));
   turnTimers.delete(roomId);
   effectTimers.delete(roomId);
   botTimers.delete(roomId);
+  roundTimers.delete(roomId);
 }
 
 function destroyRoom(io, roomId) {
@@ -99,13 +112,15 @@ function broadcastGameState(io, roomId) {
   }
 }
 
-function publicRoomsList() {
+function publicRoomsList(gameTypeFilter = null) {
   const list = [];
   for (const [roomId, game] of rooms.entries()) {
-    if (!game.isPublic || game.status !== 'waiting' || game.players.length >= 4) continue;
+    if (!game.isPublic || game.status !== 'waiting' || game.players.length >= (game.maxPlayers || 4)) continue;
+    if (gameTypeFilter && game.gameType !== gameTypeFilter) continue;
     const host = game.players.find(p => !p.isBot);
     list.push({
       roomId,
+      gameType: game.gameType || 'domino',
       host: host ? host.name : '—',
       players: game.players.length,
       bots: game.players.filter(p => p.isBot).length,
@@ -120,12 +135,14 @@ function publicRoomsList() {
   return list.sort((a, b) => b.players - a.players);
 }
 
-function spectatableRoomsList() {
+function spectatableRoomsList(gameTypeFilter = null) {
   const list = [];
   for (const [roomId, game] of rooms.entries()) {
     if (!game.isPublic || game.status !== 'playing') continue;
+    if (gameTypeFilter && game.gameType !== gameTypeFilter) continue;
     list.push({
       roomId,
+      gameType: game.gameType || 'domino',
       players: game.players.map(p => p.name),
       spectators: spectatorCount(roomId),
       maxPip: game.maxPip,
@@ -176,8 +193,14 @@ function armTurnTimer(io, roomId) {
     const current = rooms.get(roomId);
     if (!current || current.status !== 'playing') return;
 
+    // forceTurn debe devolver el contrato de BaseGame { action, playerName, drew }.
+    // Se tolera un retorno pobre (juego mal implementado) sin narrar basura.
     const result = current.forceTurn();
-    if (result.action === 'none') return;
+    if (!result || !result.action || result.action === 'none') {
+      advanceRoom(io, roomId);
+      broadcastGameState(io, roomId);
+      return;
+    }
 
     const drew = result.drew > 0 ? result.drew : 0;
     const key = result.action === 'played'
@@ -205,14 +228,21 @@ function scheduleEffectExpiry(io, roomId, ms) {
   }, ms + 250));
 }
 
+// Programa el turno del bot DELEGANDO en el propio juego (game.playBotTurn).
+// El orquestador ya no conoce la IA de dominó ni el nombre del índice de turno:
+// así un juego con otra API (tres en raya usa `currentPlayerIdx` y mueve sus
+// propios bots) no revienta con un TypeError.
 function scheduleBotTurn(io, roomId) {
   const game = rooms.get(roomId);
   clearTimeout(botTimers.get(roomId));
   botTimers.delete(roomId);
 
   if (!game || game.status !== 'playing') return;
+  // Juegos que pilotan sus propios bots (p. ej. TicTacToe) se autogestionan.
+  if (typeof game.handlesOwnBots === 'function' && game.handlesOwnBots()) return;
+  if (typeof game.playBotTurn !== 'function') return;
 
-  const current = game.players[game.currentPlayerIndex];
+  const current = typeof game.getCurrentPlayer === 'function' ? game.getCurrentPlayer() : null;
   if (!current || !current.isBot) return;
 
   const thinkMs = 700 + Math.floor(Math.random() * 900);
@@ -222,43 +252,68 @@ function scheduleBotTurn(io, roomId) {
     const g = rooms.get(roomId);
     if (!g || g.status !== 'playing') return;
 
-    const bot = g.players[g.currentPlayerIndex];
+    const bot = g.getCurrentPlayer();
     if (!bot || !bot.isBot) return;
 
-    // 1. Un poder sin objetivo, de vez en cuando.
-    const powerId = choosePower(g, bot.id);
-    if (powerId) {
-      const used = g.usePowerCard(bot.id, powerId, null, null);
-      if (used.success) {
-        io.to(roomId).emit('play_sound', { type: 'power' });
-        io.to(roomId).emit('receive_quick_message', {
-          playerName: 'SISTEMA',
-          key: 'srv.sys.botUsedPower',
-          params: { name: bot.name },
-          type: 'phrase'
-        });
-      }
+    let result;
+    try {
+      result = g.playBotTurn(bot.id);
+    } catch (e) {
+      // Un fallo de la IA no debe tumbar el proceso (corre dentro de un timer).
+      console.warn(`[bot] Error jugando el turno en ${roomId}:`, e.message);
+      return;
     }
 
-    // 2. Su jugada.
-    const move = chooseMove(g, bot.id);
-    if (move) {
-      const played = g.playTile(bot.id, move.tileIndex, move.side);
-      if (played.success) {
-        const isDouble = g.lastPlay && g.lastPlay.tile && g.lastPlay.tile[0] === g.lastPlay.tile[1];
-        io.to(roomId).emit('play_sound', { type: isDouble ? 'double_place' : 'place', tile: g.lastPlay.tile });
-      } else {
-        g.forceTurn();
-      }
-    } else {
-      const result = g.forceTurn();
-      const isDouble = g.lastPlay && g.lastPlay.tile && g.lastPlay.tile[0] === g.lastPlay.tile[1];
-      io.to(roomId).emit('play_sound', { type: result.action === 'played' ? (isDouble ? 'double_place' : 'place') : 'pass' });
+    if (result && result.usedPower) {
+      io.to(roomId).emit('play_sound', { type: 'power' });
+      io.to(roomId).emit('receive_quick_message', {
+        playerName: 'SISTEMA',
+        key: 'srv.sys.botUsedPower',
+        params: { name: bot.name },
+        type: 'phrase'
+      });
+    }
+
+    if (result && result.action !== 'none') {
+      const tile = result.tile;
+      const isDouble = Array.isArray(tile) && tile[0] === tile[1];
+      io.to(roomId).emit('play_sound', {
+        type: result.action === 'played' ? (isDouble ? 'double_place' : 'place') : 'pass',
+        tile: tile || undefined
+      });
     }
 
     advanceRoom(io, roomId);
     broadcastGameState(io, roomId);
   }, thinkMs));
+}
+
+// Auto-avanza de 'round_ended' a la siguiente ronda cuando NO hay ningún humano
+// conectado que pueda pulsar "siguiente ronda": partidas de torneo/ranked (donde
+// el rival es un bot o el humano se desconectó) o salas con todos desconectados.
+// Sin esto, una ronda de torneo terminada se queda congelada para siempre y con
+// ella el cuadro entero (onMatchEnd no llega a dispararse). En salas casuales con
+// al menos un humano conectado se respeta el botón manual y no se programa nada.
+function scheduleRoundAdvance(io, roomId) {
+  const game = rooms.get(roomId);
+  clearTimeout(roundTimers.get(roomId));
+  roundTimers.delete(roomId);
+
+  if (!game || game.status !== 'round_ended') return;
+
+  const hasConnectedHuman = game.players.some(p => !p.isBot && p.socketId);
+  const mustAutoAdvance = game.tournamentId || game.ranked || !hasConnectedHuman;
+  if (!mustAutoAdvance) return;
+
+  roundTimers.set(roomId, setTimeout(() => {
+    roundTimers.delete(roomId);
+    const g = rooms.get(roomId);
+    if (!g || g.status !== 'round_ended') return;
+    g.startNewRound();
+    io.to(roomId).emit('play_sound', { type: 'shuffle' });
+    advanceRoom(io, roomId);
+    broadcastGameState(io, roomId);
+  }, 3500));
 }
 
 const { recordMatchEnd } = require('./db');
@@ -305,9 +360,11 @@ function advanceRoom(io, roomId) {
 
   armTurnTimer(io, roomId);
   scheduleBotTurn(io, roomId);
+  scheduleRoundAdvance(io, roomId);
 }
 
 function createRoomFor(io, socket, name, playerId, opts = {}) {
+  const gameType = opts.gameType || 'domino';
   const safeMaxPip = opts.maxPip === 9 ? 9 : 6;
   const safePowers = opts.powersEnabled !== false;
   const safeTeams = opts.teamsEnabled === true;
@@ -318,21 +375,36 @@ function createRoomFor(io, socket, name, playerId, opts = {}) {
   const safeOnePerTurn = opts.onePowerPerTurn === true;
   const safeBlitz = opts.isBlitzMode === true;
   const safeRanked = opts.ranked === true;
-  // Clasificatoria = sin poderes (habilidad pura). Los poderes se desactivan.
   const effectivePowers = safeRanked ? false : safePowers;
 
   const roomId = generateRoomId();
-  const game = new DominoGame(roomId, safeScore, {
-    powersEnabled: effectivePowers,
-    maxPip: safeMaxPip,
-    teamsEnabled: safeTeams,
-    drawEnabled: safeDraw,
-    isPublic: safePublic,
-    powerIntensity: safeIntensity,
-    onePowerPerTurn: safeOnePerTurn,
-    isBlitzMode: safeBlitz,
-    ranked: safeRanked
-  });
+  let game;
+  try {
+    game = GameRegistry.createGameInstance(gameType, roomId, {
+      maxScore: safeScore,
+      powersEnabled: effectivePowers,
+      maxPip: safeMaxPip,
+      teamsEnabled: safeTeams,
+      drawEnabled: safeDraw,
+      isPublic: safePublic,
+      powerIntensity: safeIntensity,
+      onePowerPerTurn: safeOnePerTurn,
+      isBlitzMode: safeBlitz,
+      ranked: safeRanked
+    });
+  } catch (e) {
+    game = new DominoGame(roomId, safeScore, {
+      powersEnabled: effectivePowers,
+      maxPip: safeMaxPip,
+      teamsEnabled: safeTeams,
+      drawEnabled: safeDraw,
+      isPublic: safePublic,
+      powerIntensity: safeIntensity,
+      onePowerPerTurn: safeOnePerTurn,
+      isBlitzMode: safeBlitz,
+      ranked: safeRanked
+    });
+  }
   game.turnDurationMs = TURN_SECONDS * 1000;
 
   const actualPlayerId = playerId || `p_${Math.random().toString(36).substring(2, 9)}`;
@@ -408,6 +480,7 @@ function findMe(socketId) {
 module.exports = {
   rooms,
   spectators,
+  roomsAtCapacity,
   getOnlineCount,
   incOnlineCount,
   decOnlineCount,

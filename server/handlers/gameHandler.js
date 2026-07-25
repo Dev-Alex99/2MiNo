@@ -20,6 +20,7 @@ const {
   usePowerCardSchema,
   roomOnlySchema,
   sendQuickMessageSchema,
+  sendEmoteSchema,
   validate
 } = require('../schemas');
 
@@ -260,13 +261,14 @@ function registerGameHandlers(io, socket) {
 
   // 10. Emoticonos animados sobre jugadores
   socket.on('send_emote', (data) => {
-    if (!data || !data.roomId || !data.playerId || !data.emoji) return;
-    const { roomId, playerId, emoji, targetPlayerId } = data;
+    const v = validate(sendEmoteSchema, data);
+    if (!v.success) return;
+    const { roomId, playerId, emoji, targetPlayerId } = v.data;
     const game = rooms.get(roomId);
     if (!game) return;
 
     const sender = game.players.find(p => p.id === playerId);
-    if (!sender) return;
+    if (!sender || sender.socketId !== socket.id) return; // no suplantar el emisor
 
     io.to(roomId).emit('player_emote', {
       senderId: playerId,
@@ -274,6 +276,34 @@ function registerGameHandlers(io, socket) {
       emoji,
       targetId: targetPlayerId || null
     });
+  });
+
+  // --- MOTOR MULTIJUEGOS: ACCIONES GENÉRICAS (game_action & start_game) ---
+  socket.on('game_action', (data) => {
+    if (!data || !data.actionType) return;
+    const ctx = findMe(socket.id);
+    if (!ctx || !ctx.game) return;
+
+    const { game, roomId, player } = ctx;
+    const result = game.handleAction(player.id, data.actionType, data.payload || {});
+    if (result.success) {
+      advanceRoom(io, roomId);
+      broadcastGameState(io, roomId);
+    } else if (result.error) {
+      socket.emit('error_msg', { key: result.error });
+    }
+  });
+
+  socket.on('start_game', () => {
+    const ctx = findMe(socket.id);
+    if (!ctx || !ctx.game) return;
+
+    const { game, roomId } = ctx;
+    if (game.status === 'game_ended' || game.status === 'waiting') {
+      game.startNewGame();
+      advanceRoom(io, roomId);
+      broadcastGameState(io, roomId);
+    }
   });
 }
 

@@ -7,6 +7,13 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
+const {
+  corsOptions,
+  securityHeaders,
+  httpRateLimit,
+  installSocketRateLimit,
+  allowedOrigins
+} = require('./security');
 
 const {
   rooms,
@@ -24,9 +31,16 @@ const {
 const registerRoomHandlers = require('./handlers/roomHandler');
 const registerGameHandlers = require('./handlers/gameHandler');
 const { registerVoiceHandlers, leaveVoice } = require('./handlers/voiceHandler');
+const identity = require('./identity');
+require('./games/TicTacToeGame');
 
 const app = express();
-app.use(cors());
+app.set('trust proxy', 1); // detrás de Render/Vercel: usar X-Forwarded-For para el rate-limit por IP
+app.use(securityHeaders);
+app.use(cors(corsOptions));
+
+const origins = allowedOrigins();
+console.log(`[seguridad] CORS: ${origins ? origins.join(', ') : 'ABIERTO (*) — define CLIENT_ORIGINS en producción'}`);
 
 // Configuración ICE para el chat de voz
 let cfIceCache = null;
@@ -60,7 +74,9 @@ async function getCloudflareIceServers() {
   }
 }
 
-app.get('/ice-config', async (req, res) => {
+// /ice-config golpea la API de Cloudflare TURN: limitar por IP para que no se
+// use como amplificador ni agote la cuota.
+app.get('/ice-config', httpRateLimit({ windowMs: 60000, max: 30 }), async (req, res) => {
   const iceServers = [
     { urls: [
       'stun:stun.l.google.com:19302',
@@ -112,10 +128,7 @@ app.get('/health', (req, res) => {
 
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: {
-    origin: '*',
-    methods: ['GET', 'POST']
-  },
+  cors: corsOptions,
   perMessageDeflate: false,
   maxHttpBufferSize: 1e5
 });
@@ -124,6 +137,24 @@ io.on('connection', (socket) => {
   console.log(`Nuevo cliente conectado: ${socket.id}`);
   incOnlineCount();
   broadcastStats(io);
+
+  // Rate-limit por socket: corta el spam de eventos (crear salas, chat, señales)
+  // antes de que lleguen a los handlers. Debe instalarse ANTES de registrarlos.
+  installSocketRateLimit(socket);
+
+  // Handshake de sesión: el cliente presenta su { playerId, token }. Si el token
+  // es válido, el socket queda autenticado; si no trae token (o es la primera
+  // vez), se le emite uno para que lo guarde y lo reenvíe la próxima vez. En
+  // ambos casos la identidad del socket queda VINCULADA (no suplantable dentro
+  // de la conexión).
+  socket.on('hello', ({ playerId, token } = {}) => {
+    if (!playerId) return;
+    const authed = identity.verify(playerId, token);
+    identity.bind(socket, playerId);
+    socket.data.authed = authed;
+    const outToken = authed ? token : identity.issueToken(socket.data.playerId);
+    socket.emit('session', { playerId: socket.data.playerId, token: outToken, authed });
+  });
 
   // Registrar manejadores modularizados
   const { leaveVoice: leaveVoiceSelf } = registerVoiceHandlers(io, socket);

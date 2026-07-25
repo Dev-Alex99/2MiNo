@@ -35,7 +35,13 @@ export default function Chat({ roomId, playerId }) {
     <div className="chat-fab-container">
       
       {/* Botón flotante para abrir el menú de chat */}
-      <button onClick={() => setIsOpen(!isOpen)} className="chat-fab">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="chat-fab"
+        aria-label={t('chat.open')}
+        aria-expanded={isOpen}
+        title={t('chat.open')}
+      >
         <MessageSquare size={20} />
       </button>
 

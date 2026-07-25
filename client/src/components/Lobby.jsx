@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
-import { Play, Plus, ArrowRight, User, Zap, Layers, Settings2, Users, Download, Medal, ChevronDown, Zap as Bolt, Globe, Lock, Eye, Palette, Trophy, ShoppingBag, Swords } from 'lucide-react';
+import { Play, Plus, ArrowRight, User, Zap, Layers, Settings2, Users, Download, Medal, ChevronDown, Zap as Bolt, Globe, Lock, Eye, Palette, Trophy, ShoppingBag, Swords, Home } from 'lucide-react';
 import { socket } from '../socket';
 import RoomList from './RoomList';
 import LiveGames from './LiveGames';
 import LanguageSwitcher from './LanguageSwitcher';
 import { useT } from '../i18n/LanguageContext';
+import { useHubStore } from '../hub/stores/useHubStore';
 
 export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuickPlay, publicRooms = [], roomsLoading, stats, invitedCode = '', onOpenProfile, onOpenLeaderboard, onOpenStore, onOpenTournament, onFindRanked, onOpenFriends, liveGames = [], onSpectate }) {
   const { t } = useT();
+  const returnToHub = useHubStore(state => state.returnToHub);
   const VARIANT_INFO = {
     6: { label: t('opt.double', { n: 6 }), desc: t('opt.d6desc') },
     9: { label: t('opt.double', { n: 9 }), desc: t('opt.d9desc') }
@@ -86,6 +88,22 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
 
       {/* Perfil + selector de idioma, esquina superior */}
       <div className="lobby-topbar">
+        <button
+          type="button"
+          className="lobby-profile-btn"
+          onClick={returnToHub}
+          title="Volver al Hub Principal"
+          style={{
+            background: 'rgba(99, 102, 241, 0.25)',
+            border: '1px solid rgba(129, 140, 248, 0.6)',
+            color: '#a5b4fc',
+            fontWeight: 'bold'
+          }}
+        >
+          <Home size={16} />
+          <span className="lobby-btn-label">Hub</span>
+        </button>
+
         <button
           type="button"
           className="lobby-profile-btn store-btn-highlight"

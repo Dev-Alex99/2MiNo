@@ -1,3 +1,27 @@
+const BaseGame = require('./core/BaseGame');
+const GameRegistry = require('./core/GameRegistry');
+
+// Estado inicial de los efectos de poderes. FUENTE ÚNICA: antes se inicializaba
+// por triplicado (constructor, resetGame y startNewRound) y las copias habían
+// divergido —resetGame olvidaba spyAll*/curse*, que quedaban `undefined`—.
+function freshActiveEffects() {
+  return {
+    frozenEnd: null, // 'left' | 'right' | 'both' | null
+    frozenEndOwnerId: null,
+    doubleTurnActive: false,
+    reversed: false,
+    spyEyeTargetId: null,
+    spyEyeOwnerId: null,
+    spyEyeEndTime: 0,
+    spyAllOwnerId: null,   // Ojo Total: revela TODAS las manos a este jugador
+    spyAllEndTime: 0,
+    skipNextTurn: false,
+    wildcardActive: false,
+    cursedPlayerId: null,  // Maldición: solo puede jugar en cursedSide su próximo turno
+    cursedSide: null       // 'left' | 'right'
+  };
+}
+
 // Catálogo de poderes. Cada carta lleva:
 //  - type: buff | attack | defense | caos (categoría visual)
 //  - rarity: common | rare | legendary (pondera el mazo y filtra por intensidad)
@@ -49,10 +73,21 @@ const VARIANTS = {
   9: { handSize: 10, defaultMaxScore: 200 }
 };
 
-class DominoGame {
-  // maxScore = null => usa el propio de la variante.
-  // options: { powersEnabled, maxPip: 6|9, teamsEnabled, drawEnabled }
-  constructor(roomId, maxScore = null, options = {}) {
+class DominoGame extends BaseGame {
+  // Acepta tanto (roomId, options) como la firma legada (roomId, maxScore, options)
+  constructor(roomId, maxScoreOrOptions = null, rawOptions = {}) {
+    let maxScore = null;
+    let options = {};
+    if (typeof maxScoreOrOptions === 'object' && maxScoreOrOptions !== null) {
+      options = maxScoreOrOptions;
+      maxScore = options.maxScore ?? null;
+    } else {
+      maxScore = maxScoreOrOptions;
+      options = rawOptions || {};
+    }
+
+    super('domino', roomId, { ...options, maxScore });
+
     const {
       powersEnabled = true, maxPip = 6, teamsEnabled = false, drawEnabled = true,
       isPublic = true, powerIntensity = 'normal', onePowerPerTurn = false, isBlitzMode = false,
@@ -118,22 +153,7 @@ class DominoGame {
 
     // Estados activos para cartas de poderes
     this.powerDeck = [];
-    this.activeEffects = {
-      frozenEnd: null, // 'left' | 'right' | 'both' | null
-      frozenEndOwnerId: null,
-      doubleTurnActive: false,
-      reversed: false,
-      spyEyeTargetId: null,
-      spyEyeOwnerId: null,
-      spyEyeEndTime: 0,
-      spyAllOwnerId: null,   // Ojo Total: revela TODAS las manos a este jugador
-      spyAllEndTime: 0,
-      skipNextTurn: false,
-      wildcardActive: false,
-      cursedPlayerId: null,  // Maldición: solo puede jugar en cursedSide su próximo turno
-      cursedSide: null,      // 'left' | 'right'
-      curseServed: false
-    };
+    this.activeEffects = freshActiveEffects();
   }
 
   addPlayer(id, name, socketId) {
@@ -295,17 +315,7 @@ class DominoGame {
       p.powers = [];
       p.shieldActive = false;
     });
-    this.activeEffects = {
-      frozenEnd: null,
-      frozenEndOwnerId: null,
-      doubleTurnActive: false,
-      reversed: false,
-      spyEyeTargetId: null,
-      spyEyeOwnerId: null,
-      spyEyeEndTime: 0,
-      skipNextTurn: false,
-      wildcardActive: false
-    };
+    this.activeEffects = freshActiveEffects();
     this.status = 'waiting';
   }
 
@@ -314,6 +324,10 @@ class DominoGame {
     this.teamScores = [0, 0];
     this.gameWinnerTeam = null;
     this.roundWinnerTeam = null;
+    // Sin esto, tras un `play_again` el estado seguía difundiendo el ganador de
+    // la partida anterior (banner de victoria fantasma en el cliente).
+    this.gameWinner = null;
+    this.roundWinner = null;
     this.roundNumber = 0;
     this.assignTeams();
     this.startNewRound();
@@ -327,27 +341,15 @@ class DominoGame {
     this.lastPlacedBy = null;
     this.passedTurns = 0;
     this.roundWinner = null;
+    // El ganador de equipo de la ronda anterior debe limpiarse aquí; si no, se
+    // difunde durante toda la ronda nueva.
+    this.roundWinnerTeam = null;
     this.playerPassedOn = {};
     this.status = 'playing';
     this.powerUsedThisTurn = false;
 
     // Inicializar efectos activos de poderes
-    this.activeEffects = {
-      frozenEnd: null,
-      frozenEndOwnerId: null,
-      doubleTurnActive: false,
-      reversed: false,
-      spyEyeTargetId: null,
-      spyEyeOwnerId: null,
-      spyEyeEndTime: 0,
-      spyAllOwnerId: null,
-      spyAllEndTime: 0,
-      skipNextTurn: false,
-      wildcardActive: false,
-      cursedPlayerId: null,
-      cursedSide: null,
-      curseServed: false
-    };
+    this.activeEffects = freshActiveEffects();
 
     // Generar mazo de cartas de poderes según intensidad y rareza. En modo
     // clásico no se usa. Los comunes salen más (x3) y los legendarios menos (x1).
@@ -474,8 +476,11 @@ class DominoGame {
     return { leftBlocked, rightBlocked };
   }
 
-  // Verifica si un jugador tiene movimientos válidos
-  hasValidMove(playerId) {
+  // Verifica si un jugador tiene movimientos válidos.
+  // `ignoreBlocks`: ignora los bloqueos TEMPORALES de poderes (extremo congelado
+  // y maldición) para responder «¿podría jugar si no fuera por el efecto?».
+  // Se usa para no confundir un bloqueo pasajero con una tranca real.
+  hasValidMove(playerId, { ignoreBlocks = false } = {}) {
     const player = this.players.find(p => p.id === playerId);
     if (!player) return false;
 
@@ -487,7 +492,9 @@ class DominoGame {
     const left = this.getLeftEnd();
     const right = this.getRightEnd();
 
-    const { leftBlocked, rightBlocked } = this.endsBlockedFor(playerId);
+    const { leftBlocked, rightBlocked } = ignoreBlocks
+      ? { leftBlocked: false, rightBlocked: false }
+      : this.endsBlockedFor(playerId);
 
     return player.hand.some(tile => {
       const matchesLeft = tile[0] === left || tile[1] === left;
@@ -498,6 +505,15 @@ class DominoGame {
 
       return canPlayL || canPlayR;
     });
+  }
+
+  // ¿Este jugador pasa SOLO por culpa de un efecto temporal (Congelar Extremo,
+  // Bloqueo Total o Maldición)? Es decir: no puede jugar ahora, pero sí podría
+  // si el efecto no estuviera activo. Un pase así NO es señal de tranca: el
+  // tablero sigue vivo y el efecto caduca en breve.
+  passForcedByEffectsOnly(playerId) {
+    if (this.hasValidMove(playerId)) return false;            // sí puede jugar → no está pasando
+    return this.hasValidMove(playerId, { ignoreBlocks: true }); // podría, si no fuera por el efecto
   }
 
   // Devuelve TODAS las jugadas legales de un jugador: [{ tileIndex, side }, ...]
@@ -726,9 +742,15 @@ class DominoGame {
 
     this.addMoveLog(player.name, 'pass', 'Pasó turno');
 
+    // ¿Pasa por tener la mano muerta, o solo porque un poder le cerró el extremo?
+    const byEffect = this.passForcedByEffectsOnly(playerId);
+
     // Un pase es información pública: revela que ese jugador no tiene NINGUNO
     // de los dos extremos. Lo guardamos para que los bots difíciles bloqueen.
-    if (this.board.length > 0) {
+    // OJO: si el pase fue por un extremo congelado o una maldición, NO revela
+    // nada (puede tener la ficha y no poder soltarla); registrarlo alimentaría
+    // a los bots con información falsa.
+    if (this.board.length > 0 && !byEffect) {
       const seen = this.playerPassedOn[playerId] || [];
       [this.getLeftEnd(), this.getRightEnd()].forEach(v => {
         if (!seen.includes(v)) seen.push(v);
@@ -736,7 +758,9 @@ class DominoGame {
       this.playerPassedOn[playerId] = seen;
     }
 
-    this.passedTurns++;
+    // Un pase provocado por un efecto temporal NO cuenta para declarar tranca:
+    // el tablero no está cerrado, solo está bloqueado un instante.
+    if (!byEffect) this.passedTurns++;
     this.lastPlay = { playerId, tile: null, side: 'pass' };
 
     this.checkRoundEnd();
@@ -803,10 +827,21 @@ class DominoGame {
       return;
     }
 
-    // 2. Bloqueo (Trancado): Nadie tiene jugadas y el pozo está vacío
-    // Esto ocurre cuando todos los jugadores han pasado consecutivamente (igual al número de jugadores)
+    // 2. Bloqueo (Trancado): todos han pasado consecutivamente.
+    // El contador por sí solo no basta: se confirma que el tablero está
+    // REALMENTE cerrado, ignorando los bloqueos temporales de poderes. Así una
+    // ronda no se cierra por pases que provocó un Congelar Extremo o una
+    // Maldición mientras alguien todavía tenía jugada legal.
     if (this.passedTurns >= this.players.length) {
-      this.endRound(null, true);
+      const alguienPuedeJugar = this.players.some(p =>
+        p.hand.length > 0 && this.hasValidMove(p.id, { ignoreBlocks: true })
+      );
+      if (!alguienPuedeJugar) {
+        this.endRound(null, true);
+      } else {
+        // Falsa alarma: reiniciar el contador y dejar que la ronda continúe.
+        this.passedTurns = 0;
+      }
     }
   }
 
@@ -1169,6 +1204,20 @@ class DominoGame {
     // Quitar la carta usada de la mano del jugador
     player.powers.splice(cardIdx, 1);
     this.powerUsedThisTurn = true;
+
+    // Revalidar el fin de ronda: los poderes que mueven fichas entre manos,
+    // pozo o tablero pueden dejar a alguien con la mano vacía (p. ej. regalar
+    // tu última ficha con Contrabando) o desbloquear/bloquear la partida. Sin
+    // esta comprobación el estado quedaba terminal pero sin resolver.
+    const MUTATES_HANDS = new Set([
+      'smuggle', 'mind_swap', 'tile_demolition', 'boneyard_reset',
+      'trade', 'destiny_steal', 'russian_roulette', 'storm',
+      'second_wind', 'magnetic_pull', 'draw_penalty'
+    ]);
+    if (MUTATES_HANDS.has(cardId) && this.status === 'playing') {
+      this.checkRoundEnd();
+    }
+
     return { success: true };
   }
 
@@ -1288,10 +1337,75 @@ class DominoGame {
       }))
     };
   }
+
+  /**
+   * Implementación de handleAction del contrato BaseGame
+   */
+  handleAction(playerId, actionType, payload = {}) {
+    switch (actionType) {
+      case 'play_tile':
+        return this.playTile(playerId, payload.tileIndex, payload.side);
+      case 'draw_tile':
+        return this.drawTile(playerId);
+      case 'pass_turn':
+        return this.passTurn(playerId);
+      case 'use_power_card':
+        return this.usePowerCard(playerId, payload.powerId, payload.targetPlayerId, payload.targetTileIndex);
+      default:
+        return { success: false, error: 'Acción no soportada en Dominó' };
+    }
+  }
+
+  // ─── Contrato de BaseGame para el orquestador (roomManager) ───
+
+  // Dominó indexa el turno con `currentPlayerIndex`; el orquestador no debe
+  // conocer ese detalle (otros juegos usan otro campo).
+  getCurrentPlayer() {
+    return this.players[this.currentPlayerIndex] || null;
+  }
+
+  // Juega el turno de un bot: primero un poder (si toca) y luego su jugada.
+  // La IA vive en botLogic, pero se invoca DESDE el juego para que el
+  // orquestador no dependa de la IA específica de dominó.
+  playBotTurn(botId) {
+    // require perezoso: botLogic requiere este módulo (dependencia circular).
+    const { chooseMove, choosePower } = require('./botLogic');
+    const result = { action: 'none', usedPower: false, tile: null };
+
+    const powerId = choosePower(this, botId);
+    if (powerId) {
+      const used = this.usePowerCard(botId, powerId, null, null);
+      if (used.success) result.usedPower = true;
+    }
+
+    const move = chooseMove(this, botId);
+    if (move) {
+      const played = this.playTile(botId, move.tileIndex, move.side);
+      if (played.success) {
+        result.action = 'played';
+        result.tile = this.lastPlay ? this.lastPlay.tile : null;
+        return result;
+      }
+    }
+
+    // Sin jugada válida (o falló): resolver por el camino normal del timeout.
+    const forced = this.forceTurn();
+    result.action = forced && forced.action ? forced.action : 'none';
+    result.tile = this.lastPlay ? this.lastPlay.tile : null;
+    return result;
+  }
 }
+
+GameRegistry.register('domino', DominoGame, {
+  name: 'Dominó Online',
+  minPlayers: 2,
+  maxPlayers: 4,
+  description: 'Dominó multijugador clásico y con cartas de poder (Doble 6 y Doble 9).'
+});
 
 module.exports = DominoGame;
 // Metadatos exportados para tests y para el cliente/servidor si los necesitan.
 module.exports.POWER_CATALOG = POWER_CATALOG;
 module.exports.INTENSITY_RARITIES = INTENSITY_RARITIES;
 module.exports.RARITY_COPIES = RARITY_COPIES;
+

@@ -7,7 +7,8 @@ const {
   destroyRoom,
   advanceRoom,
   findMe,
-  pickBotName
+  pickBotName,
+  roomsAtCapacity
 } = require('../roomManager');
 
 const {
@@ -40,30 +41,44 @@ const {
 const tournamentManager = require('../tournamentManager');
 const matchmaking = require('../matchmaking');
 const presence = require('../presence');
+const identity = require('../identity');
 const { pushFriendsList, notifyFriendsOfPresence } = require('../friendService');
 
 function registerRoomHandlers(io, socket, leaveVoiceFn) {
+  // Identidad autoritativa del socket: vincula al primer uso y devuelve el id
+  // vinculado. Devuelve null si el socket ya estaba vinculado a OTRA identidad
+  // (intento de operar como otro jugador dentro de la misma conexión) → el
+  // llamador debe abortar. Toda la capa social/económica usa ESTE id, nunca el
+  // que venga en el payload.
+  const authId = (claimedId) => {
+    const r = identity.bind(socket, claimedId);
+    return r.conflict ? null : r.id;
+  };
+
   // Emparejamiento clasificatorio (cola 1v1 por ELO)
   socket.on('join_queue', ({ playerId, name } = {}) => {
-    if (!playerId) return;
-    matchmaking.joinQueue(io, socket, { id: playerId, name: String(name || 'Jugador').trim().slice(0, 20) });
+    const pid = authId(playerId);
+    if (!pid) return;
+    matchmaking.joinQueue(io, socket, { id: pid, name: String(name || 'Jugador').trim().slice(0, 20) });
   });
   socket.on('leave_queue', () => matchmaking.leaveQueue(socket.id));
 
   // ─── Amigos ───
   socket.on('get_friends', async ({ playerId } = {}) => {
-    if (!playerId) return;
-    const { becameOnline } = presence.register(socket.id, playerId);
-    if (becameOnline) notifyFriendsOfPresence(io, playerId);
-    await pushFriendsList(io, playerId);
+    const pid = authId(playerId);
+    if (!pid) return;
+    const { becameOnline } = presence.register(socket.id, pid);
+    if (becameOnline) notifyFriendsOfPresence(io, pid);
+    await pushFriendsList(io, pid);
   });
 
   socket.on('friend_add', async ({ playerId, code } = {}) => {
-    if (!playerId || !code) return;
-    const res = await sendFriendRequest(playerId, code);
+    const pid = authId(playerId);
+    if (!pid || !code) return;
+    const res = await sendFriendRequest(pid, code);
     socket.emit('friend_action', res);
     if (res.success) {
-      await pushFriendsList(io, playerId);
+      await pushFriendsList(io, pid);
       if (res.target && res.target.id) {
         await pushFriendsList(io, res.target.id);
         const set = presence.socketsOf(res.target.id);
@@ -73,22 +88,25 @@ function registerRoomHandlers(io, socket, leaveVoiceFn) {
   });
 
   socket.on('friend_respond', async ({ playerId, otherId, accept } = {}) => {
-    if (!playerId || !otherId) return;
-    const res = await respondFriendRequest(playerId, otherId, !!accept);
-    await pushFriendsList(io, playerId);
+    const pid = authId(playerId);
+    if (!pid || !otherId) return;
+    const res = await respondFriendRequest(pid, otherId, !!accept);
+    await pushFriendsList(io, pid);
     if (res.success && accept) await pushFriendsList(io, otherId);
   });
 
   // Retar a un amigo: crea una sala privada y le envía una invitación.
   socket.on('friend_challenge', ({ playerId, name, friendId } = {}) => {
-    if (!playerId || !friendId) return;
+    const pid = authId(playerId);
+    if (!pid || !friendId) return;
+    if (roomsAtCapacity()) return socket.emit('friend_action', { success: false, error: 'friend.err.generic' });
     const set = presence.socketsOf(friendId);
     if (!set || !set.size) {
       socket.emit('friend_action', { success: false, error: 'friend.err.offline' });
       return;
     }
     const safeName = String(name || 'Jugador').trim().slice(0, 20);
-    const created = createRoomFor(io, socket, safeName, playerId, { isPublic: false, powersEnabled: false });
+    const created = createRoomFor(io, socket, safeName, pid, { isPublic: false, powersEnabled: false });
     getOrCreateUser(created.playerId, safeName);
     socket.emit('room_created', created);
     broadcastGameState(io, created.roomId);
@@ -97,13 +115,15 @@ function registerRoomHandlers(io, socket, leaveVoiceFn) {
 
   // Torneos (individual vs IA)
   socket.on('create_tournament', ({ playerId, name } = {}) => {
-    if (!playerId) return;
-    tournamentManager.createTournament(io, socket, { id: playerId, name: String(name || 'Jugador').trim().slice(0, 20) });
+    const pid = authId(playerId);
+    if (!pid) return;
+    tournamentManager.createTournament(io, socket, { id: pid, name: String(name || 'Jugador').trim().slice(0, 20) });
   });
 
   socket.on('join_tournament', ({ playerId, name, code } = {}) => {
-    if (!playerId || !code) return;
-    tournamentManager.joinTournament(io, socket, code, { id: playerId, name: String(name || 'Jugador').trim().slice(0, 20) });
+    const pid = authId(playerId);
+    if (!pid || !code) return;
+    tournamentManager.joinTournament(io, socket, code, { id: pid, name: String(name || 'Jugador').trim().slice(0, 20) });
   });
 
   socket.on('start_tournament', ({ tournamentId } = {}) => {
@@ -112,8 +132,9 @@ function registerRoomHandlers(io, socket, leaveVoiceFn) {
   });
 
   socket.on('leave_tournament', ({ playerId } = {}) => {
-    if (!playerId) return;
-    tournamentManager.endTournamentFor(playerId);
+    const pid = authId(playerId);
+    if (!pid) return;
+    tournamentManager.endTournamentFor(pid);
   });
 
   // 0. Clasificación Global y Perfil Supabase
@@ -126,14 +147,15 @@ function registerRoomHandlers(io, socket, leaveVoiceFn) {
   });
 
   socket.on('get_profile', async ({ playerId, username } = {}) => {
-    if (!playerId) return;
-    const { becameOnline } = presence.register(socket.id, playerId);
-    if (becameOnline) notifyFriendsOfPresence(io, playerId); // avisar a mis amigos
-    await getOrCreateUser(playerId, username || 'Jugador');
-    const roll = await rollDaily(playerId); // renueva misiones + racha si es día nuevo
-    const profile = await getUserProfile(playerId);
+    const pid = authId(playerId);
+    if (!pid) return;
+    const { becameOnline } = presence.register(socket.id, pid);
+    if (becameOnline) notifyFriendsOfPresence(io, pid); // avisar a mis amigos
+    await getOrCreateUser(pid, username || 'Jugador');
+    const roll = await rollDaily(pid); // renueva misiones + racha si es día nuevo
+    const profile = await getUserProfile(pid);
     if (profile) {
-      profile.daily = await getDailyState(playerId);
+      profile.daily = await getDailyState(pid);
       // La recompensa de login solo se adjunta el primer login del día.
       if (roll && roll.rolled && roll.loginReward && profile.daily) {
         profile.daily.loginReward = roll.loginReward;
@@ -143,15 +165,18 @@ function registerRoomHandlers(io, socket, leaveVoiceFn) {
   });
 
   socket.on('claim_mission', async ({ playerId, missionId } = {}) => {
-    if (!playerId || !missionId) return;
-    const result = await claimMission(playerId, missionId);
+    const pid = authId(playerId);
+    if (!pid || !missionId) return;
+    if (!identity.canMutateEconomy(socket)) return socket.emit('mission_claimed', { success: false, error: 'srv.err.rateLimited' });
+    const result = await claimMission(pid, missionId);
     socket.emit('mission_claimed', result);
   });
 
   // Historial de partidas y repeticiones
   socket.on('get_match_history', async ({ playerId } = {}) => {
-    if (!playerId) return;
-    const history = await getUserMatchHistory(playerId, 12);
+    const pid = authId(playerId);
+    if (!pid) return;
+    const history = await getUserMatchHistory(pid, 12);
     socket.emit('match_history_data', history);
   });
 
@@ -162,9 +187,11 @@ function registerRoomHandlers(io, socket, leaveVoiceFn) {
   });
 
   socket.on('equip_skin', async ({ playerId, category, itemId, username } = {}) => {
-    if (!playerId || !category || !itemId) return;
+    const pid = authId(playerId);
+    if (!pid || !category || !itemId) return;
+    if (!identity.canMutateEconomy(socket)) return socket.emit('skin_equipped', { success: false, error: 'store.errorMsg' });
     // El precio lo decide el servidor (storeCatalog); ignoramos cualquier coste del cliente.
-    const result = await equipItem(playerId, category, itemId, username || 'Jugador');
+    const result = await equipItem(pid, category, itemId, username || 'Jugador');
     socket.emit('skin_equipped', result);
   });
 
@@ -172,6 +199,7 @@ function registerRoomHandlers(io, socket, leaveVoiceFn) {
   socket.on('create_room', (data) => {
     const v = validate(createRoomSchema, data);
     if (!v.success) return socket.emit('error_msg', { key: v.errorKey });
+    if (roomsAtCapacity()) return socket.emit('error_msg', { key: 'srv.err.serverFull' });
 
     const { name, playerId, ...opts } = v.data;
     const created = createRoomFor(io, socket, name, playerId, opts);
@@ -186,8 +214,10 @@ function registerRoomHandlers(io, socket, leaveVoiceFn) {
     const v = validate(quickPlaySchema, data);
     if (!v.success) return socket.emit('error_msg', { key: v.errorKey });
 
-    const { name, playerId } = v.data;
-    const candidate = publicRoomsList()[0];
+    const { name, playerId, gameType = 'domino' } = v.data;
+    const candidate = publicRoomsList().find(r => r.gameType === gameType);
+    // Solo se aplica el tope si no hay sala a la que unirse (habría que crear una).
+    if (!candidate && roomsAtCapacity()) return socket.emit('error_msg', { key: 'srv.err.serverFull' });
 
     if (candidate) {
       const game = rooms.get(candidate.roomId);
@@ -199,16 +229,16 @@ function registerRoomHandlers(io, socket, leaveVoiceFn) {
         socket.emit('room_joined', { roomId: candidate.roomId, playerId: actualPlayerId });
         broadcastGameState(io, candidate.roomId);
         broadcastLobby(io);
-        console.log(`Partida rápida: ${name} -> sala ${candidate.roomId}`);
+        console.log(`Partida rápida (${gameType}): ${name} -> sala ${candidate.roomId}`);
         return;
       }
     }
 
-    const created = createRoomFor(io, socket, name, playerId, { isPublic: true, powersEnabled: false });
+    const created = createRoomFor(io, socket, name, playerId, { gameType, isPublic: true, powersEnabled: false });
     socket.emit('room_created', created);
     broadcastGameState(io, created.roomId);
     broadcastLobby(io);
-    console.log(`Partida rápida: ${name} abrió sala nueva ${created.roomId}`);
+    console.log(`Partida rápida (${gameType}): ${name} abrió sala nueva ${created.roomId}`);
   });
 
   // 2. Unirse a sala

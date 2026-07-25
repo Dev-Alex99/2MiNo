@@ -8,8 +8,8 @@ import useVoiceChat from '../hooks/useVoiceChat';
  */
 const VoiceContext = createContext(null);
 
-export function VoiceProvider({ roomId, playerId, children }) {
-  const voice = useVoiceChat({ roomId, playerId });
+export function VoiceProvider({ roomId, playerId, name, children }) {
+  const voice = useVoiceChat({ roomId, playerId, name });
   return <VoiceContext.Provider value={voice}>{children}</VoiceContext.Provider>;
 }
 

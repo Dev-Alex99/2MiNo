@@ -1,2 +1,31 @@
+# Dependencias
 node_modules/
+
+# Variables de entorno (los .env.example SÍ se versionan)
 .env
+.env.*
+!.env.example
+
+# Artefactos de build (los genera Vite/CI, nunca se versionan)
+dist/
+client/dist/
+
+# Cobertura y logs
+coverage/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Gestor de paquetes: este monorepo usa pnpm. El único lock válido es
+# pnpm-lock.yaml en la RAÍZ. Se ignoran los locks de npm y los locks pnpm
+# anidados (en un workspace el lock es único y vive en la raíz).
+package-lock.json
+client/pnpm-lock.yaml
+server/pnpm-lock.yaml
+client/pnpm-workspace.yaml
+
+# Sistema operativo / editores
+.DS_Store
+Thumbs.db
+.idea/
+*.swp

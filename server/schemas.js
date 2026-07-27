@@ -12,8 +12,10 @@ const createRoomSchema = z.object({
   maxScore: z.number().nullable().optional(),
   powerIntensity: z.enum(['light', 'normal', 'chaos']).optional(),
   onePowerPerTurn: z.boolean().optional(),
-  isBlitzMode: z.boolean().optional(),
-  ranked: z.boolean().optional()
+  isBlitzMode: z.boolean().optional()
+  // `ranked` NO se acepta del cliente: era la vía para saltarse el
+  // emparejamiento y montar partidas clasificatorias a medida (farmeo de ELO
+  // con dos pestañas). Solo `createRankedMatch`, desde la cola, crea ranked.
 });
 
 const quickPlaySchema = z.object({

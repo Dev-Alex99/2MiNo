@@ -33,6 +33,30 @@ function VideoStreamTile({ stream, isLocal = false, label }) {
 
 export default function UnifiedVoiceWidget({ variant = 'floating' }) {
   const voice = useVoice();
+
+  // TODOS los hooks van antes de cualquier return. Este widget se monta en
+  // varios sitios (tablero, sala de espera, tres en raya) y fuera de
+  // <VoiceProvider> el contexto es null: con el early-return por encima de los
+  // hooks, el número de hooks variaba entre renders y React rompe con
+  // "Rendered fewer hooks than expected" en cuanto una instancia entra o sale
+  // del provider.
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [showDevicesModal, setShowDevicesModal] = useState(false);
+  const [onlineFriends, setOnlineFriends] = useState([]);
+  const pid = getOrCreatePersistentPlayerId();
+
+  useEffect(() => {
+    if (!showInviteModal) return undefined;
+    socket.emit('get_friends', { playerId: pid });
+    const onFriendsData = (data) => {
+      if (data && data.friends) {
+        setOnlineFriends(data.friends.filter(f => f.online));
+      }
+    };
+    socket.on('friends_data', onFriendsData);
+    return () => socket.off('friends_data', onFriendsData);
+  }, [showInviteModal, pid]);
+
   if (!voice) return null;
 
   const {
@@ -65,28 +89,11 @@ export default function UnifiedVoiceWidget({ variant = 'floating' }) {
     setVoiceFilter
   } = voice;
 
-  const [showInviteModal, setShowInviteModal] = useState(false);
-  const [showDevicesModal, setShowDevicesModal] = useState(false);
-  const [onlineFriends, setOnlineFriends] = useState([]);
-  const pid = getOrCreatePersistentPlayerId();
   const mutedActive = isMuted || muted;
 
   const memberCount = voicePool?.members ? voicePool.members.length : 0;
   // Consideramos activa la llamada si callState es 'connected' O si el pool tiene 2 o más miembros
   const isCallConnected = callState === 'connected' || (memberCount > 1 && callState !== 'incoming');
-
-  useEffect(() => {
-    if (showInviteModal) {
-      socket.emit('get_friends', { playerId: pid });
-      function onFriendsData(data) {
-        if (data && data.friends) {
-          setOnlineFriends(data.friends.filter(f => f.online));
-        }
-      }
-      socket.on('friends_data', onFriendsData);
-      return () => socket.off('friends_data', onFriendsData);
-    }
-  }, [showInviteModal, pid]);
 
   // 1. Modal de Llamada Entrante (Ringing)
   if (callState === 'incoming' && incomingCall) {

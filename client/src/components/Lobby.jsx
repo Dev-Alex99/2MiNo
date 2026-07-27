@@ -29,7 +29,6 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
   const [isPublic, setIsPublic] = useState(true);
   const [isBlitzMode, setIsBlitzMode] = useState(false);
   // Clasificatoria: afecta al ELO y fuerza modo clásico (excluyente con poderes).
-  const [ranked, setRanked] = useState(false);
 
   const requireName = () => {
     if (!name.trim()) { setError(t('lobby.nameRequired')); return false; }
@@ -63,7 +62,7 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
       return;
     }
     setError('');
-    onCreateRoom({ powersEnabled, maxPip, teamsEnabled, drawEnabled, maxScore, isPublic, powerIntensity, onePowerPerTurn, isBlitzMode, ranked });
+    onCreateRoom({ powersEnabled, maxPip, teamsEnabled, drawEnabled, maxScore, isPublic, powerIntensity, onePowerPerTurn, isBlitzMode });
   };
 
   const handleJoin = (e) => {
@@ -308,39 +307,16 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
               ))}
             </div>
 
-            {/* Partida clasificatoria (afecta al ELO) */}
-            <button
-              type="button"
-              onClick={() => setRanked((v) => {
-                const next = !v;
-                if (next) setPowersEnabled(false); // clasificatoria = sin poderes
-                return next;
-              })}
-              aria-pressed={ranked}
-              className={`option-toggle ranked ${ranked ? 'on' : ''}`}
-            >
-              <span className="option-toggle-text">
-                <span className="option-toggle-title">
-                  <Trophy size={14} style={{ color: '#f59e0b' }} />
-                  {t('opt.ranked')}
-                </span>
-                <span className="option-toggle-desc">
-                  {t('opt.ranked_desc')}
-                </span>
-              </span>
-              <span className="switch" aria-hidden="true">
-                <span className="switch-knob" />
-              </span>
-            </button>
+            {/* Antes había aquí un interruptor "Clasificatoria". Se retiró: una
+                sala creada a mano ya no puede afectar al ELO (permitía montar
+                partidas clasificatorias a medida y farmear con dos pestañas).
+                La vía clasificatoria es el botón de emparejamiento de arriba,
+                que empareja por ELO contra un rival de nivel similar. */}
 
             {/* Cartas de poder on/off */}
             <button
               type="button"
-              onClick={() => setPowersEnabled((v) => {
-                const next = !v;
-                if (next) setRanked(false); // activar poderes desactiva clasificatoria
-                return next;
-              })}
+              onClick={() => setPowersEnabled((v) => !v)}
               aria-pressed={powersEnabled}
               className={`option-toggle ${powersEnabled ? 'on' : ''}`}
             >

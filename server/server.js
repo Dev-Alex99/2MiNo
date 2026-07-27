@@ -34,6 +34,22 @@ const { registerVoiceHandlers, leaveVoice } = require('./handlers/voiceHandler')
 const identity = require('./identity');
 require('./games/TicTacToeGame');
 
+// Red de seguridad del proceso. Socket.IO NO captura las excepciones de sus
+// manejadores: una sola línea que lance en cualquiera de los ~53 eventos (o en
+// un timer de sala) llega hasta aquí. Sin estas guardas, Node mata el proceso y
+// se caen TODAS las partidas, torneos y llamadas de voz en curso — un cliente
+// anónimo podía provocarlo con un único evento.
+//
+// Se registra y se sigue sirviendo: el estado de una sala puede quedar raro,
+// pero tirar a todos los jugadores del servidor es estrictamente peor. Los
+// fallos quedan en el log para poder corregir la causa.
+process.on('uncaughtException', (err) => {
+  console.error('[fatal] Excepción no capturada (el servidor sigue en pie):', err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[fatal] Promesa rechazada sin manejar (el servidor sigue en pie):', reason);
+});
+
 const app = express();
 app.set('trust proxy', 1); // detrás de Render/Vercel: usar X-Forwarded-For para el rate-limit por IP
 app.use(securityHeaders);
@@ -142,18 +158,21 @@ io.on('connection', (socket) => {
   // antes de que lleguen a los handlers. Debe instalarse ANTES de registrarlos.
   installSocketRateLimit(socket);
 
-  // Handshake de sesión: el cliente presenta su { playerId, token }. Si el token
-  // es válido, el socket queda autenticado; si no trae token (o es la primera
-  // vez), se le emite uno para que lo guarde y lo reenvíe la próxima vez. En
-  // ambos casos la identidad del socket queda VINCULADA (no suplantable dentro
-  // de la conexión).
-  socket.on('hello', ({ playerId, token } = {}) => {
-    if (!playerId) return;
-    const authed = identity.verify(playerId, token);
-    identity.bind(socket, playerId);
-    socket.data.authed = authed;
-    const outToken = authed ? token : identity.issueToken(socket.data.playerId);
-    socket.emit('session', { playerId: socket.data.playerId, token: outToken, authed });
+  // Handshake de sesión: el cliente presenta su { playerId, token }.
+  //  · Identidad libre  → la reclama y recibe su token.
+  //  · Ya reclamada     → solo se vincula si el token es válido. El servidor NO
+  //    emite token para una identidad ajena (eso era el oráculo de C-2).
+  // Si no queda vinculado, `session` llega con authed:false y sin token, y las
+  // operaciones sociales/económicas de ese socket no encontrarán identidad.
+  socket.on('hello', (data) => {
+    identity.beginHandshake(socket, data || {})
+      .then((res) => socket.emit('session', {
+        playerId: res.playerId,
+        token: res.token,
+        authed: res.authed,
+        reason: res.reason
+      }))
+      .catch(() => socket.emit('session', { playerId: null, token: null, authed: false }));
   });
 
   // Registrar manejadores modularizados
@@ -219,6 +238,16 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3001;
+
+// Un fallo al abrir el puerto (EADDRINUSE, EACCES) SÍ debe ser fatal: sin él no
+// hay servicio y lo correcto es morir para que Render lo reinicie. La guarda de
+// `uncaughtException` de arriba lo convertiría en un proceso zombi vivo pero sin
+// escuchar, que es peor que caerse (los health checks lo darían por bueno).
+server.on('error', (err) => {
+  console.error(`[fatal] No se pudo abrir el puerto ${PORT}:`, err.message);
+  process.exit(1);
+});
+
 server.listen(PORT, () => {
   console.log(`Servidor corriendo en http://localhost:${PORT}`);
 });

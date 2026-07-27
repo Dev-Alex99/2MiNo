@@ -45,35 +45,49 @@ const identity = require('../identity');
 const { pushFriendsList, notifyFriendsOfPresence } = require('../friendService');
 
 function registerRoomHandlers(io, socket, leaveVoiceFn) {
-  // Identidad autoritativa del socket: vincula al primer uso y devuelve el id
-  // vinculado. Devuelve null si el socket ya estaba vinculado a OTRA identidad
-  // (intento de operar como otro jugador dentro de la misma conexión) → el
-  // llamador debe abortar. Toda la capa social/económica usa ESTE id, nunca el
-  // que venga en el payload.
-  const authId = (claimedId) => {
-    const r = identity.bind(socket, claimedId);
-    return r.conflict ? null : r.id;
+  // Identidad autoritativa del socket: la que quedó vinculada en el handshake
+  // `hello` tras demostrar su propiedad. El `playerId` que venga en el payload
+  // se IGNORA por completo — es lo que permitía operar como otra persona.
+  // Devuelve null si el socket no completó el handshake o no pudo demostrar la
+  // identidad; en ese caso el llamador aborta.
+  //
+  // Es async porque el handshake consulta el registro de reclamaciones (BD). El
+  // cliente emite `get_profile` en el mismo tick que `hello`, así que esperar a
+  // la promesa del handshake es lo que evita perder esa primera petición.
+  const authId = () => identity.ready(socket);
+
+  // El socket debe ser JUGADOR de esa sala. Sin esta comprobación bastaba con
+  // leer un roomId del lobby (`rooms_list` los publica) para manipular salas
+  // ajenas: rellenarlas de bots hasta que desaparecen del listado, quitarles
+  // los bots o barajar los asientos, sin haber entrado nunca en ellas.
+  // La UI ofrece estas acciones a cualquier jugador de la sala —solo expulsar
+  // es del anfitrión—, así que lo que se exige aquí es PERTENENCIA.
+  const myRoom = (roomId) => {
+    const ctx = findMe(socket.id);
+    if (!ctx) return null;
+    if (String(roomId || '').trim().toUpperCase() !== ctx.roomId) return null;
+    return ctx;
   };
 
   // Emparejamiento clasificatorio (cola 1v1 por ELO)
-  socket.on('join_queue', ({ playerId, name } = {}) => {
-    const pid = authId(playerId);
+  socket.on('join_queue', async ({ name } = {}) => {
+    const pid = await authId();
     if (!pid) return;
     matchmaking.joinQueue(io, socket, { id: pid, name: String(name || 'Jugador').trim().slice(0, 20) });
   });
   socket.on('leave_queue', () => matchmaking.leaveQueue(socket.id));
 
   // ─── Amigos ───
-  socket.on('get_friends', async ({ playerId } = {}) => {
-    const pid = authId(playerId);
+  socket.on('get_friends', async () => {
+    const pid = await authId();
     if (!pid) return;
     const { becameOnline } = presence.register(socket.id, pid);
     if (becameOnline) notifyFriendsOfPresence(io, pid);
     await pushFriendsList(io, pid);
   });
 
-  socket.on('friend_add', async ({ playerId, code } = {}) => {
-    const pid = authId(playerId);
+  socket.on('friend_add', async ({ code } = {}) => {
+    const pid = await authId();
     if (!pid || !code) return;
     const res = await sendFriendRequest(pid, code);
     socket.emit('friend_action', res);
@@ -87,8 +101,8 @@ function registerRoomHandlers(io, socket, leaveVoiceFn) {
     }
   });
 
-  socket.on('friend_respond', async ({ playerId, otherId, accept } = {}) => {
-    const pid = authId(playerId);
+  socket.on('friend_respond', async ({ otherId, accept } = {}) => {
+    const pid = await authId();
     if (!pid || !otherId) return;
     const res = await respondFriendRequest(pid, otherId, !!accept);
     await pushFriendsList(io, pid);
@@ -96,8 +110,8 @@ function registerRoomHandlers(io, socket, leaveVoiceFn) {
   });
 
   // Retar a un amigo: crea una sala privada y le envía una invitación.
-  socket.on('friend_challenge', ({ playerId, name, friendId } = {}) => {
-    const pid = authId(playerId);
+  socket.on('friend_challenge', async ({ name, friendId } = {}) => {
+    const pid = await authId();
     if (!pid || !friendId) return;
     if (roomsAtCapacity()) return socket.emit('friend_action', { success: false, error: 'friend.err.generic' });
     const set = presence.socketsOf(friendId);
@@ -114,14 +128,14 @@ function registerRoomHandlers(io, socket, leaveVoiceFn) {
   });
 
   // Torneos (individual vs IA)
-  socket.on('create_tournament', ({ playerId, name } = {}) => {
-    const pid = authId(playerId);
+  socket.on('create_tournament', async ({ name } = {}) => {
+    const pid = await authId();
     if (!pid) return;
     tournamentManager.createTournament(io, socket, { id: pid, name: String(name || 'Jugador').trim().slice(0, 20) });
   });
 
-  socket.on('join_tournament', ({ playerId, name, code } = {}) => {
-    const pid = authId(playerId);
+  socket.on('join_tournament', async ({ name, code } = {}) => {
+    const pid = await authId();
     if (!pid || !code) return;
     tournamentManager.joinTournament(io, socket, code, { id: pid, name: String(name || 'Jugador').trim().slice(0, 20) });
   });
@@ -131,8 +145,8 @@ function registerRoomHandlers(io, socket, leaveVoiceFn) {
     tournamentManager.startTournament(io, tournamentId, socket.id);
   });
 
-  socket.on('leave_tournament', ({ playerId } = {}) => {
-    const pid = authId(playerId);
+  socket.on('leave_tournament', async () => {
+    const pid = await authId();
     if (!pid) return;
     tournamentManager.endTournamentFor(pid);
   });
@@ -146,8 +160,8 @@ function registerRoomHandlers(io, socket, leaveVoiceFn) {
     socket.emit('leaderboard_data', { scope, rows: leaderboard });
   });
 
-  socket.on('get_profile', async ({ playerId, username } = {}) => {
-    const pid = authId(playerId);
+  socket.on('get_profile', async ({ username } = {}) => {
+    const pid = await authId();
     if (!pid) return;
     const { becameOnline } = presence.register(socket.id, pid);
     if (becameOnline) notifyFriendsOfPresence(io, pid); // avisar a mis amigos
@@ -164,8 +178,8 @@ function registerRoomHandlers(io, socket, leaveVoiceFn) {
     socket.emit('profile_data', profile);
   });
 
-  socket.on('claim_mission', async ({ playerId, missionId } = {}) => {
-    const pid = authId(playerId);
+  socket.on('claim_mission', async ({ missionId } = {}) => {
+    const pid = await authId();
     if (!pid || !missionId) return;
     if (!identity.canMutateEconomy(socket)) return socket.emit('mission_claimed', { success: false, error: 'srv.err.rateLimited' });
     const result = await claimMission(pid, missionId);
@@ -173,8 +187,8 @@ function registerRoomHandlers(io, socket, leaveVoiceFn) {
   });
 
   // Historial de partidas y repeticiones
-  socket.on('get_match_history', async ({ playerId } = {}) => {
-    const pid = authId(playerId);
+  socket.on('get_match_history', async () => {
+    const pid = await authId();
     if (!pid) return;
     const history = await getUserMatchHistory(pid, 12);
     socket.emit('match_history_data', history);
@@ -186,8 +200,8 @@ function registerRoomHandlers(io, socket, leaveVoiceFn) {
     socket.emit('match_replay_data', replay);
   });
 
-  socket.on('equip_skin', async ({ playerId, category, itemId, username } = {}) => {
-    const pid = authId(playerId);
+  socket.on('equip_skin', async ({ category, itemId, username } = {}) => {
+    const pid = await authId();
     if (!pid || !category || !itemId) return;
     if (!identity.canMutateEconomy(socket)) return socket.emit('skin_equipped', { success: false, error: 'store.errorMsg' });
     // El precio lo decide el servidor (storeCatalog); ignoramos cualquier coste del cliente.
@@ -196,13 +210,17 @@ function registerRoomHandlers(io, socket, leaveVoiceFn) {
   });
 
   // 1. Crear sala
-  socket.on('create_room', (data) => {
+  socket.on('create_room', async (data) => {
     const v = validate(createRoomSchema, data);
     if (!v.success) return socket.emit('error_msg', { key: v.errorKey });
     if (roomsAtCapacity()) return socket.emit('error_msg', { key: 'srv.err.serverFull' });
 
-    const { name, playerId, ...opts } = v.data;
-    const created = createRoomFor(io, socket, name, playerId, opts);
+    // El asiento se abre con la identidad VINCULADA, no con la del payload: si
+    // no, `getOrCreateUser` de más abajo renombraba la cuenta de otro y las
+    // estadísticas de la partida se acreditaban a la cuenta suplantada.
+    // Sin identidad (invitado que no hizo handshake) se genera una anónima.
+    const { name, playerId: _ignorado, ...opts } = v.data;
+    const created = createRoomFor(io, socket, name, await authId(), opts);
     getOrCreateUser(created.playerId, name);
     socket.emit('room_created', created);
     broadcastGameState(io, created.roomId);
@@ -210,11 +228,12 @@ function registerRoomHandlers(io, socket, leaveVoiceFn) {
   });
 
   // 1.6 Partida rápida
-  socket.on('quick_play', (data) => {
+  socket.on('quick_play', async (data) => {
     const v = validate(quickPlaySchema, data);
     if (!v.success) return socket.emit('error_msg', { key: v.errorKey });
 
-    const { name, playerId, gameType = 'domino' } = v.data;
+    const { name, gameType = 'domino' } = v.data;
+    const playerId = await authId(); // identidad vinculada, nunca la del payload
     const candidate = publicRoomsList().find(r => r.gameType === gameType);
     // Solo se aplica el tope si no hay sala a la que unirse (habría que crear una).
     if (!candidate && roomsAtCapacity()) return socket.emit('error_msg', { key: 'srv.err.serverFull' });
@@ -242,11 +261,12 @@ function registerRoomHandlers(io, socket, leaveVoiceFn) {
   });
 
   // 2. Unirse a sala
-  socket.on('join_room', (data) => {
+  socket.on('join_room', async (data) => {
     const v = validate(joinRoomSchema, data);
     if (!v.success) return socket.emit('error_msg', { key: v.errorKey });
 
-    let { roomId, name, playerId } = v.data;
+    let { roomId, name } = v.data;
+    const playerId = await authId(); // identidad vinculada, nunca la del payload
     roomId = roomId.trim().toUpperCase();
     const game = rooms.get(roomId);
 
@@ -296,8 +316,9 @@ function registerRoomHandlers(io, socket, leaveVoiceFn) {
     if (!v.success) return socket.emit('error_msg', { key: v.errorKey });
 
     const { roomId, difficulty } = v.data;
-    const game = rooms.get(roomId);
-    if (!game) return socket.emit('error_msg', { key: 'srv.err.roomNotFound' });
+    const ctx = myRoom(roomId);
+    if (!ctx) return socket.emit('error_msg', { key: 'srv.err.roomNotFound' });
+    const { game } = ctx;
     if (game.status !== 'waiting') return socket.emit('error_msg', { key: 'srv.err.noBotsInGame' });
     if (game.players.length >= 4) return socket.emit('error_msg', { key: 'srv.err.roomFull' });
 
@@ -323,8 +344,9 @@ function registerRoomHandlers(io, socket, leaveVoiceFn) {
     if (!v.success) return;
 
     const { roomId, botId } = v.data;
-    const game = rooms.get(roomId);
-    if (!game) return;
+    const ctx = myRoom(roomId);
+    if (!ctx) return;
+    const { game } = ctx;
     if (game.status !== 'waiting') return socket.emit('error_msg', { key: 'srv.err.noRemoveBotInGame' });
 
     const target = game.players.find(p => p.id === botId);
@@ -341,8 +363,9 @@ function registerRoomHandlers(io, socket, leaveVoiceFn) {
     if (!v.success) return;
 
     const { roomId, playerA, playerB } = v.data;
-    const game = rooms.get(roomId);
-    if (!game) return;
+    const ctx = myRoom(roomId);
+    if (!ctx) return;
+    const { game } = ctx;
     if (game.status !== 'waiting') {
       return socket.emit('error_msg', { key: 'srv.err.noSwapInGame' });
     }
@@ -459,8 +482,9 @@ function registerRoomHandlers(io, socket, leaveVoiceFn) {
     if (!v.success) return;
 
     const { roomId } = v.data;
-    const game = rooms.get(roomId);
-    if (!game) return;
+    const ctx = myRoom(roomId);
+    if (!ctx) return;
+    const { game } = ctx;
 
     game.toggleReady(socket.id);
     broadcastGameState(io, roomId);

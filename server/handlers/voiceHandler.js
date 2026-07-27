@@ -1,4 +1,5 @@
 const { findMe, broadcastGameState } = require('../roomManager');
+const identity = require('../identity');
 const { voiceCamSchema, validate } = require('../schemas');
 const { socketsOf } = require('../presence');
 
@@ -31,7 +32,13 @@ function registerVoiceHandlers(io, socket) {
   // --- GRUPOS Y LLAMADAS DE VOZ MULTIJUGADOR (GLOBAL VOICE POOL) ---
 
   // 1. Iniciar llamada a un amigo (Crea o reutiliza una pool)
-  socket.on('call_friend', ({ targetPlayerId, callerName, callerId }) => {
+  socket.on('call_friend', ({ targetPlayerId, callerName }) => {
+    // Quién llama lo decide la identidad VINCULADA, no el `callerId` del
+    // payload: si no, cualquiera podía aparecer en el grupo de voz (y en el
+    // aviso de llamada entrante) con el nombre y el id de otra persona.
+    const callerId = identity.currentId(socket);
+    if (!callerId) return socket.emit('call_error', { message: 'Sesión no verificada' });
+
     const targetSockets = socketsOf(targetPlayerId);
     if (!targetSockets || targetSockets.size === 0) {
       return socket.emit('call_error', { message: 'El amigo no está en línea' });
@@ -90,7 +97,11 @@ function registerVoiceHandlers(io, socket) {
   });
 
   // 2. Invitar a otro amigo a la llamada en curso (Grupo / Pool)
-  socket.on('invite_to_pool', ({ poolId, targetPlayerId, inviterName, inviterId }) => {
+  socket.on('invite_to_pool', ({ poolId, targetPlayerId, inviterName }) => {
+    // Quién invita también sale de la identidad vinculada (no del payload).
+    const inviterId = identity.currentId(socket);
+    if (!inviterId) return socket.emit('call_error', { message: 'Sesión no verificada' });
+
     const targetSockets = socketsOf(targetPlayerId);
     if (!targetSockets || targetSockets.size === 0) {
       return socket.emit('call_error', { message: 'El usuario no está en línea' });
@@ -119,7 +130,11 @@ function registerVoiceHandlers(io, socket) {
   });
 
   // 3. Aceptar llamada / Unirse a la pool de voz
-  socket.on('accept_call', ({ callId, poolId, playerId, name }) => {
+  socket.on('accept_call', ({ callId, poolId, name }) => {
+    // Se entra al grupo con la identidad vinculada, nunca con la del payload.
+    const playerId = identity.currentId(socket);
+    if (!playerId) return socket.emit('call_error', { message: 'Sesión no verificada' });
+
     const call = activeCalls.get(callId);
     const targetPoolId = poolId || (call ? call.poolId : null);
     if (!targetPoolId) {
@@ -201,8 +216,12 @@ function registerVoiceHandlers(io, socket) {
   });
 
   // 7. Salir / Colgar de la Pool de Voz
-  socket.on('end_call', ({ poolId, playerId }) => {
+  socket.on('end_call', ({ poolId }) => {
     if (!poolId) return;
+    // Solo puedes sacarte a TI del grupo: con el playerId del payload se podía
+    // expulsar a otro de la llamada.
+    const playerId = identity.currentId(socket);
+    if (!playerId) return;
     const pool = voicePools.get(poolId);
     if (pool) {
       pool.delete(playerId);

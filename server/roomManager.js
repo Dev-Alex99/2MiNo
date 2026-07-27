@@ -195,7 +195,15 @@ function armTurnTimer(io, roomId) {
 
     // forceTurn debe devolver el contrato de BaseGame { action, playerName, drew }.
     // Se tolera un retorno pobre (juego mal implementado) sin narrar basura.
-    const result = current.forceTurn();
+    // Corre dentro de un timer: si lanzara, la excepción no tendría a nadie
+    // encima y tumbaría el proceso entero (mismo criterio que scheduleBotTurn).
+    let result;
+    try {
+      result = current.forceTurn();
+    } catch (e) {
+      console.warn(`[reloj] Error forzando el turno en ${roomId}:`, e.message);
+      return;
+    }
     if (!result || !result.action || result.action === 'none') {
       advanceRoom(io, roomId);
       broadcastGameState(io, roomId);
@@ -309,7 +317,14 @@ function scheduleRoundAdvance(io, roomId) {
     roundTimers.delete(roomId);
     const g = rooms.get(roomId);
     if (!g || g.status !== 'round_ended') return;
-    g.startNewRound();
+    // Igual que el reloj de turno: dentro de un timer, un fallo del motor no
+    // debe tumbar el proceso.
+    try {
+      g.startNewRound();
+    } catch (e) {
+      console.warn(`[ronda] Error iniciando la siguiente ronda en ${roomId}:`, e.message);
+      return;
+    }
     io.to(roomId).emit('play_sound', { type: 'shuffle' });
     advanceRoom(io, roomId);
     broadcastGameState(io, roomId);
@@ -327,8 +342,9 @@ function advanceRoom(io, roomId) {
 
     // El ELO solo se mueve en clasificatoria y con al menos 2 humanos (nada de
     // farmear puntos ganando a los bots).
+    // Clasificatoria y 1v1 entre humanos: nada de mover ELO ganando a bots.
     const humanCount = game.players.filter(p => !p.isBot).length;
-    const applyElo = !!game.ranked && humanCount >= 2;
+    const applyElo = !!game.ranked && humanCount === 2;
 
     recordMatchEnd({
       id: `${roomId}_${Date.now()}`,
@@ -341,7 +357,7 @@ function advanceRoom(io, roomId) {
       moveLog: game.moveLog || [],
       players: game.players,
       applyElo
-    });
+    }).catch(e => console.warn('[BD] recordMatchEnd falló:', e && e.message));
 
     // Torneo: tras un breve respiro para ver el resultado, avanzar el cuadro
     // (la sala de esta partida se destruye dentro de onMatchEnd).
@@ -374,8 +390,11 @@ function createRoomFor(io, socket, name, playerId, opts = {}) {
   const safeIntensity = ['light', 'normal', 'chaos'].includes(opts.powerIntensity) ? opts.powerIntensity : 'normal';
   const safeOnePerTurn = opts.onePowerPerTurn === true;
   const safeBlitz = opts.isBlitzMode === true;
-  const safeRanked = opts.ranked === true;
-  const effectivePowers = safeRanked ? false : safePowers;
+  // Las salas creadas por un jugador NUNCA son clasificatorias, dijera lo que
+  // dijera el payload. El ELO solo se mueve en partidas que arma el servidor
+  // desde la cola de emparejamiento (`createRankedMatch`).
+  const safeRanked = false;
+  const effectivePowers = safePowers;
 
   const roomId = generateRoomId();
   let game;

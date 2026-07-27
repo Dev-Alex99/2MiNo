@@ -108,6 +108,11 @@ async function initDb() {
       ALTER TABLE stats ADD COLUMN IF NOT EXISTS tournaments_won INT DEFAULT 0;
       ALTER TABLE match_history ADD COLUMN IF NOT EXISTS ranked BOOLEAN DEFAULT FALSE;
 
+      -- Identidad: secreto por cuenta con el que se firma su token de sesión.
+      -- NULL = identidad aún sin reclamar (la reclama el primero que se conecta
+      -- con ese id). Ver server/identity.js.
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_nonce VARCHAR(64);
+
       -- Amigos: código para agregar + relación de amistad
       ALTER TABLE users ADD COLUMN IF NOT EXISTS friend_code VARCHAR(8);
       CREATE UNIQUE INDEX IF NOT EXISTS idx_users_friend_code ON users (friend_code) WHERE friend_code IS NOT NULL;
@@ -142,6 +147,40 @@ function isRealName(username) {
 }
 
 // Funciones helper de persistencia
+// ¿Hay persistencia? identity.js lo necesita para decidir si puede fiarse del
+// registro de reclamaciones o si está en modo degradado (memoria).
+function isEnabled() {
+  return !!pool;
+}
+
+// Reclama la identidad `userId` de forma ATÓMICA y devuelve su secreto de firma.
+//   · { nonce, isNew: true }  → estaba libre y la acabamos de reclamar.
+//   · { nonce, isNew: false } → ya estaba reclamada; devuelve el nonce existente
+//     (quien se conecte deberá presentar un token válido para esa identidad).
+//   · null                    → sin BD (el llamador decide qué hacer).
+// El `UPDATE ... WHERE auth_nonce IS NULL` hace que, ante dos conexiones
+// simultáneas con el mismo id nuevo, solo una gane la reclamación.
+// Los errores se PROPAGAN a propósito: quien llama debe fallar cerrado, nunca
+// conceder la identidad porque la BD esté caída.
+async function claimAuthNonce(userId, candidateNonce) {
+  if (!pool || !userId) return null;
+
+  await pool.query(
+    `INSERT INTO users (id, username) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING`,
+    [userId, `Jugador_${String(userId).substring(0, 4)}`]
+  );
+
+  const claimed = await pool.query(
+    `UPDATE users SET auth_nonce = $2 WHERE id = $1 AND auth_nonce IS NULL RETURNING auth_nonce`,
+    [userId, candidateNonce]
+  );
+  if (claimed.rows.length) return { nonce: claimed.rows[0].auth_nonce, isNew: true };
+
+  const existing = await pool.query('SELECT auth_nonce FROM users WHERE id = $1', [userId]);
+  const nonce = existing.rows[0] && existing.rows[0].auth_nonce;
+  return nonce ? { nonce, isNew: false } : null;
+}
+
 async function getOrCreateUser(userId, username) {
   if (!pool || !userId) return null;
   try {
@@ -171,6 +210,75 @@ async function getOrCreateUser(userId, username) {
   }
 }
 
+// ELO clasificatorio de SUMA CERO para un 1v1.
+//
+// Antes era un ±fijo (+25 al ganador, −10 al perdedor) con suelo
+// `GREATEST(1000, ...)`: cada partida INYECTABA 15 puntos en el sistema, así que
+// dos cuentas alternando victorias subían las dos indefinidamente y la
+// clasificación acababa midiendo constancia, no habilidad.
+//
+// Ahora es Elo clásico (K=32): lo que gana uno es exactamente lo que pierde el
+// otro, y ganar a alguien muy por debajo apenas suma. El suelo se respeta sin
+// romper la suma cero: si el perdedor no puede pagar el delta completo, el
+// ganador cobra solo lo que se le ha podido descontar.
+const ELO_K = 32;
+const ELO_FLOOR = 100;
+const ELO_DEFAULT = 1200;
+
+// Puntos que gana A (los mismos que pierde B). `scoreA`: 1 gana, 0 pierde,
+// 0.5 empate. Función pura para poder probar la propiedad que importa —
+// suma cero— sin base de datos.
+function computeEloDelta(Ra, Rb, scoreA) {
+  const ra = Number.isFinite(Ra) ? Ra : ELO_DEFAULT;
+  const rb = Number.isFinite(Rb) ? Rb : ELO_DEFAULT;
+  const expectedA = 1 / (1 + Math.pow(10, (rb - ra) / 400));
+  let delta = Math.round(ELO_K * (scoreA - expectedA));
+
+  // Recortar contra el suelo del que paga, para no inventar puntos.
+  if (delta > 0) delta = Math.min(delta, Math.max(0, rb - ELO_FLOOR));
+  else if (delta < 0) delta = -Math.min(-delta, Math.max(0, ra - ELO_FLOOR));
+  return delta;
+}
+
+async function applyRankedElo(humans, winnerId) {
+  if (!pool || humans.length !== 2) return;
+  const [a, b] = humans;
+
+  const res = await pool.query('SELECT id, elo FROM users WHERE id = ANY($1)', [[a.id, b.id]]);
+  const eloOf = {};
+  for (const r of res.rows) eloOf[r.id] = Number(r.elo) || ELO_DEFAULT;
+
+  // Resultado desde el punto de vista de A.
+  let scoreA;
+  if (!winnerId || winnerId === 'tie') scoreA = 0.5;
+  else if (winnerId === a.id) scoreA = 1;
+  else if (winnerId === b.id) scoreA = 0;
+  else return; // ganador no identificable (p. ej. por parejas): no tocar ELO
+
+  const delta = computeEloDelta(eloOf[a.id] || ELO_DEFAULT, eloOf[b.id] || ELO_DEFAULT, scoreA);
+  if (delta === 0) return;
+
+  await pool.query('UPDATE users SET elo = elo + $2 WHERE id = $1', [a.id, delta]);
+  await pool.query('UPDATE users SET elo = elo - $2 WHERE id = $1', [b.id, delta]);
+}
+
+// Monedas de una partida. Solo pagan las partidas con AL MENOS DOS HUMANOS.
+//
+// Antes cobraba toda partida terminada, también contra bots y sin tope: un
+// script que abriera sala, añadiera un bot y la cerrara en bucle compraba la
+// tienda entera (~7.650 doblones) en minutos. El resto de ingresos ya están
+// acotados por día (racha 10-70, misiones ~150-290), así que este era el único
+// grifo abierto.
+//
+// Jugar solo contra bots SIGUE contando para estadísticas y misiones: el
+// jugador en solitario no se queda sin progresar, solo deja de haber un ingreso
+// ilimitado y automatizable.
+function coinsForMatch({ isWinner, isTie, humanCount }) {
+  if (humanCount < 2) return 0;
+  if (isTie) return 25;
+  return isWinner ? 50 : 10;
+}
+
 async function recordMatchEnd({ id, roomId, variant, teamsEnabled, winnerName, winnerId, finalScores, moveLog, players, applyElo = false }) {
   if (!pool) return;
   try {
@@ -182,14 +290,14 @@ async function recordMatchEnd({ id, roomId, variant, teamsEnabled, winnerName, w
 
     // Actualizar estadísticas, ELO y doblones de cada jugador humano.
     if (Array.isArray(players)) {
+      const humanCount = players.filter(p => !p.isBot && p.id).length;
       for (const p of players) {
         if (!p.isBot && p.id) {
           const isWinner = p.id === winnerId || (teamsEnabled && `team_${p.team}` === winnerId);
           const isTie = winnerId === 'tie' || !winnerId;
-          // ELO solo en clasificatoria (applyElo). Los doblones y estadísticas
-          // se otorgan siempre (alimentan tienda y misiones).
-          const eloChange = (applyElo && !isTie) ? (isWinner ? 25 : -10) : 0;
-          const coinsEarned = isTie ? 25 : (isWinner ? 50 : 10);
+          // El ELO ya NO se toca aquí: se calcula aparte, de suma cero y entre
+          // los dos jugadores a la vez (ver applyRankedElo).
+          const coinsEarned = coinsForMatch({ isWinner, isTie, humanCount });
 
           // Asegurar que la fila del usuario existe antes de acreditar recompensas.
           await pool.query(
@@ -210,14 +318,19 @@ async function recordMatchEnd({ id, roomId, variant, teamsEnabled, winnerName, w
             [p.id, isWinner ? 1 : 0, (!isWinner && !isTie) ? 1 : 0, isTie ? 1 : 0, p.score || 0]
           );
 
-          await pool.query(
-            `UPDATE users SET
-               elo = GREATEST(1000, elo + $2),
-               coins = coins + $3
-             WHERE id = $1`,
-            [p.id, eloChange, coinsEarned]
-          );
+          if (coinsEarned > 0) {
+            await pool.query(
+              'UPDATE users SET coins = coins + $2 WHERE id = $1',
+              [p.id, coinsEarned]
+            );
+          }
         }
+      }
+
+      // ELO: solo clasificatoria y solo 1v1 entre humanos.
+      if (applyElo) {
+        const humans = players.filter(p => !p.isBot && p.id);
+        if (humans.length === 2) await applyRankedElo(humans, winnerId);
       }
     }
     console.log(`[Supabase BD] Partida ${id} guardada, ELO y estadísticas actualizados.`);
@@ -609,6 +722,13 @@ initDb();
 module.exports = {
   pool,
   dbEnabled: DB_ENABLED,
+  isEnabled,
+  claimAuthNonce,
+  computeEloDelta,
+  coinsForMatch,
+  ELO_K,
+  ELO_FLOOR,
+  ELO_DEFAULT,
   STORE_ITEMS,
   getOrCreateUser,
   recordMatchEnd,

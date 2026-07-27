@@ -210,3 +210,293 @@ Cubierto por `testFalseBlock.js` (13 asserts), que verifica tanto que el bloqueo
 - **Antes de desplegar**: revisar y commitear todo el árbol (`git add -A && git commit`), definir `CLIENT_ORIGINS` y `AUTH_SECRET` en el entorno de producción.
 
 > Nota de entorno: en esta máquina no hay `pnpm`/`npm`/`node_modules`, así que no se pudo ejecutar `pnpm install`, el build de Vite, ESLint, ni las 2 suites que dependen de `pg`. Todo lo verificado localmente son las 10 suites de lógica pura (con `node`) y `node --check` de sintaxis. El resto debe validarse en el primer CI/staging.
+
+---
+
+# Segunda auditoría — 2026-07-27 (con toolchain, verificada por ejecución)
+
+> Commit auditado: `14356fb` · Método: `pnpm install --frozen-lockfile`, 15 suites, ESLint, build de Vite y **pruebas de explotación contra el servidor en marcha**.
+
+La auditoría anterior se escribió **sin toolchain** y declaró la Fase 1 (seguridad) esencialmente
+completa. Con node/pnpm disponibles se ha podido ejecutar y explotar el servidor real, y el
+resultado es distinto: existía la *fachada* de seguridad (`identity.js`, `security.js`, tokens
+HMAC, rate-limit) sin que ninguna barrera cerrase.
+
+## Correcciones a la auditoría del 2026-07-24
+
+Tres afirmaciones de su registro de implementación son **inexactas** (verificado, no deducido):
+
+1. **«higiene: README UTF-8»** — falso. `README.md` y `server/README.md` siguen en UTF-16.
+   `README.md` no tiene BOM, así que `file` lo identifica como imagen Targa y
+   `git diff --numstat` devuelve `-  -`: **git los trata como binarios** (sin diffs ni revisión).
+2. **«la capa económica/social usa ahora la identidad vinculada»** — parcial. `create_room`,
+   `quick_play` y `join_room` siguen usando el `playerId` crudo del payload, y esos caminos
+   escriben en BD vía `getOrCreateUser` (que actualiza el `username`).
+3. **«pendiente: activar `AUTH_STRICT=1`»** — activarlo no habría protegido nada: el handshake
+   `hello` **emite el token de sesión de cualquier `playerId` a quien lo pida** (ver C-2).
+
+## Recuento
+
+| Severidad | Nº | Titulares |
+|---|---|---|
+| 🔴 Crítico | 4 | DoS con un evento · oráculo de tokens · secuestro de salas · sin red de seguridad de proceso |
+| 🟠 Alto | 7 | Capa de sala sin identidad · ELO/economía farmeables · CI descarta el lint · hooks condicionales · WebRTC sin renegociar · READMEs binarios · god component |
+| 🟡 Medio | ~11 | CORS abierto · `findMe` O(N) · sin límite por IP · 0 tests de cliente · CSS monolítico · código muerto |
+
+---
+
+## ✅ Bloqueantes corregidos en esta pasada
+
+### C-1 · DoS remoto trivial: `findMe` no estaba importado
+`gameHandler.js` usaba `findMe` en `game_action` y `start_game` sin importarlo del `roomManager`.
+**Explotado en vivo:** un socket anónimo, sin sala y sin autenticar, emitía `start_game` y el
+proceso moría con `ReferenceError` — cayendo **todas** las partidas, torneos y llamadas en curso.
+De paso, el motor multi-juego entero (tres en raya) era inarrancable.
+**Corregido:** añadido al `require`. Verificado que el hub arranca de verdad, no solo que no revienta.
+
+### C-4 · El proceso no tenía ninguna red de seguridad
+Cero `uncaughtException`/`unhandledRejection` sobre 53 eventos de socket. Es lo que convertía
+C-1 de bug en DoS. Además, tres puntos dentro de timers llamaban al motor **sin `try/catch`**
+—`forceTurn()`, `startNewRound()` y `recordMatchEnd()` sin `.catch()`— pese a que
+`scheduleBotTurn` ya aplicaba ese criterio.
+**Corregido:** guardas de proceso que registran y siguen sirviendo, más `try/catch` en los tres
+timers. **Matiz importante:** una guarda global convertiría un fallo de arranque (`EADDRINUSE`)
+en un proceso zombi vivo pero sin escuchar —peor que caerse, porque el health check lo daría por
+bueno—, así que `server.on('error')` sigue siendo **fatal con `exit(1)`**. Verificado ambos casos.
+
+### C-3 · Cualquiera podía inutilizar todas las salas públicas
+`add_bot`, `remove_bot` y `swap_seats` validaban el schema pero **no la pertenencia a la sala**,
+y `lobby_subscribe` publica los `roomId` gratis. **Explotado en vivo:** un extraño que nunca entró
+llenaba una sala ajena de bots hasta que desaparecía del lobby. Un bucle sobre `rooms_list` dejaba
+el matchmaking público muerto.
+**Corregido:** helper `myRoom()` (`findMe` + comprobación de sala) en los tres handlers y en
+`toggle_ready`. Se exige **pertenencia, no ser anfitrión**, porque la UI ofrece estas acciones a
+cualquier jugador de la sala (solo expulsar es del anfitrión) — el arreglo no recorta funcionalidad.
+
+### A-3 · El CI veía el bug crítico y descartaba el resultado
+Ambos lints estaban en `continue-on-error: true`. ESLint marcaba el `no-undef` de C-1 y cuatro
+`rules-of-hooks`, y el CI seguía adelante. **Esta es la causa raíz de que C-1 llegara a `main`.**
+**Corregido:** lint bloqueante (los avisos no bloquean, los errores sí), `pnpm install
+--frozen-lockfile`, y los **20 errores a 0**: `findMe`, los hooks de `UnifiedVoiceWidget` (A-4) y
+13 `no-case-declarations` en `gameLogic.js` (fugas de scope en el `switch` de poderes).
+
+### A-4 · Hooks condicionales en `UnifiedVoiceWidget`
+`if (!voice) return null` por encima de tres `useState` y un `useEffect` — la misma clase de bug
+que C4 de la auditoría anterior, reintroducida. Latente hoy (el contexto no transiciona en una
+instancia montada) pero el widget se monta en 4 sitios.
+**Corregido:** hooks por encima de cualquier `return`.
+
+### Nueva suite: `server/testHandlers.js` (integración)
+Las 15 suites existentes son **todas de lógica pura**, y por eso ninguna vio estos cuatro fallos:
+eran de **cableado y ciclo de vida**. La suite nueva arranca `server.js` de verdad en su propio
+puerto y le habla con un cliente Socket.IO real (11 asserts): eventos anónimos y malformados no
+tumban el proceso, un extraño no manipula salas ajenas, y **el jugador legítimo sí puede** hacerlo.
+`socket.io-client` añadido a las devDeps del server.
+
+**Verificado que la suite falla al revertir los arreglos** (no es decorativa):
+revertir C-1+C-4 → la suite muere con `ECONNREFUSED` (exit 1); revertir solo `add_bot` → 3 asserts
+en rojo (exit 1).
+
+### Estado tras los arreglos
+```
+pnpm install --frozen-lockfile   ✅  reproducible
+pnpm test                        ✅  16/16 suites (exit 0)
+pnpm --filter domino-* lint      ✅  0 errores (exit 0), avisos visibles
+pnpm --filter domino-client build ✅  459 KB / 132 KB gzip
+```
+
+---
+
+## ✅ C-2 corregido — el oráculo de tokens (segunda tanda)
+
+**El fallo.** El handler `hello` emitía un token para **cualquier** `playerId` que le pidieran:
+si el token presentado no era válido, en vez de rechazar, *firmaba uno nuevo y lo devolvía*. Como
+el `playerId` real de cuenta viaja en `game_state` a rivales y espectadores, bastaba con mirar una
+partida, pedir el token de otro y reconectar con él. El token era `HMAC(playerId)` puro: sin
+caducidad, sin nonce y sin revocación — una contraseña permanente derivable a petición.
+Peor: la vinculación socket↔identidad ocurría **aunque no se autenticase**, y la capa social usaba
+esa vinculación, así que `AUTH_STRICT=1` no protegía de nada.
+
+**Lo corregido**, en cuatro piezas:
+
+1. **Registro de reclamación (fin del oráculo).** Cada identidad guarda un secreto propio
+   (`users.auth_nonce`, columna nueva). La primera conexión que presenta un id libre lo reclama y
+   recibe su token; a partir de ahí el servidor **no vuelve a emitir token para ese id**. La
+   reclamación es atómica (`UPDATE ... WHERE auth_nonce IS NULL RETURNING`), así que dos conexiones
+   simultáneas con el mismo id nuevo no pueden ganarla las dos.
+2. **Vinculación solo con prueba.** Si no demuestras la propiedad, el socket **no queda vinculado**
+   y la capa social/económica no encuentra identidad. Antes se vinculaba igualmente.
+3. **Token v2** — `v2.<caducidad>.<firma>`, firmado sobre el nonce de la cuenta: caduca (180 días,
+   renovado en cada conexión) y es **revocable** rotando el nonce en BD.
+4. **Fallo cerrado.** Si hay BD y la consulta falla, se deniega. Nunca se concede una identidad
+   porque la base de datos esté caída.
+
+**Alcance ampliado a la misma superficie de suplantación** (no tenía sentido cerrar una puerta y
+dejar las otras):
+- **A-1** · `create_room`/`quick_play`/`join_room` usan ya la identidad vinculada. Antes,
+  `getOrCreateUser(playerId, name)` con un id ajeno **renombraba la cuenta de otro** y las
+  estadísticas de la partida se acreditaban a la cuenta suplantada.
+- **Capa de voz** · `call_friend`, `invite_to_pool`, `accept_call` y `end_call` tomaban el
+  `callerId`/`playerId` del payload: se podía aparecer en un grupo de voz con el nombre y el id de
+  otra persona, y `end_call` con un id ajeno **echaba a otro de la llamada**.
+
+**La carrera que había que resolver.** El cliente emite `get_profile` en el **mismo tick** que
+`hello`; al pasar el handshake a asíncrono (consulta el registro), esa primera petición se habría
+perdido en silencio. `beginHandshake` fija la promesa en `socket.data` de forma **síncrona** y los
+handlers la esperan con `identity.ready(socket)`. Cubierto por un test explícito.
+
+**Cliente.** Si el servidor deniega la identidad (`reason: 'reclamada'` — token caducado tras medio
+año sin jugar, o localStorage a medias), el cliente empieza una identidad nueva en vez de quedarse
+con perfil, tienda y amigos fallando en silencio para siempre.
+
+**Verificación**
+- `testIdentity.js` reescrito: **24 asserts** (token v2, caducidad, revocación por rotación de
+  nonce, y el oráculo end-to-end: víctima reclama → atacante pide → no recibe token ni vinculación).
+- `testHandlers.js`: **8 asserts nuevos** de integración contra el servidor real, incluidos la
+  carrera `hello`/`get_profile` y A-1 (crear sala con el id de otro no sienta a la víctima).
+- El exploit original de esta auditoría, contra el servidor parcheado:
+  `{"playerId":null,"token":null,"authed":false,"reason":"reclamada"}` — antes devolvía el token de
+  la víctima y `AUTENTICADO COMO LA VICTIMA: true`.
+- **Verificado que los tests fallan al reintroducir el oráculo** (`owns = true`): `testIdentity`
+  exit 1, `testHandlers` 3 asserts en rojo.
+
+### 🔧 Cambio operativo obligatorio: `AUTH_SECRET`
+Con las reclamaciones persistidas en BD, **`AUTH_SECRET` deja de ser opcional**. Las identidades
+sobreviven al reinicio pero los tokens se firman con ese secreto: si fuera efímero, tras cada
+reinicio ningún token verificaría, todos los ids seguirían reclamados y cada jugador sería
+rechazado y empezaría de cero — pérdida silenciosa e irreversible de monedas, skins, ELO y amigos
+de todo el mundo, en cada reinicio.
+
+Por eso el servidor ahora **se niega a arrancar** si hay `DATABASE_URL` y falta `AUTH_SECRET`, con
+un mensaje que explica el motivo y cómo generarlo. Es preferible un fallo inmediato y visible a una
+pérdida de datos callada. Sin BD sigue arrancando con secreto efímero (no hay nada que perder,
+porque el registro de reclamaciones también es en memoria). Verificados los tres casos.
+
+**Acción requerida antes de desplegar:** definir `AUTH_SECRET` estable en el entorno de Render.
+
+### ⚠️ Límite conocido y asumido
+Sin registro (ni email ni contraseña) esto es **confianza en el primer uso**: quien reclame un id
+antes que su dueño se queda con él, y al desplegar hay una **ventana de migración** en la que las
+cuentas existentes están sin reclamar. Como los `playerId` llevan difundiéndose desde siempre, esa
+ventana no se cierra con ids efímeros (el daño de la fuga pasada ya está hecho). Cerrarlo de verdad
+exige **autenticación real** (OAuth/email), que es una decisión de producto, no un parche.
+
+---
+
+## ✅ A-2 corregido — ELO y economía farmeables (tercera tanda)
+
+**El fallo tenía tres capas.**
+
+1. **`create_room` aceptaba `ranked: true` del cliente**, así que cualquiera montaba una partida
+   clasificatoria a medida saltándose el emparejamiento.
+2. **El ELO era de suma positiva**: ±fijo (+25 / −10) con suelo `GREATEST(1000, ...)`. Cada partida
+   *inyectaba 15 puntos*. Dos pestañas alternando victorias subían **las dos** indefinidamente
+   (+750 cada una en 100 partidas): la clasificación medía constancia, no habilidad.
+3. **Las monedas se pagaban en toda partida terminada, también contra bots y sin tope.** Un script
+   que abriera sala, metiera un bot y la cerrara en bucle compraba la tienda entera (~7.650) en
+   minutos — el resto de ingresos (racha 10-70/día, misiones ~150-290/día) ya estaban acotados.
+
+**Lo corregido.**
+- `ranked` **fuera del schema** y forzado a `false` en `createRoomFor`. Solo `createRankedMatch`
+  —desde la cola de emparejamiento— crea partidas clasificatorias. Como efecto añadido, dos cuentas
+  cómplices ya no eligen rival: la cola empareja por ELO.
+- **Elo clásico de suma cero** (K=32) calculado entre los dos jugadores a la vez, con el resultado
+  esperado según la diferencia de puntuación: ganar a alguien muy inferior apenas suma, perder
+  contra él cuesta caro. El suelo se respeta **sin romper la suma cero**: si el perdedor no puede
+  pagar el delta completo, el ganador cobra solo lo que se le ha podido descontar.
+  Además el ELO exige ahora **1v1 con exactamente 2 humanos** (antes bastaba `>= 2`).
+- **Las monedas solo se pagan con ≥2 humanos** (decisión del propietario). Jugar contra bots sigue
+  contando para estadísticas y misiones, así que el jugador en solitario progresa igual; lo que
+  desaparece es el único ingreso ilimitado y automatizable.
+- **Cliente:** se retira el interruptor «Clasificatoria» del formulario de crear sala — habría
+  quedado mintiendo al jugador («Afecta al ELO») sin hacer nada. La vía clasificatoria es el botón
+  de emparejamiento, que ya estaba en el mismo lobby. Retiradas también sus 2 claves i18n
+  (paridad verificada: 3 × 568).
+
+**Verificación** — `testEconomy.js`, **30 asserts** sobre las funciones puras extraídas
+(`computeEloDelta`, `coinsForMatch`), más 1 de integración:
+- el total de ELO del sistema no varía en ninguna partida, ni en resultados extremos;
+- tras 100 partidas alternas entre dos cuentas el total sigue siendo 2400 (antes +1500) y **es
+  imposible que suban las dos**;
+- el recorte por suelo mantiene la suma cero y el perdedor nunca baja de él;
+- 1.000 partidas contra bots dan 0 monedas (antes 50.000, seis veces la tienda);
+- `create_room` con `ranked: true` no crea sala clasificatoria.
+
+> **Nota honesta sobre el ELO:** la suma cero impide *crear* puntos, pero no impide que alguien
+> infle una cuenta sacrificando un alt. Eso es inherente al Elo y las defensas reales
+> (partidas provisionales, mínimo de rivales distintos, señales de cuenta) son otra tarea. Lo que
+> se ha eliminado es el «+15 gratis para todos», que era un fallo, no un compromiso de diseño.
+
+---
+
+## ✅ A-5 y A-6 corregidos (cuarta tanda)
+
+### A-5 · WebRTC no renegociaba
+Toda la maquinaria de *perfect negotiation* estaba ahí (`polite`/`makingOffer`/`ignoreOffer`,
+resolución de colisiones) pero **faltaba el disparador**: sin `onnegotiationneeded`, el
+`addTrack`/`removeTrack` de `toggleCam` se aplicaba sobre conexiones ya negociadas y el otro par
+no se enteraba nunca. Encender la cámara a mitad de llamada solo «funcionaba» si ya estaba
+encendida antes de crear el peer; apagarla tampoco se propagaba.
+
+**Corregido** con un `onnegotiationneeded` deliberadamente conservador: se **ignora el disparo
+inicial** (el que provoca añadir el micrófono al crear la conexión) mediante un flag
+`canRenegotiate` que solo se activa cuando la conexión vuelve a `stable` teniendo ya descripción
+remota, es decir, cuando el intercambio inicial oferta/respuesta ha terminado. Así el
+establecimiento de la llamada —que funciona— no se toca, y solo se atienden los cambios de pista
+posteriores, que es exactamente lo que estaba roto. Se revalida `signalingState` después del
+`await` de `createOffer` por si llegó una oferta del otro par entretanto.
+
+> ⚠️ **Sin verificar en navegador.** Esto es lo único de todas las tandas que no he podido probar
+> ejecutándolo: requiere dos navegadores con cámara y un TURN. Está revisado línea a línea y
+> compila, pero **hay que comprobarlo a mano**: llamada entre dos equipos → encender la cámara en
+> uno → debe aparecer en el otro; apagarla → debe desaparecer; repetir el ciclo varias veces.
+> Punto concreto a vigilar en esa prueba: cada ciclo apagar/encender usa `removeTrack` + `addTrack`,
+> que puede ir añadiendo secciones `m=` al SDP. Si se observa degradación tras varios ciclos, la
+> solución es reutilizar el `RTCRtpSender` (`replaceTrack` + `transceiver.direction`) en vez de
+> añadir pistas nuevas; no lo he hecho a ciegas porque el manejo de transceivers es fácil de
+> romper sin un navegador delante.
+
+### A-6 · READMEs corruptos (git los trataba como binarios)
+Ambos estaban en UTF-16 —`README.md` sin BOM, hasta el punto de que `file` lo identificaba como
+imagen Targa— y `git diff` devolvía `-  -`: sin diffs, sin revisión posible. Convertidos a UTF-8
+(verificado: el contenido nuevo diffea como texto, 84 y 64 líneas).
+
+`server/README.md` resultó ser un muñón de **15 caracteres** (`# 2mino-bcknd`), así que se ha
+escrito de verdad: arranque, mapa del módulo, cómo añadir un juego al hub, rutas HTTP y —lo más
+útil— una tabla de **qué mecanismo de confianza aplica cada capa** (`ownsPlayer` / `myRoom` /
+`identity.ready`), que es justo lo que se confundía en los fallos de esta auditoría.
+
+El README raíz tenía además la tabla de variables desactualizada: faltaban `AUTH_SECRET`,
+`AUTH_STRICT`, `CLIENT_ORIGINS`, `MAX_ROOMS` y `DB_SSL_*`, y no advertía de que sin
+`VITE_SERVER_URL` el cliente en producción apunta a su propio origen. Corregido, con el aviso
+destacado de `AUTH_SECRET`.
+
+---
+
+## ⏳ Abierto — por prioridad
+
+### 🟠 Resto de C-2: dejar de difundir el `playerId` real de cuenta
+`getGameStateForPlayer`/`getSpectatorState` siguen enviando `id: p.id` —el id de cuenta— a rivales
+y espectadores. Con el oráculo cerrado y A-1 arreglado, **ya no es una vía de robo de cuenta**:
+queda como divulgación de identificador (rastreo entre partidas) y como facilitador de la ventana
+de migración descrita arriba.
+
+No se ha hecho en esta pasada porque **no es un parche, es un cambio de arquitectura**:
+`useGameStore` documenta que el id de cuenta *es* el id de asiento a propósito («Identidad
+canónica: SIEMPRE el id persistente… El servidor devuelve este mismo id»). Separarlos obliga a
+mantener un mapa asiento↔cuenta en el servidor (`addPlayer`, `roomManager`, torneos, matchmaking,
+`recordMatchEnd`) y a revisar en el cliente todo el targeting por `player.id` (poderes, emotes,
+expulsar, intercambiar asientos, espía, voz). Merece su propia pasada con navegador delante.
+
+### 🟠 Antes de abrir al público
+- **A-7** · `App.jsx` sigue siendo god component: **959 líneas**, ha crecido desde las 926.
+
+### 🟡 Medios
+CORS abierto por defecto (y el CORS no protege de clientes no-navegador: las tres pruebas de
+explotación usaron `socket.io-client` desde Node y lo ignoraron — la barrera real es la
+autorización) · rate-limit solo por socket, sin tope de conexiones por IP · `findMe` hace scan
+lineal de todas las salas en cada evento con `MAX_ROOMS=3000` · `/health` sin rate-limit expone
+`rss`/`heap` · `socket.js` cae a `window.location.origin` en producción si falta
+`VITE_SERVER_URL` · **0 tests de cliente** reales · `index.css` de 7.815 líneas · código muerto
+que el lint ya señala (`setJoined`/`setConnecting`/`setError`/`setPeerStates`/`setSpeaking` en
+`useVoiceChat` — la detección de "quién habla" sigue sin cablear).

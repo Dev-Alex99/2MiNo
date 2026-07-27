@@ -166,6 +166,9 @@ export default function useVoiceChat({ roomId, playerId, name }) {
       pendingCandidates: [],
       makingOffer: false,
       ignoreOffer: false,
+      // Solo se renegocia una vez asentada la conexión inicial (ver
+      // onsignalingstatechange / onnegotiationneeded más abajo).
+      canRenegotiate: false,
       polite
     };
     poolPeersRef.current.set(targetPlayerId, peerData);
@@ -190,6 +193,46 @@ export default function useVoiceChat({ roomId, playerId, name }) {
           toPlayerId: targetPlayerId,
           signal: { candidate }
         });
+      }
+    };
+
+    // La conexión se considera "asentada" la primera vez que vuelve a 'stable'
+    // teniendo ya descripción remota, es decir, cuando el intercambio inicial de
+    // oferta/respuesta ha terminado. A partir de ahí sí renegociamos.
+    pc.onsignalingstatechange = () => {
+      if (pc.signalingState === 'stable' && pc.remoteDescription) {
+        peerData.canRenegotiate = true;
+      }
+    };
+
+    // RENEGOCIACIÓN. Faltaba por completo: `toggleCam` hacía addTrack/removeTrack
+    // sobre conexiones ya negociadas y el otro par NUNCA se enteraba, así que
+    // encender la cámara a mitad de llamada solo "funcionaba" si ya estaba
+    // encendida antes de crear el peer.
+    //
+    // Se ignora el disparo inicial (el que provoca añadir el micro al crear la
+    // conexión): esa primera oferta la maneja el flujo de creación / respuesta.
+    // Tocarla habría cambiado el establecimiento de la llamada, que funciona.
+    // Aquí solo se atienden los cambios POSTERIORES de pistas.
+    pc.onnegotiationneeded = async () => {
+      if (!peerData.canRenegotiate) return;
+      if (pc.signalingState !== 'stable') return;
+      if (!voicePoolRef.current.poolId) return;
+      try {
+        peerData.makingOffer = true;
+        const offer = await pc.createOffer();
+        // Entre el await y aquí puede haber llegado una oferta del otro par.
+        if (pc.signalingState !== 'stable') return;
+        await pc.setLocalDescription(offer);
+        socket.emit('voice_pool_signal', {
+          poolId: voicePoolRef.current.poolId,
+          toPlayerId: targetPlayerId,
+          signal: { description: pc.localDescription }
+        });
+      } catch (e) {
+        console.warn('[voz renegociación error]', e);
+      } finally {
+        peerData.makingOffer = false;
       }
     };
 

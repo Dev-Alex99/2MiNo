@@ -8,7 +8,8 @@ const {
   broadcastGameState,
   broadcastLobby,
   advanceRoom,
-  scheduleEffectExpiry
+  scheduleEffectExpiry,
+  findMe
 } = require('../roomManager');
 
 const {

@@ -1002,7 +1002,7 @@ class DominoGame extends BaseGame {
         this.activeEffects.doubleTurnActive = true;
         break;
 
-      case 'smuggle':
+      case 'smuggle': {
         if (tileIndex === undefined || tileIndex === null) {
           return { success: false, error: 'srv.err.selectTileToGift' };
         }
@@ -1014,6 +1014,7 @@ class DominoGame extends BaseGame {
         player.hand.splice(tileIndex, 1);
         targetPlayer.hand.push(smuggleTile);
         break;
+      }
 
       case 'spy_eye':
         if (!targetPlayer) return { success: false, error: 'srv.err.selectOpponent' };
@@ -1026,7 +1027,7 @@ class DominoGame extends BaseGame {
         this.activeEffects.skipNextTurn = true;
         break;
 
-      case 'draw_penalty':
+      case 'draw_penalty': {
         if (!targetPlayer) return { success: false, error: 'srv.err.selectOpponent' };
         if (this.boneyard.length === 0) {
           return { success: false, error: 'srv.err.boneyardEmpty' };
@@ -1035,12 +1036,13 @@ class DominoGame extends BaseGame {
         const penaltyTile = this.boneyard.pop();
         targetPlayer.hand.push(penaltyTile);
         break;
+      }
 
       case 'reverse':
         this.activeEffects.reversed = !this.activeEffects.reversed;
         break;
 
-      case 'trade':
+      case 'trade': {
         if (tileIndex === undefined || tileIndex === null) {
           return { success: false, error: 'srv.err.selectTileToTrade' };
         }
@@ -1056,6 +1058,7 @@ class DominoGame extends BaseGame {
         this.boneyard.push(tradeTile);
         this.shuffle(this.boneyard); // Barajar el pozo de nuevo
         break;
+      }
 
       case 'shield':
         player.shieldActive = true;
@@ -1069,7 +1072,7 @@ class DominoGame extends BaseGame {
         this.activeEffects.frozenEndOwnerId = playerId;
         break;
 
-      case 'destiny_steal':
+      case 'destiny_steal': {
         if (!targetPlayer) return { success: false, error: 'srv.err.selectOpponent' };
         if (!targetPlayer.powers || targetPlayer.powers.length === 0) {
           return { success: false, error: 'srv.err.opponentNoPowers' };
@@ -1081,13 +1084,15 @@ class DominoGame extends BaseGame {
         targetPlayer.powers.splice(stolenIdx, 1);
         player.powers.push(stolenPower);
         break;
+      }
 
-      case 'mind_swap':
+      case 'mind_swap': {
         if (!targetPlayer) return { success: false, error: 'srv.err.selectOpponent' };
         const tempHand = player.hand;
         player.hand = targetPlayer.hand;
         targetPlayer.hand = tempHand;
         break;
+      }
 
       case 'tile_demolition':
         if (targetId !== 'left' && targetId !== 'right') {
@@ -1108,7 +1113,7 @@ class DominoGame extends BaseGame {
         this.activeEffects.wildcardActive = true;
         break;
 
-      case 'boneyard_reset':
+      case 'boneyard_reset': {
         const handCount = player.hand.length;
         if (handCount === 0) return { success: false, error: 'srv.err.noTilesInHand' };
         this.boneyard.push(...player.hand);
@@ -1119,8 +1124,9 @@ class DominoGame extends BaseGame {
           player.hand.push(this.boneyard.pop());
         }
         break;
+      }
 
-      case 'magnetic_pull':
+      case 'magnetic_pull': {
         if (!targetPlayer) return { success: false, error: 'srv.err.selectOpponent' };
         let pulls = 0;
         while (pulls < 3 && this.boneyard.length > 0 && !this.hasValidMove(targetPlayer.id)) {
@@ -1128,8 +1134,9 @@ class DominoGame extends BaseGame {
           pulls++;
         }
         break;
+      }
 
-      case 'russian_roulette':
+      case 'russian_roulette': {
         const numPlayers = this.players.length;
         if (numPlayers < 2) return { success: false, error: 'srv.err.needTwoPlayers' };
         const passedTiles = this.players.map(p => {
@@ -1147,6 +1154,7 @@ class DominoGame extends BaseGame {
           this.players[receiverIdx].hand.push(tile);
         }
         break;
+      }
 
       // --- Poderes nuevos ---
       case 'block_both':

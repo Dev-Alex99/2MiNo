@@ -210,11 +210,29 @@ export default function App() {
       setIsConnected(false);
     }
 
-    // El servidor confirma la sesión y (si hacía falta) emite un token de
-    // sesión firmado: lo guardamos para reenviarlo en el próximo 'hello'.
+    // El servidor confirma la sesión y emite un token firmado (renovado en cada
+    // conexión): lo guardamos para reenviarlo en el próximo 'hello'.
     function onSession(data) {
-      if (data && data.token) {
+      if (!data) return;
+      if (data.token) {
         try { localStorage.setItem('domino_session_token', data.token); } catch (e) {}
+        return;
+      }
+      // Sin token y sin autenticar: el id que tenemos guardado ya está reclamado
+      // y no hemos podido demostrar que sea nuestro (token caducado tras medio
+      // año sin jugar, o localStorage a medias). El servidor no vincula el
+      // socket, así que perfil, tienda y amigos fallarían en silencio para
+      // siempre. Se empieza una identidad nueva para no dejar al jugador
+      // atascado; el id libre se reclama solo y vuelve a haber token.
+      if (data.authed === false && data.reason === 'reclamada') {
+        try {
+          localStorage.removeItem('domino_session_token');
+          localStorage.removeItem('domino_persistent_player_id');
+        } catch (e) {}
+        const fresh = getOrCreatePersistentPlayerId();
+        setPlayerId(fresh);
+        socket.emit('hello', { playerId: fresh });
+        socket.emit('get_profile', { username: localStorage.getItem('domino_username') || 'Jugador' });
       }
     }
 

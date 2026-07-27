@@ -23,22 +23,24 @@ jobs:
           node-version: 20
           cache: pnpm
 
-      # No se usa --frozen-lockfile: el lockfile puede no reflejar aún los
-      # últimos cambios de package.json (eslint devDep, engines). Cambiar a
-      # --frozen-lockfile una vez regenerado y commiteado el pnpm-lock.yaml.
+      # El lockfile está al día y verificado: una instalación reproducible es lo
+      # que hace que el CI valide lo mismo que se despliega.
       - name: Install
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
       - name: Tests (servidor)
         run: pnpm test
 
-      - name: Lint (cliente) — advisory
+      # El lint BLOQUEA. Estuvo en `continue-on-error: true` y por ahí se coló a
+      # main un `no-undef` (findMe sin importar en gameHandler) con el que
+      # cualquier cliente anónimo tumbaba el servidor entero: el CI lo detectó y
+      # descartó el resultado. Un lint cuyo fallo se ignora no es una barrera.
+      # Los avisos (código muerto pendiente de limpiar) no bloquean; los errores sí.
+      - name: Lint (cliente)
         run: pnpm --filter domino-client lint
-        continue-on-error: true
 
-      - name: Lint (servidor) — advisory
+      - name: Lint (servidor)
         run: pnpm --filter domino-server lint
-        continue-on-error: true
 
       - name: Build (cliente)
         run: pnpm --filter domino-client build

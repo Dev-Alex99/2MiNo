@@ -4,6 +4,7 @@ import { socket } from '../socket';
 import VoiceChat from './VoiceChat';
 import LanguageSwitcher from './LanguageSwitcher';
 import { useT } from '../i18n/LanguageContext';
+import { capacidadesDe } from '../games/registry';
 
 export default function WaitingRoom({ gameState, playerId, onLeave }) {
   const { t } = useT();
@@ -19,7 +20,12 @@ export default function WaitingRoom({ gameState, playerId, onLeave }) {
   const [swapFrom, setSwapFrom] = useState(null);
   const me = gameState.players.find(p => p.id === playerId);
   const totalPlayers = gameState.players.length;
-  const isFull = totalPlayers >= 4;
+  // Capacidades y aforo del juego de ESTA sala. `isFull` estaba fijado a 4:
+  // en una mesa de dos (tres en raya) el botón de añadir bot seguía activo con
+  // la sala llena, y el servidor rechazaba la petición sin más.
+  const juego = capacidadesDe(gameState.gameType);
+  const maxPlayers = gameState.maxPlayers ?? 4;
+  const isFull = totalPlayers >= maxPlayers;
 
   const addBot = () => {
     socket.emit('add_bot', { roomId: gameState.roomId, difficulty: botLevel });
@@ -109,32 +115,44 @@ export default function WaitingRoom({ gameState, playerId, onLeave }) {
             </span>
             <h2 className="waiting-room-header-title">{t('wait.title')}</h2>
 
-            {/* Modalidad fijada por el anfitrión al crear la sala */}
+            {/* Modalidad fijada por el anfitrión al crear la sala.
+                Son etiquetas del DOMINÓ (variante, parejas, pozo, poderes,
+                puntos): en una sala de otro juego anunciaban "Doble 6" y
+                "100 puntos" de cosas que ahí no existen. */}
             <div className="room-mode-tags">
-              <span className="room-mode-tag">
-                <Layers size={11} />
-                {t('opt.double', { n: gameState.maxPip ?? 6 })}
-              </span>
-              {gameState.teamsEnabled && (
-                <span className="room-mode-tag teams">
-                  <Users size={11} />
-                  {t('rooms.teams')} 2v2
+              {juego.opcionesDeSala ? (
+                <>
+                  <span className="room-mode-tag">
+                    <Layers size={11} />
+                    {t('opt.double', { n: gameState.maxPip ?? 6 })}
+                  </span>
+                  {gameState.teamsEnabled && (
+                    <span className="room-mode-tag teams">
+                      <Users size={11} />
+                      {t('rooms.teams')} 2v2
+                    </span>
+                  )}
+                  {gameState.drawEnabled === false && (
+                    <span className="room-mode-tag">
+                      <Download size={11} />
+                      {t('rooms.noDraw')}
+                    </span>
+                  )}
+                  <span className={`room-mode-tag ${gameState.powersEnabled === false ? '' : 'accent'}`}>
+                    <Zap size={11} />
+                    {gameState.powersEnabled === false ? t('mode.classic') : t('mode.withPowers')}
+                  </span>
+                  <span className="room-mode-tag">
+                    <Medal size={11} />
+                    {gameState.maxScore ?? 100} {t('common.points')}
+                  </span>
+                </>
+              ) : (
+                <span className="room-mode-tag accent">
+                  <Sparkles size={11} />
+                  {juego.nombre}
                 </span>
               )}
-              {gameState.drawEnabled === false && (
-                <span className="room-mode-tag">
-                  <Download size={11} />
-                  {t('rooms.noDraw')}
-                </span>
-              )}
-              <span className={`room-mode-tag ${gameState.powersEnabled === false ? '' : 'accent'}`}>
-                <Zap size={11} />
-                {gameState.powersEnabled === false ? t('mode.classic') : t('mode.withPowers')}
-              </span>
-              <span className="room-mode-tag">
-                <Medal size={11} />
-                {gameState.maxScore ?? 100} {t('common.points')}
-              </span>
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -174,7 +192,7 @@ export default function WaitingRoom({ gameState, playerId, onLeave }) {
         <div className="waiting-players-section">
           <div className="waiting-players-header">
             <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Users size={14} /> {t('wait.players', { n: totalPlayers })}
+              <Users size={14} /> {t('wait.players', { n: totalPlayers, max: maxPlayers })}
             </span>
             <span>{t('wait.status')}</span>
           </div>
@@ -283,7 +301,9 @@ export default function WaitingRoom({ gameState, playerId, onLeave }) {
             ))}
 
             {/* Ranuras vacías */}
-            {Array.from({ length: 4 - totalPlayers }).map((_, idx) => (
+            {/* Tantas ranuras como plazas le queden a ESTE juego: con un 4 fijo, una
+                sala de tres en raya (2 plazas) se pintaba como una mesa de cuatro. */}
+            {Array.from({ length: Math.max(0, maxPlayers - totalPlayers) }).map((_, idx) => (
               <div key={`empty-${idx}`} className="player-row-empty">
                 <div className="empty-avatar">?</div>
                 <span>{t('wait.emptySlot')}</span>
@@ -335,8 +355,8 @@ export default function WaitingRoom({ gameState, playerId, onLeave }) {
           </button>
 
           <div className="waiting-footer-desc">
-            {gameState.teamsEnabled && totalPlayers < 4
-              ? t('wait.teamsNeed', { n: 4 - totalPlayers })
+            {gameState.teamsEnabled && totalPlayers < maxPlayers
+              ? t('wait.teamsNeed', { n: maxPlayers - totalPlayers })
               : totalPlayers < 2
                 ? t('wait.needPlayers')
                 : t('wait.willStart')

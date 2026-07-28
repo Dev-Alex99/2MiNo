@@ -57,6 +57,9 @@ export function LanguageProvider({ children }) {
   return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
 }
 
+// El hook vive junto a su provider a propósito: separarlo sólo mejoraría el fast
+// refresh en desarrollo y obligaría a tocar todos los imports del proyecto.
+// eslint-disable-next-line react-refresh/only-export-components
 export function useT() {
   const ctx = useContext(LanguageContext);
   // Fallback defensivo por si algún componente se renderiza fuera del provider.

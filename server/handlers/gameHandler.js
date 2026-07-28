@@ -9,7 +9,10 @@ const {
   broadcastLobby,
   advanceRoom,
   scheduleEffectExpiry,
-  findMe
+  findMe,
+  salaDeLobby,
+  tiposDeJuego,
+  salirDeLobbies
 } = require('../roomManager');
 
 const {
@@ -25,6 +28,8 @@ const {
   validate
 } = require('../schemas');
 
+const seatAliases = require('../seatAliases');
+
 // ¿El socket es dueño de ese playerId en la sala? Evita que otro socket
 // manipule el turno/poderes/chat de un jugador ajeno.
 function ownsPlayer(game, playerId, socketId) {
@@ -32,16 +37,33 @@ function ownsPlayer(game, playerId, socketId) {
   return !!p && p.socketId === socketId;
 }
 
+// El cliente sólo conoce ALIAS de asiento (el id de cuenta no sale de la sala),
+// así que lo que llega hay que traducirlo de vuelta antes de tocar el motor.
+// Los valores que no son un alias conocido —'left', 'right', ids de bot…— pasan
+// tal cual.
+function conIdsReales(roomId, datos, campos) {
+  return seatAliases.traducirEntrada(roomId, datos, campos);
+}
+
 function registerGameHandlers(io, socket) {
   // Lobby Subscripción
-  socket.on('lobby_subscribe', () => {
+  // Se entra al lobby DE UN JUEGO. Antes había uno solo y las listas iban sin
+  // filtrar, así que desde el tres en raya se veían —y se podían abrir— salas
+  // de dominó. 'lobby' a secas se conserva para las estadísticas globales.
+  socket.on('lobby_subscribe', (data) => {
+    const gameType = (data && typeof data.gameType === 'string') ? data.gameType : 'domino';
+    // Salir de cualquier lobby anterior: cambiar de juego no debe dejarte
+    // suscrito al listado del juego que acabas de abandonar.
+    salirDeLobbies(socket);
+
     socket.join('lobby');
-    socket.emit('rooms_list', publicRoomsList());
-    socket.emit('live_games', spectatableRoomsList());
+    socket.join(salaDeLobby(gameType));
+    socket.emit('rooms_list', publicRoomsList(gameType));
+    socket.emit('live_games', spectatableRoomsList(gameType));
     socket.emit('lobby_stats', lobbyStats());
   });
 
-  socket.on('lobby_unsubscribe', () => socket.leave('lobby'));
+  socket.on('lobby_unsubscribe', () => salirDeLobbies(socket));
 
   // Espectar partida
   socket.on('spectate_room', (data) => {
@@ -53,12 +75,13 @@ function registerGameHandlers(io, socket) {
     if (!game) return socket.emit('error_msg', { key: 'srv.err.roomNotFound' });
     if (game.status !== 'playing') return socket.emit('error_msg', { key: 'srv.err.notWatchable' });
 
-    socket.leave('lobby');
+    salirDeLobbies(socket);
     socket.join(roomId);
     addSpectator(roomId, socket.id);
 
     socket.emit('spectating', { roomId });
-    socket.emit('game_state', game.getSpectatorState());
+    seatAliases.registrarJugadores(roomId, game.players);
+    socket.emit('game_state', seatAliases.aliasarEstado(roomId, game.getSpectatorState()));
     broadcastLobby(io);
   });
 
@@ -77,7 +100,7 @@ function registerGameHandlers(io, socket) {
     const v = validate(playTileSchema, data);
     if (!v.success) return;
 
-    const { roomId, playerId, tileIndex, side } = v.data;
+    const { roomId, playerId, tileIndex, side } = conIdsReales(v.data.roomId, v.data, ['playerId']);
     const game = rooms.get(roomId);
     if (!game) return;
     if (!ownsPlayer(game, playerId, socket.id)) return;
@@ -98,7 +121,7 @@ function registerGameHandlers(io, socket) {
     const v = validate(drawTileSchema, data);
     if (!v.success) return;
 
-    const { roomId, playerId } = v.data;
+    const { roomId, playerId } = conIdsReales(v.data.roomId, v.data, ['playerId']);
     const game = rooms.get(roomId);
     if (!game) return;
     if (!ownsPlayer(game, playerId, socket.id)) return;
@@ -118,7 +141,7 @@ function registerGameHandlers(io, socket) {
     const v = validate(passTurnSchema, data);
     if (!v.success) return;
 
-    const { roomId, playerId } = v.data;
+    const { roomId, playerId } = conIdsReales(v.data.roomId, v.data, ['playerId']);
     const game = rooms.get(roomId);
     if (!game) return;
     if (!ownsPlayer(game, playerId, socket.id)) return;
@@ -138,7 +161,7 @@ function registerGameHandlers(io, socket) {
     const v = validate(usePowerCardSchema, data);
     if (!v.success) return;
 
-    const { roomId, playerId, cardId, targetId, tileIndex } = v.data;
+    const { roomId, playerId, cardId, targetId, tileIndex } = conIdsReales(v.data.roomId, v.data, ['playerId', 'targetId']);
     const game = rooms.get(roomId);
     if (!game) return;
 
@@ -245,7 +268,7 @@ function registerGameHandlers(io, socket) {
     const v = validate(sendQuickMessageSchema, data);
     if (!v.success) return;
 
-    const { roomId, playerId, text, type } = v.data;
+    const { roomId, playerId, text, type } = conIdsReales(v.data.roomId, v.data, ['playerId']);
     const game = rooms.get(roomId);
     if (!game) return;
 
@@ -253,7 +276,9 @@ function registerGameHandlers(io, socket) {
     if (!player || player.socketId !== socket.id) return; // no suplantar a otro jugador
 
     io.to(roomId).emit('receive_quick_message', {
-      playerId,
+      // De vuelta al cliente va el ALIAS: 'playerId' ya está traducido a id de
+      // cuenta para el motor, y reemitirlo tal cual lo filtraría a la sala.
+      playerId: seatAliases.aliasDe(roomId, playerId),
       playerName: player.name,
       text,
       type
@@ -264,7 +289,7 @@ function registerGameHandlers(io, socket) {
   socket.on('send_emote', (data) => {
     const v = validate(sendEmoteSchema, data);
     if (!v.success) return;
-    const { roomId, playerId, emoji, targetPlayerId } = v.data;
+    const { roomId, playerId, emoji, targetPlayerId } = conIdsReales(v.data.roomId, v.data, ['playerId', 'targetPlayerId']);
     const game = rooms.get(roomId);
     if (!game) return;
 
@@ -272,10 +297,10 @@ function registerGameHandlers(io, socket) {
     if (!sender || sender.socketId !== socket.id) return; // no suplantar el emisor
 
     io.to(roomId).emit('player_emote', {
-      senderId: playerId,
+      senderId: seatAliases.aliasDe(roomId, playerId),
       senderName: sender.name,
       emoji,
-      targetId: targetPlayerId || null
+      targetId: targetPlayerId ? seatAliases.aliasDe(roomId, targetPlayerId) : null
     });
   });
 

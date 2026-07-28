@@ -1,0 +1,490 @@
+/* Chat de voz, dispositivos y miniaturas de vídeo
+   Parte de index.css, que los importa EN ESTE ORDEN. La cascada depende de
+   ese orden: mover un import cambia qué regla gana. */
+/* --- CHAT DE VOZ --- */
+.voice-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.voice-join-wrap {
+  position: relative;
+  width: 100%;
+}
+
+/* Botón relleno (no un chip apagado): se lee como una acción principal. */
+.voice-join-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(99, 102, 241, 0.5);
+  background: linear-gradient(135deg, var(--secondary) 0%, #4f46e5 100%);
+  color: #fff;
+  font-family: var(--font-family);
+  font-size: 0.8rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.2s, filter 0.2s;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.28);
+}
+.voice-join-btn:hover:not(:disabled) {
+  filter: brightness(1.12);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.45);
+}
+.voice-join-btn:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+.voice-join-btn span:first-of-type { flex-grow: 1; text-align: left; }
+
+/* Cuando nadie está en la voz aún, el botón "respira" para llamar la atención. */
+.voice-join-btn.inviting {
+  animation: voice-invite 2s ease-in-out infinite;
+}
+@keyframes voice-invite {
+  0%, 100% { box-shadow: 0 4px 14px rgba(99, 102, 241, 0.28); }
+  50%      { box-shadow: 0 4px 22px rgba(99, 102, 241, 0.6), 0 0 0 4px rgba(99, 102, 241, 0.12); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .voice-join-btn.inviting { animation: none; }
+}
+
+/* Burbuja que señala el botón e invita a entrar a la voz. */
+.voice-nudge {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(99, 102, 241, 0.14);
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  color: #dbe0ff;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.35;
+  animation: nudge-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.voice-nudge-icon { font-size: 0.95rem; flex-shrink: 0; }
+.voice-nudge > span:nth-child(2) { flex-grow: 1; }
+
+/* Flecha apuntando al botón, justo debajo. */
+.voice-nudge::after {
+  content: '';
+  position: absolute;
+  left: 22px;
+  bottom: -5px;
+  width: 9px;
+  height: 9px;
+  background: rgba(99, 102, 241, 0.14);
+  border-right: 1px solid rgba(99, 102, 241, 0.35);
+  border-bottom: 1px solid rgba(99, 102, 241, 0.35);
+  transform: rotate(45deg);
+}
+
+.voice-nudge-close {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  border: none;
+  background: rgba(255, 255, 255, 0.08);
+  color: #c7d2fe;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.voice-nudge-close:hover { background: rgba(255, 255, 255, 0.18); }
+
+@keyframes nudge-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.voice-count {
+  background: var(--secondary);
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 800;
+  min-width: 17px;
+  height: 17px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+}
+
+.voice-active {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  background: rgba(16, 185, 129, 0.06);
+}
+
+.voice-mic-btn {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.voice-mic-btn.speaking {
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25);
+}
+.voice-mic-btn.muted {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #f87171;
+  box-shadow: none;
+}
+
+.voice-info {
+  flex-grow: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.voice-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.voice-peers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.voice-peer {
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-muted);
+  border: 1px solid transparent;
+  transition: all 0.15s;
+}
+.voice-peer.talking {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: var(--primary);
+  color: #6ee7b7;
+}
+.voice-peer.failed {
+  background: rgba(239, 68, 68, 0.12);
+  color: #f87171;
+  text-decoration: line-through;
+}
+
+.voice-cam-btn {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.voice-cam-btn:hover:not(:disabled) {
+  background: rgba(99, 102, 241, 0.12);
+  color: #a5b4fc;
+}
+.voice-cam-btn.on {
+  background: rgba(99, 102, 241, 0.2);
+  border-color: rgba(99, 102, 241, 0.45);
+  color: #a5b4fc;
+}
+.voice-cam-btn:disabled { opacity: 0.5; cursor: wait; }
+
+/* --- SELECTOR DE DISPOSITIVOS --- */
+.device-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 9px;
+  border-radius: 10px;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.03);
+  animation: fade-in 0.15s ease-out;
+}
+
+.device-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.device-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.58rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.device-select {
+  width: 100%;
+  max-width: 100%;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  color: var(--text-main);
+  font-family: var(--font-family);
+  font-size: 0.68rem;
+  padding: 5px 6px;
+  cursor: pointer;
+  outline: none;
+  /* Los nombres de dispositivo son larguísimos: que no ensanchen la barra. */
+  text-overflow: ellipsis;
+}
+.device-select:focus-visible {
+  border-color: var(--primary);
+}
+.device-select:disabled { opacity: 0.5; cursor: wait; }
+.device-select option { background: #0d121e; color: var(--text-main); }
+
+.device-note {
+  font-size: 0.55rem;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+/* --- MINIATURAS DE VÍDEO (flotando sobre el tablero) ---
+   Van en absoluto y NO en el flujo: dentro de la barra lateral le robaban al
+   tablero toda su altura en móvil. Y con ancho FIJO, nunca 1fr: con 1fr una
+   sola cámara se estiraba a los 320px del sidebar (240px de alto). */
+/* Tu propia cámara, abajo al centro. Es la única franja libre: zoom a la
+   izquierda, chat a la derecha y los asientos en los costados. */
+.video-float {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 10px;
+  z-index: 15;
+  display: flex;
+  flex-wrap: wrap-reverse;
+  gap: 5px;
+  max-width: calc(100% - 200px);
+  /* Que no robe el arrastre del tablero: son decorativas, no se tocan. */
+  pointer-events: none;
+}
+
+.video-tile {
+  position: relative;
+  width: 116px;
+  flex: 0 0 auto;
+  aspect-ratio: 4 / 3;
+  border-radius: 9px;
+  overflow: hidden;
+  background: #05080f;
+  border: 1px solid var(--glass-border);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.video-tile.talking {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary), 0 0 10px var(--primary-glow);
+}
+
+.video-tile video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  /* La cámara frontal en espejo: es lo que la gente espera de sí misma. */
+  transform: scaleX(-1);
+}
+
+.video-tile-name {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 5px;
+  font-size: 0.55rem;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(to top, rgba(0,0,0,.8), transparent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 1024px) {
+  .video-float {
+    bottom: 8px;
+    gap: 4px;
+    max-width: calc(100% - 190px);
+  }
+  .video-tile {
+    width: 84px;
+    border-radius: 7px;
+  }
+  .video-tile-name {
+    font-size: 0.5rem;
+    padding: 1px 4px;
+  }
+  /* Asientos: más chicos que en escritorio, pero se tienen que leer las fichas. */
+  .seat {
+    width: 82px;
+    padding: 3px;
+  }
+  .seat-face {
+    width: 70px;
+    height: 53px;
+  }
+  .seat-name { font-size: 0.58rem; }
+  .seat-avatar { font-size: 0.72rem; }
+  .seat-tiles i { width: 3px; height: 9px; }
+  .seat-count { font-size: 0.55rem; margin-left: 3px; }
+  .seat-top { top: 4px; }
+  .seat-left { left: 4px; }
+  .seat-right { right: 4px; }
+
+  /* Los avisos, por debajo de la fila de asientos: arriba los tapaban. */
+  /* Sin la etiqueta "Centrar" los controles ocupan la mitad y dejan sitio
+     abajo para tu propia cámara. El icono se entiende igual. */
+  .zoom-btn-text { display: none; }
+  .zoom-controls { gap: 4px; bottom: 8px; left: 8px; }
+  .zoom-btn { padding: 7px; }
+
+  .network-alert { top: 8px; }
+  .error-toast { top: 152px; font-size: 0.64rem; }
+  .floating-toast { top: 152px; max-width: calc(100% - 20px); }
+  .floating-toast-text { font-size: 0.64rem; }
+  .floating-emoji { font-size: 1.9rem; }
+  .turn-splash-text { font-size: 1.5rem; }
+
+  /* El panel de voz también ocupa altura del sidebar: en móvil se queda en
+     botones y punto. Quién está en la voz ya se ve por el icono de micro en
+     cada jugador. */
+  .voice-status,
+  .voice-peers {
+    display: none;
+  }
+  .voice-active {
+    padding: 5px;
+    gap: 5px;
+  }
+  .voice-join-btn {
+    padding: 6px 10px;
+    font-size: 0.7rem;
+  }
+  .voice-mic-btn {
+    width: 30px;
+    height: 30px;
+  }
+  .voice-info {
+    display: none;
+  }
+  /* El panel del engranaje cuelga de la barra, sin empujar nada. */
+  .voice-panel { position: static; }
+  .voice-active { border: none; background: none; padding: 0; }
+  .voice-join-btn { width: auto; }
+  .device-panel {
+    position: absolute;
+    top: 100%;
+    right: 6px;
+    z-index: 45;
+    width: 220px;
+    margin-top: 4px;
+    background: #141a2a;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+  }
+  .voice-error {
+    position: absolute;
+    top: 100%;
+    right: 6px;
+    z-index: 45;
+    width: 230px;
+    margin-top: 4px;
+    background: #2a1416;
+  }
+  /* Tu propia cámara en móvil: mínima y fuera del paso. */
+  .video-float { max-width: 60px; }
+}
+
+.voice-leave-btn {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.voice-leave-btn:hover {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #f87171;
+}
+
+.voice-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 5px;
+  font-size: 0.62rem;
+  line-height: 1.4;
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  padding: 6px 8px;
+  border-radius: 8px;
+}
+.voice-error svg { flex-shrink: 0; margin-top: 1px; }
+
+.player-voice-mic {
+  color: var(--primary);
+  flex-shrink: 0;
+}
+
+@keyframes voice-spin { to { transform: rotate(360deg); } }
+.voice-spin { animation: voice-spin 0.9s linear infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .voice-spin { animation: none; }
+}
+

@@ -7,5 +7,13 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true
+  },
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: ['./src/test/setup.js'],
+    // Sólo los tests del cliente: las suites del servidor son scripts de node
+    // que se ejecutan aparte con `pnpm test` desde la raíz.
+    include: ['src/**/*.test.{js,jsx}']
   }
 })

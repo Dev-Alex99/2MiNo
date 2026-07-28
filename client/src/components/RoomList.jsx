@@ -63,7 +63,7 @@ export default function RoomList({ rooms, onJoin, loading }) {
 
           <span className="room-row-count">
             <Users size={11} />
-            {r.players}/4
+            {r.players}/{r.maxPlayers ?? 4}
           </span>
         </button>
       ))}

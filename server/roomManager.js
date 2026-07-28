@@ -3,6 +3,7 @@ const GameRegistry = require('./core/GameRegistry');
 // La IA de dominó (chooseMove/choosePower) ya NO se usa aquí: cada juego pilota
 // sus bots vía game.playBotTurn(). Solo se conserva el generador de nombres.
 const { pickBotName } = require('./botLogic');
+const seatAliases = require('./seatAliases');
 
 // Almacén de salas activas: roomId -> BaseGame (DominoGame, etc.)
 const rooms = new Map();
@@ -79,6 +80,8 @@ function destroyRoom(io, roomId) {
   rooms.delete(roomId);
   spectators.delete(roomId);
   clearRoomTimers(roomId);
+  forgetRoom(roomId);
+  seatAliases.olvidarSala(roomId);
 }
 
 function generateRoomId() {
@@ -99,15 +102,22 @@ function broadcastGameState(io, roomId) {
 
   const shared = game.getSharedState();
 
+  // Único punto de salida del estado: aquí se sustituyen los ids de cuenta por
+  // alias de asiento, para que el id persistente de un jugador no viaje a sus
+  // rivales ni a los espectadores. El estado se construye con los ids reales
+  // (el motor decide con ellos qué mano revelar) y se traduce al final.
+  seatAliases.registrarJugadores(roomId, game.players);
+  const aliasar = (estado) => seatAliases.aliasarEstado(roomId, estado);
+
   game.players.forEach(player => {
     if (player.socketId) {
-      io.to(player.socketId).emit('game_state', game.getGameStateForPlayer(player.id, shared));
+      io.to(player.socketId).emit('game_state', aliasar(game.getGameStateForPlayer(player.id, shared)));
     }
   });
 
   const specs = spectatorsOf(roomId);
   if (specs && specs.size) {
-    const specView = game.getSpectatorState(shared);
+    const specView = aliasar(game.getSpectatorState(shared));
     for (const sid of specs) io.to(sid).emit('game_state', specView);
   }
 }
@@ -123,6 +133,7 @@ function publicRoomsList(gameTypeFilter = null) {
       gameType: game.gameType || 'domino',
       host: host ? host.name : '—',
       players: game.players.length,
+      maxPlayers: game.maxPlayers || 4,
       bots: game.players.filter(p => p.isBot).length,
       maxPip: game.maxPip,
       maxScore: game.maxScore,
@@ -171,9 +182,37 @@ function broadcastStats(io) {
   io.to('lobby').emit('lobby_stats', lobbyStats());
 }
 
+// Un lobby por juego. `publicRoomsList`/`spectatableRoomsList` aceptaban un
+// filtro por tipo desde el principio y NUNCA se les pasaba: el lobby del tres
+// en raya listaba las salas de dominó y te dejaba entrar en ellas.
+function salaDeLobby(gameType) {
+  return `lobby:${gameType || 'domino'}`;
+}
+
+function tiposDeJuego() {
+  try {
+    return GameRegistry.listGames().map(g => g.gameType);
+  } catch {
+    return ['domino'];
+  }
+}
+
+/**
+ * Saca al socket de TODOS los lobbies (el global de estadísticas y el de cada
+ * juego). Se sale del lobby desde varios sitios —crear sala, partida rápida,
+ * espectar— y hacerlo a mano en cada uno era la forma de olvidarse de uno.
+ */
+function salirDeLobbies(socket) {
+  socket.leave('lobby');
+  for (const tipo of tiposDeJuego()) socket.leave(salaDeLobby(tipo));
+}
+
 function broadcastLobby(io) {
-  io.to('lobby').emit('rooms_list', publicRoomsList());
-  io.to('lobby').emit('live_games', spectatableRoomsList());
+  for (const gameType of tiposDeJuego()) {
+    const sala = salaDeLobby(gameType);
+    io.to(sala).emit('rooms_list', publicRoomsList(gameType));
+    io.to(sala).emit('live_games', spectatableRoomsList(gameType));
+  }
   broadcastStats(io);
 }
 
@@ -337,8 +376,13 @@ function advanceRoom(io, roomId) {
   const game = rooms.get(roomId);
   if (game && game.status === 'game_ended' && !game._matchRecorded) {
     game._matchRecorded = true;
-    const winnerId = game.gameWinner;
+    // Se pregunta al JUEGO por su resultado: leer `gameWinner`/`maxPip` a pelo
+    // son campos del dominó y con otro juego se registraba basura.
+    const winnerId = typeof game.getWinnerId === 'function' ? game.getWinnerId() : game.gameWinner;
     const winner = game.players.find(p => p.id === winnerId);
+    const variante = typeof game.getVariantLabel === 'function'
+      ? game.getVariantLabel()
+      : `double_${game.maxPip || 6}`;
 
     // El ELO solo se mueve en clasificatoria y con al menos 2 humanos (nada de
     // farmear puntos ganando a los bots).
@@ -349,7 +393,7 @@ function advanceRoom(io, roomId) {
     recordMatchEnd({
       id: `${roomId}_${Date.now()}`,
       roomId,
-      variant: `double_${game.maxPip || 6}`,
+      variant: variante,
       teamsEnabled: game.teamsEnabled,
       winnerName: winner ? winner.name : (game.teamsEnabled && winnerId ? `Equipo ${winnerId.replace('team_', '') === '0' ? 'A' : 'B'}` : 'Empate'),
       winnerId: winnerId || null,
@@ -431,7 +475,7 @@ function createRoomFor(io, socket, name, playerId, opts = {}) {
 
   rooms.set(roomId, game);
   socket.join(roomId);
-  socket.leave('lobby');
+  salirDeLobbies(socket);
 
   console.log(`Sala creada: ${roomId} por ${name} (doble ${safeMaxPip}, ${safePublic ? 'pública' : 'privada'}, ` +
     `poderes: ${safePowers ? 'sí' : 'no'}, ${safeTeams ? 'parejas' : 'individual'}, ${game.maxScore} pts)`);
@@ -488,12 +532,49 @@ function createRankedMatch(io, players) {
   return { roomId };
 }
 
+// Índice socketId → roomId. `findMe` se llama en casi todos los eventos de
+// socket y recorría TODAS las salas cada vez: con MAX_ROOMS=3000 eso son 3000
+// búsquedas lineales por evento.
+//
+// El índice es una CACHÉ, no la fuente de verdad: se valida contra la sala real
+// en cada consulta y, si falla, se cae al escaneo y se reindexa. Así el
+// `socketId` de un jugador puede reasignarse por ahí (reconexión, expulsión,
+// desconexión) sin que una entrada obsoleta devuelva nunca un resultado
+// incorrecto — sólo cuesta un escaneo puntual.
+const socketIndex = new Map();
+
 function findMe(socketId) {
+  const cached = socketIndex.get(socketId);
+  if (cached) {
+    const game = rooms.get(cached);
+    const player = game && game.players.find(p => p.socketId === socketId);
+    if (player) return { roomId: cached, game, player };
+    socketIndex.delete(socketId); // entrada obsoleta
+  }
+
   for (const [roomId, game] of rooms.entries()) {
     const player = game.players.find(p => p.socketId === socketId);
-    if (player) return { roomId, game, player };
+    if (player) {
+      socketIndex.set(socketId, roomId);
+      return { roomId, game, player };
+    }
   }
   return null;
+}
+
+// Olvidar un socket (al desconectar). No es imprescindible para la corrección
+// —la validación de arriba ya cubre las entradas obsoletas— pero evita que el
+// Map crezca con sockets muertos en un servidor de larga vida.
+function forgetSocket(socketId) {
+  socketIndex.delete(socketId);
+}
+
+// Al destruir una sala se tiran sus entradas: si no, quedarían apuntando a una
+// sala inexistente hasta que ese socket volviera a preguntar.
+function forgetRoom(roomId) {
+  for (const [socketId, rid] of socketIndex.entries()) {
+    if (rid === roomId) socketIndex.delete(socketId);
+  }
 }
 
 module.exports = {
@@ -516,6 +597,9 @@ module.exports = {
   lobbyStats,
   broadcastStats,
   broadcastLobby,
+  salaDeLobby,
+  tiposDeJuego,
+  salirDeLobbies,
   armTurnTimer,
   scheduleEffectExpiry,
   scheduleBotTurn,
@@ -524,5 +608,6 @@ module.exports = {
   createMatchRoom,
   createRankedMatch,
   findMe,
+  forgetSocket,
   pickBotName
 };

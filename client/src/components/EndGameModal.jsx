@@ -3,7 +3,6 @@ import { Trophy, RefreshCw, ChevronRight, Award, Eye } from 'lucide-react';
 import { socket } from '../socket';
 import { useT } from '../i18n/LanguageContext';
 
-import { playGameSound } from '../audio';
 
 function ConfettiCanvas() {
   const canvasRef = React.useRef(null);

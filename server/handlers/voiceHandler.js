@@ -1,5 +1,6 @@
 const { findMe, broadcastGameState } = require('../roomManager');
 const identity = require('../identity');
+const seatAliases = require('../seatAliases');
 const { voiceCamSchema, validate } = require('../schemas');
 const { socketsOf } = require('../presence');
 
@@ -24,7 +25,7 @@ function leaveVoice(io, socket, ctx) {
   if (!ctx || !ctx.player.inVoice) return;
   ctx.player.inVoice = false;
   ctx.player.camOn = false;
-  socket.to(ctx.roomId).emit('voice_peer_left', { playerId: ctx.player.id });
+  socket.to(ctx.roomId).emit('voice_peer_left', { playerId: seatAliases.aliasDe(ctx.roomId, ctx.player.id) });
   broadcastGameState(io, ctx.roomId);
 }
 
@@ -204,13 +205,18 @@ function registerVoiceHandlers(io, socket) {
     }
   });
 
-  // 6. Indicador de voz activa en pool
+  // 6. Indicador de voz activa en pool.
+  // Se difunde el `playerId` (no el socketId): es la clave por la que la
+  // interfaz consulta quién está hablando. Mandando el socketId, el indicador
+  // no encontraba a nadie y no se encendía nunca.
   socket.on('voice_pool_speaking', ({ poolId, speaking }) => {
     const pool = voicePools.get(poolId);
     if (!pool) return;
+    const quien = identity.currentId(socket);
+    if (!quien) return;
     for (const member of pool.values()) {
       if (member.socketId !== socket.id) {
-        io.to(member.socketId).emit('voice_pool_speaking', { socketId: socket.id, speaking });
+        io.to(member.socketId).emit('voice_pool_speaking', { playerId: quien, speaking: !!speaking });
       }
     }
   });
@@ -292,7 +298,7 @@ function registerVoiceHandlers(io, socket) {
       .map(p => ({ playerId: p.id, name: p.name }));
 
     socket.emit('voice_peers', { peers });
-    socket.to(ctx.roomId).emit('voice_peer_joined', { playerId: ctx.player.id, name: ctx.player.name });
+    socket.to(ctx.roomId).emit('voice_peer_joined', { playerId: seatAliases.aliasDe(ctx.roomId, ctx.player.id), name: ctx.player.name });
     broadcastGameState(io, ctx.roomId);
   });
 
@@ -303,7 +309,7 @@ function registerVoiceHandlers(io, socket) {
   socket.on('voice_speaking', (data) => {
     const ctx = findMe(socket.id);
     if (!ctx || !ctx.player.inVoice) return;
-    socket.to(ctx.roomId).emit('voice_speaking', { playerId: ctx.player.id, speaking: !!data.speaking });
+    socket.to(ctx.roomId).emit('voice_speaking', { playerId: seatAliases.aliasDe(ctx.roomId, ctx.player.id), speaking: !!data.speaking });
   });
 
   return {

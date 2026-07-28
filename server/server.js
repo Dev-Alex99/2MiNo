@@ -12,7 +12,9 @@ const {
   securityHeaders,
   httpRateLimit,
   installSocketRateLimit,
-  allowedOrigins
+  installConnectionLimit,
+  allowedOrigins,
+  MAX_SOCKETS_PER_IP
 } = require('./security');
 
 const {
@@ -21,6 +23,7 @@ const {
   incOnlineCount,
   decOnlineCount,
   findMe,
+  forgetSocket,
   removeSpectatorEverywhere,
   broadcastLobby,
   broadcastGameState,
@@ -131,7 +134,9 @@ app.get('/ice-config', httpRateLimit({ windowMs: 60000, max: 30 }), async (req, 
   res.json({ iceServers, turnMode, turnConfigured: turnMode === 'cloudflare' || turnMode === 'custom' });
 });
 
-app.get('/health', (req, res) => {
+// /health expone memoria y nº de salas: útil para monitorizar, pero no hace
+// falta que cualquiera lo consulte en bucle.
+app.get('/health', httpRateLimit({ windowMs: 60000, max: 60 }), (req, res) => {
   const m = process.memoryUsage();
   res.json({
     ok: true,
@@ -148,6 +153,11 @@ const io = new Server(server, {
   perMessageDeflate: false,
   maxHttpBufferSize: 1e5
 });
+
+// Tope de sockets simultáneos por IP. El rate-limit por socket se evadía
+// abriendo conexiones nuevas; esto pone techo a cuántas puede tener una IP.
+installConnectionLimit(io);
+console.log(`[seguridad] Máx. sockets simultáneos por IP: ${MAX_SOCKETS_PER_IP}`);
 
 io.on('connection', (socket) => {
   console.log(`Nuevo cliente conectado: ${socket.id}`);
@@ -232,6 +242,7 @@ io.on('connection', (socket) => {
       }
     }
 
+    forgetSocket(socket.id); // el índice socketId→sala no debe crecer con muertos
     decOnlineCount();
     broadcastStats(io);
   });

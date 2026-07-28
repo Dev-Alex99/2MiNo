@@ -1,10 +1,8 @@
 import React from 'react';
 import { Eye, LogOut, Bot, Shield, Zap } from 'lucide-react';
-import GameBoard from './GameBoard';
 import LanguageSwitcher from './LanguageSwitcher';
 import { useT } from '../i18n/LanguageContext';
-
-const noop = () => {};
+import { obtenerTableroEspectador } from '../games/registry';
 
 function initials(name) {
   return (name || '?').substring(0, 2).toUpperCase();
@@ -19,6 +17,9 @@ export default function SpectatorView({ gameState, onLeave }) {
   const { t } = useT();
   const g = gameState;
   const players = g.players || [];
+  // El tablero lo decide el juego, no este componente: antes pintaba siempre el
+  // de dominó, así que espectar un tres en raya mostraba una mesa vacía.
+  const Tablero = obtenerTableroEspectador(g.gameType);
 
   return (
     <div className="app-container spectator">
@@ -48,10 +49,16 @@ export default function SpectatorView({ gameState, onLeave }) {
             </span>
             <span className="spec-pname">{p.name}</span>
             <span className="spec-pmeta">
-              <span className="spec-tiles" title={t('seat.tiles', { n: p.handCount })}>
-                {Array.from({ length: Math.min(p.handCount, 10) }).map((_, i) => <i key={i} />)}
-                <b>{p.handCount}</b>
-              </span>
+              {/* Las fichas en mano son cosa del dominó: en otros juegos
+                  `handCount` no existe y se pintaba una tira vacía con un
+                  número en blanco al lado. */}
+              {typeof p.handCount === 'number' && (
+                <span className="spec-tiles" title={t('seat.tiles', { n: p.handCount })}>
+                  {Array.from({ length: Math.min(p.handCount, 10) }).map((_, i) => <i key={i} />)}
+                  <b>{p.handCount}</b>
+                </span>
+              )}
+              {p.symbol && <span className="spec-symbol">{p.symbol}</span>}
               <span className="spec-score">{p.score} {t('common.points')}</span>
               {g.powersEnabled && p.powersCount > 0 && (
                 <span className="spec-powers"><Zap size={9} />{p.powersCount}</span>
@@ -63,23 +70,9 @@ export default function SpectatorView({ gameState, onLeave }) {
 
       <div className="game-area">
         <div className="board-region spec-board">
-          <GameBoard
-            board={g.board}
-            selectedTileIndex={null}
-            onPlay={noop}
-            isMyTurn={false}
-            players={players}
-            currentPlayerId={g.currentPlayerId}
-            canPlayLeft={false}
-            canPlayRight={false}
-            pendingTargetType={null}
-            onSelectEndTarget={noop}
-            activeEffects={g.activeEffects}
-            lastPlay={g.lastPlay}
-            lastPlacedTile={g.lastPlacedTile}
-            lastPlacedBy={g.lastPlacedBy}
-            seatsPadding={40}
-          />
+          {/* `playerId` vacío a propósito: ningún asiento coincide, así que el
+              tablero se pinta sin controles y las casillas quedan inertes. */}
+          <Tablero gameState={g} playerId="" onLeave={onLeave} />
         </div>
       </div>
     </div>

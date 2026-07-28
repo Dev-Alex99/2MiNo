@@ -7,6 +7,7 @@ const BaseGame = require('../core/BaseGame');
 class TicTacToeGame extends BaseGame {
   constructor(roomId, options = {}) {
     super('tictactoe', roomId, options);
+    this.minPlayers = 2;
     this.maxPlayers = 2;
     this.board = Array(9).fill(null); // Tablero 3x3 (índices 0-8)
     this.currentPlayerIdx = 0;
@@ -33,13 +34,14 @@ class TicTacToeGame extends BaseGame {
     if (this.players[1]) this.symbols[this.players[1].id] = 'O';
 
     this.resetTurnTimer();
-    this.triggerBotTurnIfNeeded();
     return true;
   }
 
   resetTurnTimer() {
-    this.turnDurationMs = (this.options.turnDurationSeconds || 30) * 1000;
-    this.turnEndsAt = Date.now() + this.turnDurationMs;
+    // La duración la fija roomManager desde TURN_SECONDS. Antes se leía de unas
+    // `options.turnDurationSeconds` que nadie rellenaba nunca, así que la
+    // variable de entorno se ignoraba y el turno duraba siempre 30 s.
+    this.turnEndsAt = Date.now() + (this.turnDurationMs || 30000);
   }
 
   getCurrentPlayer() {
@@ -48,22 +50,22 @@ class TicTacToeGame extends BaseGame {
 
   handleAction(playerId, actionType, payload = {}) {
     if (this.status !== 'playing') {
-      return { success: false, error: 'La partida no está en curso' };
+      return { success: false, error: 'srv.err.gameNotRunning' };
     }
 
     const current = this.getCurrentPlayer();
     if (!current || current.id !== playerId) {
-      return { success: false, error: 'No es tu turno' };
+      return { success: false, error: 'srv.err.notYourTurn' };
     }
 
     if (actionType === 'move' || actionType === 'place_symbol') {
       const cellIdx = payload.index ?? payload.cellIdx;
       if (typeof cellIdx !== 'number' || cellIdx < 0 || cellIdx > 8) {
-        return { success: false, error: 'Casilla inválida' };
+        return { success: false, error: 'srv.err.badCell' };
       }
 
       if (this.board[cellIdx] !== null) {
-        return { success: false, error: 'Casilla ya ocupada' };
+        return { success: false, error: 'srv.err.cellTaken' };
       }
 
       const symbol = this.symbols[playerId];
@@ -85,23 +87,16 @@ class TicTacToeGame extends BaseGame {
         // Avanzar turno
         this.currentPlayerIdx = (this.currentPlayerIdx + 1) % this.players.length;
         this.resetTurnTimer();
-        this.triggerBotTurnIfNeeded();
       }
 
       return { success: true };
     }
 
-    return { success: false, error: 'Acción no reconocida' };
+    return { success: false, error: 'srv.err.unknownAction' };
   }
 
   checkWin() {
-    const lines = [
-      [0, 1, 2], [3, 4, 5], [6, 7, 8], // Filas
-      [0, 3, 6], [1, 4, 7], [2, 5, 8], // Columnas
-      [0, 4, 8], [2, 4, 6]             // Diagonales
-    ];
-
-    for (const line of lines) {
+    for (const line of TicTacToeGame.LINEAS) {
       const [a, b, c] = line;
       if (this.board[a] && this.board[a] === this.board[b] && this.board[a] === this.board[c]) {
         return { winner: this.board[a], line };
@@ -122,24 +117,26 @@ class TicTacToeGame extends BaseGame {
     const current = this.getCurrentPlayer();
     if (!current) return none;
 
-    // Encontrar casillas vacías y jugar automáticamente
-    const emptyIndices = this.board
-      .map((val, idx) => (val === null ? idx : null))
-      .filter(val => val !== null);
+    if (!this.casillasLibres().length) return none;
 
-    if (emptyIndices.length === 0) return none;
-
-    // Seleccionar una casilla aleatoria
-    const randomIdx = emptyIndices[Math.floor(Math.random() * emptyIndices.length)];
-    const res = this.handleAction(current.id, 'move', { index: randomIdx });
+    // Se juega con la heurística, no al azar: al jugador se le acabó el tiempo,
+    // no hay por qué castigarle además con una jugada suicida.
+    const idx = this.jugadaHeuristica(this.symbols[current.id] || 'X');
+    const res = this.handleAction(current.id, 'move', { index: idx });
     if (!res || !res.success) return none;
     return { action: 'played', playerId: current.id, playerName: current.name, drew: 0 };
   }
 
-  // Este juego mueve a sus propios bots (triggerBotTurnIfNeeded), así que el
-  // orquestador no debe programarlos con el botLogic de dominó.
+  // El bot lo pilota el ORQUESTADOR (roomManager.scheduleBotTurn), no el juego.
+  //
+  // Antes esto devolvía `true` y la jugada se aplicaba desde un `setTimeout`
+  // privado… que nadie observaba: el estado cambiaba en el servidor y **no se
+  // difundía**. El jugador movía, el bot respondía por dentro y el tablero se
+  // quedaba congelado hasta que ocurriera cualquier otra cosa. Delegando en el
+  // orquestador se reutiliza su ciclo (retardo de "pensar" + difusión + sonido),
+  // que es justo lo que faltaba.
   handlesOwnBots() {
-    return true;
+    return false;
   }
 
   addBot(name = 'Bot TresEnRaya', difficulty = 'normal') {
@@ -154,68 +151,154 @@ class TicTacToeGame extends BaseGame {
       score: 0
     };
     this.players.push(bot);
-
-    if (this.players.length === 2 && this.status === 'waiting') {
-      this.startNewGame();
-    }
+    this.ensureHost();
+    // No se arranca la partida aquí: la mesa se pone en marcha cuando todos
+    // están listos (`allReady`), igual que en dominó. Antes empezaba sola al
+    // añadir el bot, sin que el humano hubiera pulsado "listo".
     return bot;
   }
 
-  triggerBotTurnIfNeeded() {
-    const current = this.getCurrentPlayer();
-    if (current && current.isBot && this.status === 'playing') {
-      setTimeout(() => {
-        if (this.status !== 'playing') return;
-        const botCurrent = this.getCurrentPlayer();
-        if (!botCurrent || !botCurrent.isBot || botCurrent.id !== current.id) return;
+  /** Contrato de BaseGame: el orquestador llama, aplica y difunde. */
+  playBotTurn(botId) {
+    const bot = this.players.find(p => p.id === botId);
+    if (!bot || this.status !== 'playing') return { action: 'none' };
 
-        const symbol = this.symbols[botCurrent.id];
-        const opponentSymbol = symbol === 'X' ? 'O' : 'X';
+    const symbol = this.symbols[botId];
+    if (!symbol) return { action: 'none' };
 
-        const bestIndex = this.getBestBotMove(symbol, opponentSymbol, botCurrent.difficulty);
-        this.handleAction(botCurrent.id, 'move', { index: bestIndex });
-      }, 600);
+    const index = this.elegirJugada(symbol, bot.difficulty);
+    if (index === null) return { action: 'none' };
+
+    const res = this.handleAction(botId, 'move', { index });
+    return res && res.success ? { action: 'played', index } : { action: 'none' };
+  }
+
+  casillasLibres(board = this.board) {
+    const libres = [];
+    for (let i = 0; i < board.length; i++) if (board[i] === null) libres.push(i);
+    return libres;
+  }
+
+  /**
+   * Elige jugada según la dificultad.
+   *
+   * Antes los cuatro niveles del selector eran decorativos: el motor comparaba
+   * `difficulty === 'easy'` (en inglés) pero el cliente manda 'facil', 'normal',
+   * 'dificil' y 'maestro', así que NINGUNO entraba en la rama aleatoria y los
+   * cuatro jugaban exactamente igual.
+   */
+  elegirJugada(mySymbol, difficulty = 'normal') {
+    const libres = this.casillasLibres();
+    if (!libres.length) return null;
+
+    const alAzar = () => libres[Math.floor(Math.random() * libres.length)];
+
+    switch (difficulty) {
+      case 'facil':
+        return alAzar();
+      case 'dificil':
+      case 'maestro':
+        // Juego perfecto: no se le puede ganar, sólo empatar.
+        return this.mejorJugadaMinimax(mySymbol);
+      case 'normal':
+      default:
+        return this.jugadaHeuristica(mySymbol);
     }
   }
 
-  getBestBotMove(mySymbol, opponentSymbol, difficulty) {
-    const emptyIndices = this.board
-      .map((val, idx) => (val === null ? idx : null))
-      .filter(val => val !== null);
+  /** Ganar > bloquear > centro > esquina > lado. Buena, pero cae en horquillas. */
+  jugadaHeuristica(mySymbol) {
+    const rival = mySymbol === 'X' ? 'O' : 'X';
+    const libres = this.casillasLibres();
 
-    if (emptyIndices.length === 0) return 0;
-
-    // Si es fácil, juega aleatorio
-    if (difficulty === 'easy') {
-      return emptyIndices[Math.floor(Math.random() * emptyIndices.length)];
-    }
-
-    // 1. Ganar si hay jugada ganadora directa
-    for (const idx of emptyIndices) {
+    for (const idx of libres) {
       this.board[idx] = mySymbol;
       const win = this.checkWin();
       this.board[idx] = null;
       if (win && win.winner === mySymbol) return idx;
     }
 
-    // 2. Bloquear al rival si tiene jugada ganadora
-    for (const idx of emptyIndices) {
-      this.board[idx] = opponentSymbol;
+    for (const idx of libres) {
+      this.board[idx] = rival;
       const win = this.checkWin();
       this.board[idx] = null;
-      if (win && win.winner === opponentSymbol) return idx;
+      if (win && win.winner === rival) return idx;
     }
 
-    // 3. Tomar el centro (4) si está libre
-    if (emptyIndices.includes(4)) return 4;
+    if (libres.includes(4)) return 4;
 
-    // 4. Tomar esquinas (0, 2, 6, 8)
-    const corners = [0, 2, 6, 8].filter(c => emptyIndices.includes(c));
-    if (corners.length > 0) {
-      return corners[Math.floor(Math.random() * corners.length)];
+    const esquinas = [0, 2, 6, 8].filter(c => libres.includes(c));
+    if (esquinas.length) return esquinas[Math.floor(Math.random() * esquinas.length)];
+
+    return libres[Math.floor(Math.random() * libres.length)];
+  }
+
+  /**
+   * Minimax con la profundidad en la puntuación: entre dos victorias prefiere la
+   * más rápida y entre dos derrotas la más lenta. Sin eso el bot alarga partidas
+   * ya ganadas y parece que juega mal.
+   *
+   * El tablero tiene como mucho 9! = 362.880 partidas, así que se explora
+   * entero sin poda y sin coste apreciable.
+   */
+  mejorJugadaMinimax(mySymbol) {
+    const rival = mySymbol === 'X' ? 'O' : 'X';
+    const tablero = [...this.board];
+
+    let mejor = null;
+    let mejorValor = -Infinity;
+    for (const idx of this.casillasLibres(tablero)) {
+      tablero[idx] = mySymbol;
+      const valor = this.minimax(tablero, mySymbol, rival, 1, false);
+      tablero[idx] = null;
+      if (valor > mejorValor) {
+        mejorValor = valor;
+        mejor = idx;
+      }
     }
+    return mejor;
+  }
 
-    return emptyIndices[Math.floor(Math.random() * emptyIndices.length)];
+  minimax(tablero, mySymbol, rival, profundidad, maximizando) {
+    const ganador = TicTacToeGame.ganadorDe(tablero);
+    if (ganador === mySymbol) return 10 - profundidad;   // ganar antes, mejor
+    if (ganador === rival) return profundidad - 10;      // perder tarde, menos malo
+    if (ganador === 'draw') return 0;
+
+    const libres = this.casillasLibres(tablero);
+    let valor = maximizando ? -Infinity : Infinity;
+    for (const idx of libres) {
+      tablero[idx] = maximizando ? mySymbol : rival;
+      const v = this.minimax(tablero, mySymbol, rival, profundidad + 1, !maximizando);
+      tablero[idx] = null;
+      valor = maximizando ? Math.max(valor, v) : Math.min(valor, v);
+    }
+    return valor;
+  }
+
+  /** Ganador de un tablero cualquiera: 'X' | 'O' | 'draw' | null. Estático para
+   *  poder evaluar tableros hipotéticos sin tocar el estado de la partida. */
+  static ganadorDe(tablero) {
+    for (const [a, b, c] of TicTacToeGame.LINEAS) {
+      if (tablero[a] && tablero[a] === tablero[b] && tablero[a] === tablero[c]) return tablero[a];
+    }
+    return tablero.every(c => c !== null) ? 'draw' : null;
+  }
+
+  /**
+   * El ganador del tres en raya vive en `winner` y es un SÍMBOLO ('X'/'O'), no
+   * un playerId. El historial y el ELO esperan un playerId, así que se traduce
+   * aquí. Sin esto toda partida se guardaba como empate.
+   */
+  getWinnerId() {
+    if (this.winner === 'draw') return 'tie';
+    if (!this.winner) return null;
+    const ganador = this.players.find(p => this.symbols[p.id] === this.winner);
+    return ganador ? ganador.id : null;
+  }
+
+  getVariantLabel() {
+    return 'tictactoe';
   }
 
   getSharedState() {
@@ -223,6 +306,11 @@ class TicTacToeGame extends BaseGame {
       gameType: this.gameType,
       roomId: this.roomId,
       status: this.status,
+      // El cliente los necesita para saber si la mesa está llena y quién manda
+      // en ella: sin `maxPlayers` daba por hecho 4 y sin `hostId` nadie podía
+      // expulsar.
+      maxPlayers: this.maxPlayers,
+      hostId: this.hostId,
       roundNumber: this.roundNumber,
       board: this.board,
       currentPlayerId: this.getCurrentPlayer() ? this.getCurrentPlayer().id : null,
@@ -252,6 +340,13 @@ class TicTacToeGame extends BaseGame {
     return sharedState || this.getSharedState();
   }
 }
+
+// Las 8 líneas que dan la victoria: 3 filas, 3 columnas y 2 diagonales.
+TicTacToeGame.LINEAS = [
+  [0, 1, 2], [3, 4, 5], [6, 7, 8],
+  [0, 3, 6], [1, 4, 7], [2, 5, 8],
+  [0, 4, 8], [2, 4, 6]
+];
 
 const GameRegistry = require('../core/GameRegistry');
 GameRegistry.register('tictactoe', TicTacToeGame, {

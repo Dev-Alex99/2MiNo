@@ -1,0 +1,99 @@
+/* Variables, reset, scrollbar, foco y utilidades globales
+   Parte de index.css, que los importa EN ESTE ORDEN. La cascada depende de
+   ese orden: mover un import cambia qué regla gana. */
+/* -------------------------------------------------------------
+ * Sistema de Diseño de Dominó Online - Classic Minimalist Premium
+ * ------------------------------------------------------------- */
+
+:root {
+  --bg-app: radial-gradient(circle at top center, #0f172a 0%, #070a12 100%);
+  --bg-table: radial-gradient(circle at center, #0d382c 0%, #041712 100%);
+  --primary: #059669; /* Esmeralda Clásico */
+  --primary-glow: rgba(5, 150, 105, 0.2);
+  --secondary: #4f46e5; /* Índigo Pizarra */
+  --secondary-glow: rgba(79, 70, 229, 0.2);
+  --accent: #d97706; /* Dorado / Ámbar Cálido */
+  --accent-glow: rgba(217, 119, 6, 0.25);
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+  --glass: rgba(15, 23, 42, 0.82);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-glow: rgba(255, 255, 255, 0.02);
+  --font-family: 'Outfit', sans-serif;
+  --tile-bg: linear-gradient(135deg, #ffffff 0%, #f7f7ee 100%);
+  --tile-pip: #0f172a;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  user-select: none;
+}
+
+body {
+  font-family: var(--font-family);
+  background: var(--bg-app);
+  color: var(--text-main);
+  overflow: hidden;
+  /* dvh = viewport dinámico: en móvil la barra de direcciones se muestra/oculta y
+     100vh mide SIEMPRE el viewport grande, dejando la mano del jugador cortada
+     bajo el navegador (e inalcanzable, porque el body no scrollea). */
+  height: 100vh;
+  height: 100dvh;
+  width: 100%;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+/* #root es el contenedor con scroll de la app.
+   El body va en overflow:hidden para que la página no rebote, pero eso también
+   impide scrollear con el dedo. Las pantallas tipo documento (lobby, sala de
+   espera) pueden pasarse de alto en móviles bajos y hay que poder alcanzarlas.
+   El tablero mide exactamente 100dvh, así que nunca desborda y sigue fijo. */
+#root {
+  height: 100%;
+  width: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+
+/* --- SCROLLBAR --- */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+/* Firefox: scrollbar fino a juego con el de WebKit. */
+* { scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.15) transparent; }
+
+/* --- PULIDO GLOBAL DE INTERACCIÓN (tacto + accesibilidad) --- */
+/* Sin destello azul al tocar en móvil. */
+button, a, input, [role="button"], .domino-tile, .power-card-slot {
+  -webkit-tap-highlight-color: transparent;
+}
+/* Foco visible SOLO con teclado (no en clics de ratón). */
+button:focus-visible, a:focus-visible, input:focus-visible,
+[role="button"]:focus-visible, [tabindex]:focus-visible {
+  outline: 2px solid var(--accent, #34d399);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+button:focus:not(:focus-visible) { outline: none; }
+/* Feedback táctil al pulsar (se siente más vivo en móvil). */
+.btn-premium:active:not(:disabled),
+.lobby-profile-btn:active,
+.ranked-find-btn:active,
+.quick-play-btn:active { transform: scale(0.97); }
+

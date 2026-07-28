@@ -1,0 +1,717 @@
+/* Estructura de la pantalla de partida y barra superior
+   Parte de index.css, que los importa EN ESTE ORDEN. La cascada depende de
+   ese orden: mover un import cambia qué regla gana. */
+/* --- LAYOUT GENERAL --- */
+.app-container {
+  display: flex;
+  /* Columna SIEMPRE: era "row" cuando había barra lateral. Con la barra arriba,
+     en row se estiraba a 800px de alto y se colocaba al costado. */
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  width: 100%;
+  overflow: hidden;
+  position: relative;
+  background: var(--bg-app);
+}
+
+.network-alert {
+  /* `fixed` (antes `absolute`): estos avisos son GLOBALES y se renderizan en la
+     raíz de la app, fuera de .app-container, para que también se vean en el
+     lobby y el hub, no solo dentro de la partida. */
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  margin: 0 auto;
+  width: fit-content;
+  z-index: 100;
+  max-width: calc(100% - 24px);
+  background: rgba(153, 27, 27, 0.92);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #fecaca;
+  padding: 5px 10px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  font-weight: 600;
+  font-size: 0.68rem;
+  animation: fade-in 0.2s ease-out forwards;
+}
+.network-alert svg { flex-shrink: 0; }
+
+.error-toast {
+  position: fixed; /* global: visible también en lobby/hub (ver .network-alert) */
+  top: 70px;
+  left: 12px;
+  right: 12px;
+  margin: 0 auto;
+  width: fit-content;
+  z-index: 100;
+  max-width: min(360px, calc(100% - 24px));
+  background: rgba(120, 53, 15, 0.92);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  color: #fde68a;
+  padding: 5px 10px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1.35;
+  animation: fade-in 0.2s ease-out forwards;
+}
+.error-toast svg { flex-shrink: 0; }
+
+/* Avisos discretos: se leen de reojo y se van. No compiten con la mesa.
+   Centrado con márgenes y NO con left:50%+translateX(-50%): con aquello el
+   ancho disponible se calculaba desde el 50%, así que el aviso nunca podía
+   pasar de media pantalla y el texto largo se partía en 4 líneas. */
+.floating-toast {
+  position: absolute;
+  top: 80px;
+  left: 12px;
+  right: 12px;
+  margin: 0 auto;
+  width: fit-content;
+  z-index: 90;
+  max-width: min(400px, calc(100% - 24px));
+  background: rgba(13, 18, 30, 0.92);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(99, 102, 241, 0.22);
+  color: var(--text-main);
+  padding: 5px 10px;
+  border-radius: 9px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 6px;
+  animation: fade-in 0.2s ease-out forwards;
+}
+
+.floating-toast-sender {
+  font-size: 0.55rem;
+  color: #818cf8;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+
+.floating-toast-text {
+  font-size: 0.7rem;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.floating-emoji {
+  position: absolute;
+  font-size: 2.4rem;
+  pointer-events: none;
+  z-index: 95;
+  animation: emoji-float 2.2s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
+}
+
+.game-area {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+  /* min-height/width: 0 => permite que el tablero ceda espacio a la mano
+     en lugar de desbordar (por defecto un flex item no baja de su contenido). */
+  min-height: 0;
+  min-width: 0;
+}
+
+/* Región del tablero: envuelve tablero + chat para que el botón flotante del
+   chat quede anclado al tablero y no encima de las fichas de la mano. */
+.board-region {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+}
+
+/* --- SIDEBAR (SCOREBOARD) --- */
+.sidebar {
+  width: 320px;
+  background: rgba(8, 12, 24, 0.65);
+  backdrop-filter: blur(20px);
+  border-right: 1px solid var(--glass-border);
+  box-shadow: inset 0 0 20px var(--glass-glow), 10px 0 30px rgba(0,0,0,0.3);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  z-index: 10;
+  height: 100%;
+}
+
+.sidebar-top {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+}
+
+.sidebar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.sidebar-title-box {
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-subtitle {
+  color: var(--text-muted);
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.sidebar-title {
+  color: #fff;
+  font-weight: 800;
+  font-size: 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mute-btn {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--glass-border);
+  color: var(--text-muted);
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+.mute-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+.mute-btn.active {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+}
+
+.separator {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.06);
+  width: 100%;
+}
+
+.sidebar-header-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* --- CONFIRMACIÓN AL ABANDONAR --- */
+.leave-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  background: rgba(239, 68, 68, 0.07);
+  animation: fade-in 0.15s ease-out;
+}
+
+.leave-confirm-text {
+  font-size: 0.68rem;
+  line-height: 1.45;
+  color: #fca5a5;
+}
+
+.leave-confirm-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.leave-confirm-yes,
+.leave-confirm-no {
+  flex: 1 1 0;
+  padding: 7px 8px;
+  border-radius: 9px;
+  font-family: var(--font-family);
+  font-size: 0.68rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.leave-confirm-yes {
+  background: rgba(239, 68, 68, 0.85);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  color: #fff;
+}
+.leave-confirm-yes:hover { background: #ef4444; }
+
+.leave-confirm-no {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--glass-border);
+  color: var(--text-main);
+}
+.leave-confirm-no:hover { background: rgba(255, 255, 255, 0.1); }
+
+.sidebar-section-title {
+  color: var(--text-muted);
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 10px;
+  display: block;
+}
+
+.players-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.player-card {
+  display: flex;
+  flex-direction: column;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  transition: all 0.3s;
+  position: relative;
+  overflow: hidden;
+}
+
+.player-card.active-turn {
+  background: rgba(16, 185, 129, 0.06);
+  border-color: rgba(16, 185, 129, 0.25);
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.05);
+}
+
+.player-card.active-turn::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 4px;
+  height: 100%;
+  background: var(--primary);
+  box-shadow: 0 0 8px var(--primary);
+}
+
+.player-card-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.player-info-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.player-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 800;
+  font-size: 0.75rem;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+  flex-shrink: 0;
+}
+
+.player-meta {
+  display: flex;
+  flex-direction: column;
+}
+
+.player-name {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: white;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.player-badge-me {
+  font-size: 0.6rem;
+  font-weight: 800;
+  background: rgba(16, 185, 129, 0.2);
+  color: #6ee7b7;
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+
+/* --- BARRA DE PARTIDA (sustituye a la barra lateral, móvil y escritorio) --- */
+.game-bar {
+  position: relative;
+  z-index: 30;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px calc(7px + env(safe-area-inset-top, 0px));
+  background: rgba(8, 12, 24, 0.9);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.game-bar-round {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.game-bar-score {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+.game-bar-score b.team-0 { color: #10b981; }
+.game-bar-score b.team-1 { color: #f43f5e; }
+.game-bar-sep { color: var(--text-muted); font-weight: 600; font-size: 0.62rem; }
+
+/* Turno + reloj. Antes flotaba sobre el tablero y tapaba a los jugadores. */
+.game-bar-turn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--glass-border);
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: var(--text-muted);
+  min-width: 0;
+  transition: all 0.25s;
+}
+.game-bar-turn.mine {
+  background: rgba(16, 185, 129, 0.14);
+  border-color: rgba(16, 185, 129, 0.4);
+  color: var(--primary);
+}
+.game-bar-turn.urgent {
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #f87171;
+}
+.game-bar-turn-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.game-bar-timer {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.game-bar-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.game-bar-actions .mute-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+}
+
+.leave-confirm.bar-leave {
+  position: absolute;
+  top: 100%;
+  right: 8px;
+  z-index: 45;
+  width: 250px;
+  margin-top: 4px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+  background: #141a2a;
+}
+
+.mobile-bar-round {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.62rem;
+  font-weight: 800;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.mobile-bar-score {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+.mobile-bar-score b.team-0 { color: #10b981; }
+.mobile-bar-score b.team-1 { color: #f43f5e; }
+.mobile-bar-vs { color: var(--text-muted); font-weight: 600; font-size: 0.6rem; }
+
+.mobile-bar-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.mobile-bar-actions .mute-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+
+.leave-confirm.mobile-leave {
+  position: absolute;
+  top: 100%;
+  right: 6px;
+  z-index: 45;
+  width: 230px;
+  margin-top: 4px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+  background: #141a2a;
+}
+
+/* --- ASIENTOS ALREDEDOR DEL TABLERO (móvil) ---
+   Van flotando: no le quitan ni un píxel al tablero, que es justo el problema
+   que tenía la barra lateral. */
+.seat {
+  position: absolute;
+  z-index: 14;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 9px;
+  background: rgba(4, 10, 8, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  backdrop-filter: blur(6px);
+  width: 108px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  pointer-events: none; /* no roba el arrastre del tablero */
+}
+.seat.targetable {
+  pointer-events: auto;
+  cursor: pointer;
+  border-color: #34d399;
+  border-style: solid;
+  box-shadow: 0 0 16px rgba(52, 211, 153, 0.4), inset 0 0 8px rgba(52, 211, 153, 0.2);
+  animation: pulse-glow 1.2s ease-in-out infinite alternate;
+}
+.seat.targetable:hover {
+  transform: scale(1.08);
+  border-color: #10b981;
+  box-shadow: 0 0 24px rgba(16, 185, 129, 0.6);
+}
+
+.seat-top   { top: 6px;  left: 50%; transform: translateX(-50%); }
+.seat-left  { left: 6px;  top: 50%; transform: translateY(-50%); }
+.seat-right { right: 6px; top: 50%; transform: translateY(-50%); }
+
+/* Turno activo: el borde verde es la señal más barata de leer. */
+.seat.active {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary), 0 0 12px var(--primary-glow);
+}
+.seat.talking .seat-face { box-shadow: 0 0 0 2px var(--primary); }
+
+.seat.team-0 { border-left: 2px solid #10b981; }
+.seat.team-1 { border-left: 2px solid #f43f5e; }
+
+.seat-face {
+  position: relative;
+  width: 92px;
+  height: 69px;
+  border-radius: 7px;
+  overflow: visible;
+  background: rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: box-shadow 0.15s;
+}
+
+/* Corona Dorada de Líder */
+.seat-crown {
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 1.15rem;
+  z-index: 25;
+  filter: drop-shadow(0 2px 6px rgba(251, 191, 36, 0.8));
+  animation: crown-float 2.4s ease-in-out infinite alternate;
+}
+
+@keyframes crown-float {
+  0% { transform: translateX(-50%) translateY(0) scale(1); }
+  100% { transform: translateX(-50%) translateY(-4px) scale(1.1); }
+}
+
+/* Impacto Ficha Doble ("¡Traz!") y Shockwave */
+.board-tile-wrap.last-played.double-impact {
+  animation: double-shake 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+.shockwave-burst {
+  position: absolute;
+  inset: -25px;
+  border-radius: 50%;
+  border: 3px solid var(--primary, #10b981);
+  box-shadow: 0 0 25px var(--primary-glow, rgba(16, 185, 129, 0.6)), inset 0 0 15px var(--primary-glow, rgba(16, 185, 129, 0.4));
+  pointer-events: none;
+  animation: shockwave-expand 0.65s ease-out forwards;
+  z-index: 30;
+}
+
+@keyframes double-shake {
+  10%, 90% { transform: translate(-50%, -50%) scale(1.08) rotate(-1deg); }
+  20%, 80% { transform: translate(-50%, -50%) scale(1.12) rotate(2deg); }
+  30%, 50%, 70% { transform: translate(-50%, -50%) scale(1.05) rotate(-2deg); }
+  40%, 60% { transform: translate(-50%, -50%) scale(1.02) rotate(1deg); }
+  100% { transform: translate(-50%, -50%) scale(1) rotate(0deg); }
+}
+
+@keyframes shockwave-expand {
+  0% {
+    opacity: 1;
+    transform: scale(0.2);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(2.2);
+  }
+}
+
+.seat-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+
+.seat-avatar {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--text-muted);
+}
+
+.seat-shield { position: absolute; top: 2px; right: 2px; color: #818cf8; }
+.seat-mic { position: absolute; bottom: 2px; right: 2px; color: var(--primary); }
+
+.seat-name {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #fff;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Las fichas como fichas de verdad, no barritas: se ve de un vistazo quién está
+   a punto de cerrar sin tener que leer un número. */
+.seat-tiles {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  flex-wrap: nowrap;
+}
+.seat-tiles i {
+  width: 4px;
+  height: 11px;
+  border-radius: 1px;
+  background: linear-gradient(to bottom, #fff 0%, #fff 45%, rgba(0,0,0,.35) 47%, #fff 49%, #fff 100%);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  flex-shrink: 0;
+}
+.seat-count {
+  font-size: 0.6rem;
+  font-weight: 800;
+  color: #fff;
+  margin-left: 4px;
+  font-variant-numeric: tabular-nums;
+}
+/* Última ficha: aviso de que va a cerrar. */
+.seat-tiles:has(i:only-of-type) .seat-count { color: #fbbf24; }
+
+/* Cartas de poder que le quedan */
+.seat-powers {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  margin-left: 4px;
+  padding: 0 3px;
+  border-radius: 4px;
+  background: rgba(245, 158, 11, 0.18);
+  color: #fbbf24;
+  font-size: 0.55rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+/* Quedan pocas fichas: aviso. */
+.seat-tiles i:only-of-type,
+.seat.active .seat-tiles i { background: #fff; }
+
+.seat-target {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  background: rgba(99, 102, 241, 0.25);
+  border-radius: 9px;
+}
+

@@ -473,30 +473,171 @@ destacado de `AUTH_SECRET`.
 
 ---
 
-## ⏳ Abierto — por prioridad
+## ✅ A-7 corregido — el god component (quinta tanda)
 
-### 🟠 Resto de C-2: dejar de difundir el `playerId` real de cuenta
-`getGameStateForPlayer`/`getSpectatorState` siguen enviando `id: p.id` —el id de cuenta— a rivales
-y espectadores. Con el oráculo cerrado y A-1 arreglado, **ya no es una vía de robo de cuenta**:
-queda como divulgación de identificador (rastreo entre partidas) y como facilitador de la ventana
-de migración descrita arriba.
+`App.jsx` concentraba **977 líneas**: los ~21 listeners de socket en un solo `useEffect` de ~350
+líneas, los ~20 emisores, la lógica de logros y momentos épicos, y el JSX completo de la partida.
 
-No se ha hecho en esta pasada porque **no es un parche, es un cambio de arquitectura**:
-`useGameStore` documenta que el id de cuenta *es* el id de asiento a propósito («Identidad
-canónica: SIEMPRE el id persistente… El servidor devuelve este mismo id»). Separarlos obliga a
-mantener un mapa asiento↔cuenta en el servidor (`addPlayer`, `roomManager`, torneos, matchmaking,
-`recordMatchEnd`) y a revisar en el cliente todo el targeting por `player.id` (poderes, emotes,
-expulsar, intercambiar asientos, espía, voz). Merece su propia pasada con navegador delante.
+**Descompuesto en cuatro piezas con una responsabilidad cada una:**
 
-### 🟠 Antes de abrir al público
-- **A-7** · `App.jsx` sigue siendo god component: **959 líneas**, ha crecido desde las 926.
+| Fichero | Líneas | Responsabilidad |
+|---|---|---|
+| `App.jsx` | **281** | Orquestador: qué vista se muestra y cableado |
+| `hooks/useGameSocket.js` | 397 | Todo lo que se ESCUCHA del servidor |
+| `hooks/useGameActions.js` | 256 | Todo lo que se EMITE al servidor |
+| `views/GameView.jsx` | 238 | La partida en curso (tablero, mano, poderes, asientos) |
+| `i18n/format.js` | 21 | `formatMessage`/`renderError`, antes duplicados como closures |
 
-### 🟡 Medios
-CORS abierto por defecto (y el CORS no protege de clientes no-navegador: las tres pruebas de
-explotación usaron `socket.io-client` desde Node y lo ignoraron — la barrera real es la
-autorización) · rate-limit solo por socket, sin tope de conexiones por IP · `findMe` hace scan
-lineal de todas las salas en cada evento con `MAX_ROOMS=3000` · `/health` sin rate-limit expone
-`rss`/`heap` · `socket.js` cae a `window.location.origin` en producción si falta
-`VITE_SERVER_URL` · **0 tests de cliente** reales · `index.css` de 7.815 líneas · código muerto
-que el lint ya señala (`setJoined`/`setConnecting`/`setError`/`setPeerStates`/`setSpeaking` en
-`useVoiceChat` — la detección de "quién habla" sigue sin cablear).
+**Mejoras que el corte hizo posibles**, más allá de mover código:
+- **Ningún hook de lógica se suscribe ya al store.** `useGameActions` y `useGameSocket` leen el
+  estado fresco con `getState()` en el momento de ejecutarse, en lugar de destructurar
+  `useGameStore()`. Dos beneficios: no aportan re-renders, y ningún handler puede quedarse con un
+  valor viejo capturado en el render en que se creó.
+- **El array de dependencias del efecto pasó de 13 setters a 1 ref.** Los 21 listeners se registran
+  una vez por montaje y ya no hay forma de que un cambio de estado los re-registre — que es
+  justamente el fallo A-6 de la primera auditoría (el idioma reconectaba el socket).
+- **Registro/desregistro de listeners desde un único mapa** en vez de dos listas paralelas de 21
+  líneas, donde bastaba olvidar un `off` para dejar un listener colgado en cada remontaje.
+- `showBracket` baja a estado local de `GameView` (sólo se usa allí).
+
+**Verificación.** Además de lint (con `react-hooks`, que es lo que caza los fallos de un refactor
+de hooks) y build, se comparó automáticamente el ANTES (git HEAD) contra el DESPUÉS:
+- los **21 eventos** de socket escuchados: lista idéntica;
+- el conjunto de **emisores** `socket.emit`: idéntico.
+
+> ⚠️ **Sin verificar en navegador**, igual que A-5: no hay tests de cliente (ver «Medios»). El
+> refactor es un movimiento mecánico y las comparaciones de arriba descartan haber perdido o
+> añadido tráfico de socket, pero conviene un repaso manual de los cinco flujos de vista: hub →
+> lobby → sala de espera → partida → torneo, más entrar/salir de espectador.
+
+**Lo que este refactor NO arregla:** `App` y `GameView` siguen suscribiéndose al store completo, así
+que un tick de `game_state` continúa re-renderizando el árbol de la partida. Reducirlo de verdad
+pide selectores de zustand por componente y `React.memo` en los contenedores; es una tarea de
+rendimiento aparte, medible con el profiler, no un efecto secundario de reordenar ficheros.
+
+---
+
+## ✅ Sexta tanda — pulido completo
+
+Cierra todo lo que quedaba: los tests de cliente que faltaban, los medios de servidor, el código
+muerto, la i18n, el CSS monolítico, la configuración de despliegue y el resto de C-2.
+
+### Tests de cliente (de 0 a 42)
+No existía ninguno: A-5 (WebRTC) y A-7 (refactor de App) quedaron dependiendo de una revisión
+manual. Montado **vitest + Testing Library + jsdom**, con un doble de socket propio que registra lo
+emitido y permite disparar eventos entrantes. La cobertura apunta a las regresiones concretas de
+esta auditoría, no a llenar líneas:
+- **router de vistas** (A-7): hub, lobby, sala de espera, partida, torneo y espectador;
+- **C-4**: entrar y salir de espectador sin romper el orden de hooks;
+- **A-6**: cambiar de idioma NO vuelve a registrar los 21 listeners ni reconecta;
+- **A-4**: el widget de voz montado dentro y fuera del provider;
+- **C-2**: el cliente arranca una identidad nueva si el servidor rechaza la suya;
+- **M6**: los avisos globales se ven en el hub, no sólo en partida.
+
+`pnpm test` pasa a ser `test:server` + `test:i18n` + `test:client`, los tres en CI por separado.
+
+### Medios de servidor
+- **`findMe` era O(salas) en cada evento** (con `MAX_ROOMS=3000`, hasta 3000 búsquedas por evento).
+  Ahora hay índice `socketId → sala`, tratado como **caché**: se valida contra la sala real en cada
+  consulta y, si falla, se cae al escaneo y se reindexa. Un `socketId` reasignado (reconexión,
+  expulsión, abandono) no puede devolver nunca un jugador equivocado — 13 asserts lo comprueban.
+- **Tope de conexiones por IP** (`MAX_SOCKETS_PER_IP`, 40): el rate-limit por socket se evadía
+  abriendo sockets nuevos. Se toma la IP de `X-Forwarded-For` porque detrás del proxy de Render, si
+  no, todos los jugadores contarían como una sola dirección. Generoso a propósito: tras un CGNAT
+  móvil hay muchos jugadores legítimos compartiendo IP.
+- **`/health` con rate-limit** (exponía `rss`/`heap`/salas sin límite).
+- **CSP y HSTS** en el servidor. HSTS sólo si la petición llegó por HTTPS: mandarlo en HTTP plano no
+  hace nada y en desarrollo local forzaría https. Verificado con `curl` en ambos casos.
+
+### Código muerto — y una función que estaba al 90%
+`GlobalVoiceOverlay` y `TemplateBoard` (que además usaba clases de Tailwind, que este proyecto no
+tiene: nunca habría renderizado) borrados. El caso interesante fue **la detección de «quién habla»**:
+`PlayerSeats` y `VideoGrid` llevaban tiempo pintando el indicador a partir de `voice.speaking`, el
+cliente emitía su estado y el servidor lo difundía… y **nadie escuchaba**; además el servidor mandaba
+`socketId` donde la interfaz buscaba por `playerId`. En vez de borrar tres piezas de interfaz se ha
+**cableado de verdad**: VAD con `AnalyserNode`, histéresis y tiempo de retención (para que el
+indicador no parpadee ni se apague a media frase), emitiendo **sólo en los cambios**. La lógica
+decidible sin navegador vive en `voice/vad.js` con 13 asserts.
+
+También se convirtió `games/registry.js` —que existía sin que nadie lo usara y registraba el dominó
+*sin componente*— en un registro real: `GameView` resolvía el tablero con un
+`gameType === 'tictactoe' ? … : …` incrustado, así que cada juego nuevo obligaba a añadir otra rama.
+Ahora el tablero de dominó vive en `games/domino/DominoBoard.jsx` y añadir un juego no toca `GameView`.
+
+### i18n y lint
+`UnifiedVoiceWidget` tenía 20 literales en español (botones de llamada, títulos, estados). Añadidas
+20 claves × 3 idiomas: **588 claves con paridad completa**. Y ambos lints pasan de 32 avisos a
+**0 problemas**.
+
+### `index.css`: de 7.815 líneas a 11 ficheros
+Partido por áreas en `styles/`, con `index.css` como índice de imports. **El orden de los imports ES
+la cascada**, así que el corte se hizo sólo en fronteras de profundidad cero (nunca dentro de un
+`@media`) y con dos verificaciones: la concatenación de las partes es **byte a byte idéntica** al
+original, y el CSS que emite el build **conserva el mismo hash de contenido** (`index-DMFLuked.css`
+antes y después). Reorganización con cero riesgo visual, demostrado.
+
+### Despliegue
+`render.yaml` versiona la configuración del servicio, que hasta ahora sólo vivía en el panel de
+Render: nadie podía revisarla ni había constancia de sus cambios. Los secretos van con `sync: false`
+(los pide Render y los guarda cifrados) y `AUTH_SECRET` con `generateValue: true`, que es justo lo
+que garantiza que sea **estable** entre reinicios.
+
+### ✅ Resto de C-2 — el id de cuenta ya no sale de la sala
+Era el último punto abierto. El estado llevaba ids de cuenta a rivales y espectadores; cerrado el
+oráculo y vinculada la capa de sala ya no permitía robar cuentas, pero seguía siendo divulgación de
+un identificador estable.
+
+**Lo que hacía inviable un parche** era enumerar los campos: el estado lleva ids en `players[].id`,
+`currentPlayerId`, `hostId`, `gameWinner`, `roundWinner`, `lastPlacedBy`, los `...OwnerId` y
+`...TargetId` de los efectos, el `moveLog`… Una lista a mano se queda corta en cuanto alguien añade
+un campo, y entonces se filtra un id o —peor— se rompe una comparación de la interfaz en silencio.
+
+**La solución fue no enumerar.** `seatAliases.js` recorre el estado ya construido y sustituye
+**cualquier cadena que sea un id conocido de esa sala**, valores y claves incluidos. Es exhaustivo
+por construcción: hay un test con un campo inventado (`campoFuturoConId`) que representa «el que
+alguien añadirá mañana» y queda cubierto sin tocar nada. El alias es estable durante la partida (las
+claves de React y las reconexiones dependen de ello), distinto en cada sala —dos partidas del mismo
+jugador no se pueden correlacionar— y se destruye con la sala.
+
+Se traduce en un único punto de salida (`broadcastGameState`) y de vuelta en los handlers. Al
+implementarlo aparecieron **cuatro fugas que una lista de campos no habría cazado**: `spectate_room`
+emitía el estado sin aliasar, `send_quick_message` y `send_emote` reemitían el id ya traducido a
+real, y la capa de voz anunciaba `voice_peer_joined` / `voice_speaking` / `voice_peer_left` con el id
+de cuenta.
+
+**Verificación** — 30 asserts de unidad más integración contra el servidor real: el id de cuenta no
+aparece en el `game_state` (ni el propio), `room_created` devuelve el alias, y **una partida real
+funciona de punta a punta enviando sólo el alias** (si la traducción de vuelta fallara, el motor no
+encontraría al jugador y no ocurriría nada).
+
+---
+
+## Estado final
+
+```
+pnpm test    ✅  20 suites · 458 asserts (servidor + integración + i18n + 42 de cliente)
+pnpm lint    ✅  0 problemas en cliente y servidor
+build        ✅  460 KB / 133 KB gzip
+install      ✅  --frozen-lockfile reproducible
+```
+
+Cerrados **C-1 a C-4** y **A-1 a A-7**, más los medios y la deuda de documentación y despliegue.
+
+### Lo que sigue sin verificar en navegador
+Los tests cubren ya el router de vistas, los listeners y las regresiones de hooks, pero **nada
+sustituye a abrir la aplicación**. Conviene un repaso manual de:
+1. **A-5 (WebRTC)** — dos equipos, encender y apagar la cámara a mitad de llamada varias veces.
+   Vigilar si el SDP crece con cada ciclo (ver la nota de la cuarta tanda).
+2. **Detección de voz** — que el indicador se encienda al hablar y no parpadee.
+3. Los cinco flujos de vista y entrar/salir de espectador.
+
+### Deuda consciente que queda
+- **Rendimiento de render**: `App` y `GameView` siguen suscritos al store completo, así que un tick
+  de `game_state` re-renderiza el árbol de la partida. Pide selectores de zustand y `React.memo`,
+  medido con el profiler.
+- **Identidad**: la reclamación es confianza-en-el-primer-uso. Quien reclame un id antes que su
+  dueño se queda con él. Cerrarlo del todo exige autenticación real (OAuth/email) — decisión de
+  producto, no un parche.
+- **ELO**: la suma cero impide *crear* puntos, no impide inflar una cuenta sacrificando un alt.
+- **CORS abierto por defecto**: hay que definir `CLIENT_ORIGINS` en producción. Y recordar que el
+  CORS no protege de clientes no-navegador: la barrera real es la autorización.

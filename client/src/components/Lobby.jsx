@@ -1,15 +1,20 @@
 import React, { useState } from 'react';
 import { Play, Plus, ArrowRight, User, Zap, Layers, Settings2, Users, Download, Medal, ChevronDown, Zap as Bolt, Globe, Lock, Eye, Palette, Trophy, ShoppingBag, Swords, Home } from 'lucide-react';
-import { socket } from '../socket';
 import RoomList from './RoomList';
 import LiveGames from './LiveGames';
 import LanguageSwitcher from './LanguageSwitcher';
 import { useT } from '../i18n/LanguageContext';
 import { useHubStore } from '../hub/stores/useHubStore';
+import { capacidadesDe } from '../games/registry';
 
 export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuickPlay, publicRooms = [], roomsLoading, stats, invitedCode = '', onOpenProfile, onOpenLeaderboard, onOpenStore, onOpenTournament, onFindRanked, onOpenFriends, liveGames = [], onSpectate }) {
   const { t } = useT();
   const returnToHub = useHubStore(state => state.returnToHub);
+  // Juego elegido en el hub. El lobby era del DOMINÓ para todos: entrar por
+  // "Tres en Raya" mostraba el título, la variante doble 6/9, las parejas y los
+  // poderes del dominó, y de ahí la sensación de "me mete en el otro juego".
+  const selectedGameId = useHubStore(state => state.selectedGameId);
+  const juego = capacidadesDe(selectedGameId);
   const VARIANT_INFO = {
     6: { label: t('opt.double', { n: 6 }), desc: t('opt.d6desc') },
     9: { label: t('opt.double', { n: 9 }), desc: t('opt.d9desc') }
@@ -120,7 +125,10 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
           <span className="lobby-btn-label">{t('lobby.store')}</span>
         </button>
 
-        {onOpenTournament && (
+        {/* Torneos y clasificatoria sólo se ofrecen si el juego los soporta:
+            en el servidor ambos hacen `new DominoGame`, así que desde otro
+            juego te metían en una partida de dominó. */}
+        {onOpenTournament && juego.torneos && (
           <button type="button" className="lobby-profile-btn tournament-btn-highlight" onClick={onOpenTournament} title={t('lobby.tournament')}>
             <Swords size={16} />
             <span className="lobby-btn-label">{t('lobby.tournament')}</span>
@@ -153,7 +161,7 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
       {/* Título animado flotante */}
       <div className="lobby-header">
         <h1 className="lobby-title">
-          DOMINÓ ONLINE
+          {juego.nombre}
         </h1>
         <p className="lobby-subtitle">
           {t('lobby.subtitle')}
@@ -212,8 +220,8 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
             {t('lobby.playNow')}
           </button>
 
-          {/* Emparejamiento clasificatorio por ELO */}
-          {onFindRanked && (
+          {/* Emparejamiento clasificatorio por ELO (sólo juegos que lo soportan) */}
+          {onFindRanked && juego.clasificatoria && (
             <button
               type="button"
               onClick={() => { if (!name.trim()) { setError(t('lobby.nameRequired')); return; } onFindRanked(); }}
@@ -247,6 +255,10 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
           <div className="separator"></div>
 
           {/* Opciones de la sala a crear (plegadas por defecto) */}
+          {/* Las opciones de sala son del DOMINÓ (variante, parejas, poderes,
+              blitz). Otros juegos del hub no tienen nada que configurar, y
+              ofrecérselas era engañoso: se mandaban al servidor y se ignoraban. */}
+          {juego.opcionesDeSala && (
           <div className="lobby-form-field">
             <button
               type="button"
@@ -463,6 +475,7 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
               </div>
             )}
           </div>
+          )}
 
           {/* Sección de acciones */}
           <div className="lobby-form-field">

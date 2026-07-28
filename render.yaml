@@ -1,0 +1,57 @@
+# Infraestructura del servidor como código (Render Blueprint).
+#
+# Hasta ahora la configuración vivía sólo en el panel web de Render: nadie podía
+# revisarla, no quedaba constancia de sus cambios y recrear el servicio era un
+# ejercicio de memoria. Aquí queda versionada junto al código que despliega.
+#
+# Los secretos NO se ponen aquí: van marcados con `sync: false` para que Render
+# los pida una vez y los guarde cifrados. El fichero es público, ellos no.
+services:
+  - type: web
+    name: domino-server
+    runtime: node
+    plan: free
+    region: frankfurt
+    branch: main
+    # El monorepo es pnpm: se instala desde la raíz y se arranca el servidor.
+    buildCommand: corepack enable && pnpm install --frozen-lockfile
+    startCommand: node server/server.js
+    healthCheckPath: /health
+    autoDeploy: true
+
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+
+      # ── Obligatorio con base de datos ──
+      # Firma los tokens de sesión. Las identidades quedan reclamadas en la BD y
+      # sobreviven al reinicio, así que si este secreto cambiara en cada arranque
+      # todos los jugadores serían rechazados y perderían su cuenta en silencio.
+      # Por eso el servidor SE NIEGA A ARRANCAR si hay DATABASE_URL y falta.
+      # `generateValue` hace que Render cree uno estable la primera vez.
+      - key: AUTH_SECRET
+        generateValue: true
+
+      # ── Secretos: se introducen en el panel, no se versionan ──
+      - key: DATABASE_URL
+        sync: false
+      - key: CF_TURN_KEY_ID
+        sync: false
+      - key: CF_TURN_API_TOKEN
+        sync: false
+
+      # ── Ajustes con valor por defecto seguro ──
+      # Dominios del cliente. Vacío ⇒ CORS abierto: hay que rellenarlo en
+      # producción con la URL de Vercel.
+      - key: CLIENT_ORIGINS
+        sync: false
+      - key: MAX_ROOMS
+        value: "3000"
+      - key: MAX_SOCKETS_PER_IP
+        value: "40"
+      - key: TURN_SECONDS
+        value: "30"
+      # Pool conservador: el plan gratuito tiene 512 MB y Supabase limita
+      # conexiones simultáneas.
+      - key: DB_POOL_MAX
+        value: "5"

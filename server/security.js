@@ -25,12 +25,25 @@ function corsOrigin(origin, cb) {
 const corsOptions = { origin: corsOrigin, methods: ['GET', 'POST'] };
 
 // ─── Cabeceras de seguridad (helmet-lite) ───
+// El cliente (Vercel) ya lleva su propia CSP en `client/vercel.json`. Estas son
+// para el servidor, que sólo sirve dos endpoints JSON: /health e /ice-config.
 function securityHeaders(req, res, next) {
   res.set('X-Content-Type-Options', 'nosniff');
   res.set('X-Frame-Options', 'DENY');
   res.set('Referrer-Policy', 'no-referrer');
   res.set('X-DNS-Prefetch-Control', 'off');
   res.set('Cross-Origin-Resource-Policy', 'same-site');
+
+  // CSP mínima: este origen no sirve HTML ni scripts, así que se bloquea todo.
+  // Si alguna vez una respuesta se interpretara como documento, no podría
+  // cargar ni ejecutar nada.
+  res.set('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'");
+
+  // HSTS sólo cuando la petición llegó por HTTPS (en Render, vía el proxy).
+  // Mandarlo en HTTP plano no hace nada y en desarrollo local forzaría https.
+  const seguro = req.secure || req.get('x-forwarded-proto') === 'https';
+  if (seguro) res.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+
   res.removeHeader('X-Powered-By');
   next();
 }
@@ -119,6 +132,67 @@ function installSocketRateLimit(socket, { onDrop } = {}) {
   });
 }
 
+// ─── Tope de conexiones simultáneas por IP ───
+// El rate-limit de arriba es POR SOCKET, así que se evadía abriendo sockets
+// nuevos: mil conexiones desde una máquina daban mil cubos llenos. Esto pone
+// techo a cuántas puede tener abiertas una misma IP a la vez.
+//
+// El valor por defecto es generoso a propósito: detrás de un CGNAT móvil o del
+// NAT de una oficina hay muchos jugadores legítimos compartiendo IP, y cortar
+// por lo sano dejaría fuera a gente real. Lo que se quiere frenar es una única
+// máquina abriendo miles de sockets, no a una familia jugando en casa.
+const MAX_SOCKETS_PER_IP = Math.max(4, Number(process.env.MAX_SOCKETS_PER_IP) || 40);
+
+// Detrás de Render/Vercel la IP real viene en X-Forwarded-For; el primer valor
+// es el cliente y el resto son los proxies por los que pasó.
+function socketIp(socket) {
+  const fwd = socket.handshake && socket.handshake.headers && socket.handshake.headers['x-forwarded-for'];
+  if (fwd) return String(fwd).split(',')[0].trim();
+  return (socket.handshake && socket.handshake.address) || 'desconocida';
+}
+
+// Crea el guardia. Se devuelve un objeto para poder probarlo sin levantar un
+// servidor: `admit` decide, `release` libera al desconectar.
+function createConnectionGuard({ max = MAX_SOCKETS_PER_IP } = {}) {
+  const porIp = new Map();
+
+  return {
+    max,
+    /** ¿Se admite una conexión más de esa IP? Si sí, la contabiliza. */
+    admit(ip) {
+      const n = (porIp.get(ip) || 0) + 1;
+      if (n > max) return false;
+      porIp.set(ip, n);
+      return true;
+    },
+    release(ip) {
+      const n = (porIp.get(ip) || 1) - 1;
+      if (n <= 0) porIp.delete(ip);
+      else porIp.set(ip, n);
+    },
+    count(ip) { return porIp.get(ip) || 0; },
+    tracked() { return porIp.size; }
+  };
+}
+
+// Instala el guardia en el servidor de Socket.IO.
+function installConnectionLimit(io, opciones) {
+  const guard = createConnectionGuard(opciones);
+
+  io.use((socket, next) => {
+    const ip = socketIp(socket);
+    if (!guard.admit(ip)) {
+      return next(new Error('demasiadas conexiones desde esta IP'));
+    }
+    if (!socket.data) socket.data = {};
+    socket.data.ip = ip;
+    socket.once('disconnect', () => guard.release(ip));
+    next();
+  });
+
+  return guard;
+}
+
 module.exports = {
   allowedOrigins,
   corsOrigin,
@@ -126,7 +200,11 @@ module.exports = {
   securityHeaders,
   httpRateLimit,
   installSocketRateLimit,
+  createConnectionGuard,
+  installConnectionLimit,
+  socketIp,
   TokenBucket,
   HEAVY_EVENTS,
-  CHAT_EVENTS
+  CHAT_EVENTS,
+  MAX_SOCKETS_PER_IP
 };

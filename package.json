@@ -9,7 +9,11 @@
     "dev:server": "pnpm --filter domino-server dev",
     "dev:client": "pnpm --filter domino-client dev",
     "dev": "concurrently \"pnpm dev:server\" \"pnpm dev:client\"",
-    "test": "node server/testLogic.js && node server/testPowerCards.js && node server/testVariants.js && node server/testTurnTimer.js && node server/testBots.js && node server/testTeams.js && node server/testState.js && node server/testSecurity.js && node server/testIdentity.js && node server/testEngineFixes.js && node server/testFalseBlock.js && node server/testGameContract.js && node client/src/i18n/testTranslations.mjs && node server/testMatchmaking.js && node server/testTournament.js && node server/testTicTacToe.js && node server/testEconomy.js && node server/testHandlers.js"
+    "test": "pnpm test:server && pnpm test:i18n && pnpm test:client",
+    "test:server": "node server/testLogic.js && node server/testPowerCards.js && node server/testVariants.js && node server/testTurnTimer.js && node server/testBots.js && node server/testTeams.js && node server/testState.js && node server/testSecurity.js && node server/testIdentity.js && node server/testEngineFixes.js && node server/testFalseBlock.js && node server/testGameContract.js && node server/testMatchmaking.js && node server/testTournament.js && node server/testTicTacToe.js && node server/testSeatAliases.js && node server/testRoomIndex.js && node server/testEconomy.js && node server/testHandlers.js",
+    "test:i18n": "node client/src/i18n/testTranslations.mjs",
+    "test:client": "pnpm --filter domino-client test",
+    "lint": "pnpm --filter domino-server lint && pnpm --filter domino-client lint"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

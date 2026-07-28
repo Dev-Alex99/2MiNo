@@ -12,7 +12,6 @@
 // Un test de lógica pura nunca habría tocado esos caminos. Este sí.
 
 const assert = require('assert');
-const path = require('path');
 const { spawn } = require('child_process');
 const { io } = require('socket.io-client');
 
@@ -209,8 +208,17 @@ async function servidorVivo() {
     await pausa(400);
     comprobar(estadoSup && estadoSup.players.every(p => p.id !== VICTIMA),
       'crear sala con el playerId de otro NO sienta a la víctima (se ignora el payload)');
-    comprobar(estadoSup && estadoSup.players.some(p => p.id === 'p_suplantador'),
-      'la sala se abre con la identidad realmente vinculada');
+    comprobar(estadoSup && estadoSup.players.length === 1,
+      'la sala se abre con un único asiento: el de quien la creó');
+
+    // ── Resto de C-2: el id de CUENTA no sale de la sala ──────────────────
+    // El estado ya no lleva ids persistentes sino alias de asiento, así que
+    // espectar o jugar contra alguien no permite cosechar su identidad.
+    const serializado = JSON.stringify(estadoSup);
+    comprobar(!serializado.includes('p_suplantador'),
+      'el id de cuenta NO aparece en el game_state (ni el propio)');
+    comprobar(estadoSup.players.every(p => typeof p.id === 'string' && p.id.startsWith('s_')),
+      'los asientos se identifican con un alias efímero');
 
     // ── A-2: el cliente no puede declarar su sala clasificatoria ──────────
     const tramposo = await conectar();
@@ -226,6 +234,58 @@ async function servidorVivo() {
     tramposo.close();
 
     victima.close(); atacante.close(); vuelve.close(); nuevo.close(); suplantador.close();
+  }
+
+  // ── Ida y vuelta de los alias en una partida REAL ──────────────────────
+  // Aliasar el estado es fácil; lo que hay que probar es que el cliente puede
+  // seguir jugando con lo que recibe. El cliente sólo conoce el alias y lo
+  // reenvía en cada jugada: si la traducción de vuelta fallara, no se podría
+  // ni robar una ficha.
+  {
+    const CUENTA = 'p_alias_e2e';
+    const jugador = await conectar();
+    jugador.emit('hello', { playerId: CUENTA });
+    await esperar(jugador, 'session');
+
+    let estado = null;
+    jugador.on('game_state', (s) => { estado = s; });
+    jugador.emit('create_room', { name: 'Aliasada', isPublic: false, powersEnabled: false });
+    const sala = await esperar(jugador, 'room_created');
+
+    comprobar(sala.playerId !== CUENTA && String(sala.playerId).startsWith('s_'),
+      'room_created devuelve el ALIAS, no el id de cuenta');
+
+    jugador.emit('add_bot', { roomId: sala.roomId, difficulty: 'normal' });
+    await pausa(600);
+    jugador.emit('toggle_ready', { roomId: sala.roomId });
+    await pausa(900);
+
+    comprobar(estado && estado.status === 'playing', 'la partida arranca con un bot');
+    comprobar(!JSON.stringify(estado).includes(CUENTA),
+      'el id de cuenta tampoco aparece con la partida en marcha');
+
+    // Jugar usando EXCLUSIVAMENTE lo que el servidor mandó (el alias).
+    const miAlias = sala.playerId;
+    const miMano = () => {
+      const p = estado.players.find(x => x.id === miAlias);
+      return p && Array.isArray(p.hand) ? p.hand : null;
+    };
+    comprobar(!!miMano(), 'el alias de room_created identifica mi asiento en el estado');
+
+    // Ida y vuelta con el chat: el handler busca al jugador por el id que llega.
+    // Si el alias no se tradujera, no encontraría a nadie y NO llegaría nada.
+    // (Se usa el chat y no una jugada porque robar o pasar dependen de las
+    // reglas del dominó y el test no probaría siempre lo que pretende.)
+    const mensaje = new Promise(r => jugador.once('receive_quick_message', r));
+    jugador.emit('send_quick_message', { roomId: sala.roomId, playerId: miAlias, text: 'hola', type: 'text' });
+    const recibido = await Promise.race([mensaje, pausa(2000).then(() => null)]);
+
+    comprobar(recibido && recibido.text === 'hola',
+      'enviar con el ALIAS llega al motor (la traducción de vuelta acierta)');
+    comprobar(recibido && recibido.playerId === miAlias,
+      'y lo que vuelve es el alias, no el id de cuenta');
+
+    jugador.close();
   }
 
   server.kill();

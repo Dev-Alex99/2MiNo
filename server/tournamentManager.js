@@ -35,8 +35,9 @@ function simulateBotMatch() {
   const g = new DominoGame('SIM', MATCH_MAX_SCORE, {
     powersEnabled: false, maxPip: MATCH_MAX_PIP, teamsEnabled: false, drawEnabled: true, isPublic: false
   });
+  // Dos bots simulan la partida; sólo se necesita el id del primero.
   const a = g.addBot('SimA', 'dificil');
-  const b = g.addBot('SimB', 'dificil');
+  g.addBot('SimB', 'dificil');
   g.startNewGame();
   let guard = 0;
   while (g.status !== 'game_ended' && guard++ < 20000) {

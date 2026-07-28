@@ -157,7 +157,7 @@ class DominoGame extends BaseGame {
   }
 
   addPlayer(id, name, socketId) {
-    if (this.players.length >= 4) return null;
+    if (this.players.length >= this.maxPlayers) return null;
     if (this.status !== 'waiting') return null;
 
     const player = {
@@ -204,7 +204,7 @@ class DominoGame extends BaseGame {
   // Añade un bot. Va siempre "listo": no tiene a quién esperar, así que
   // allReady() depende solo de los humanos.
   addBot(name, difficulty = 'normal') {
-    if (this.players.length >= 4) return null;
+    if (this.players.length >= this.maxPlayers) return null;
     if (this.status !== 'waiting') return null;
 
     const bot = {
@@ -291,6 +291,11 @@ class DominoGame extends BaseGame {
       player.ready = !player.ready;
     }
     return player;
+  }
+
+  // El historial del dominó distingue doble-6 de doble-9.
+  getVariantLabel() {
+    return `double_${this.maxPip || 6}`;
   }
 
   allReady() {
@@ -1247,6 +1252,7 @@ class DominoGame extends BaseGame {
       isPublic: this.isPublic,
       ranked: this.ranked,
       hostId: this.hostId,
+      maxPlayers: this.maxPlayers,
       teamScores: this.teamScores,
       teamNames: this.teamNames,
       roundWinnerTeam: this.roundWinnerTeam ?? null,

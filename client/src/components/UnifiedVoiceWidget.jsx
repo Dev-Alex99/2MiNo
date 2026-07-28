@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useVoice } from '../voice/VoiceContext';
+import { useT } from '../i18n/LanguageContext';
 import {
   Phone, PhoneOff, Mic, MicOff, Volume2, VolumeX,
   Video, VideoOff, Settings2, UserPlus, Users, X, Loader2
@@ -33,6 +34,7 @@ function VideoStreamTile({ stream, isLocal = false, label }) {
 
 export default function UnifiedVoiceWidget({ variant = 'floating' }) {
   const voice = useVoice();
+  const { t } = useT();
 
   // TODOS los hooks van antes de cualquier return. Este widget se monta en
   // varios sitios (tablero, sala de espera, tres en raya) y fuera de
@@ -106,7 +108,7 @@ export default function UnifiedVoiceWidget({ variant = 'floating' }) {
             </div>
             <div className="incoming-info">
               <span className="incoming-badge">
-                {incomingCall.isGroupInvite ? 'Invitación a Grupo' : 'Llamada Entrante'}
+                {t(incomingCall.isGroupInvite ? 'voice.groupInvite' : 'voice.incomingCall')}
               </span>
               <h4 className="incoming-caller-name">{incomingCall.fromName}</h4>
             </div>
@@ -115,12 +117,12 @@ export default function UnifiedVoiceWidget({ variant = 'floating' }) {
           <div className="incoming-call-actions">
             <button onClick={declineCall} className="voice-action-btn btn-decline">
               <PhoneOff size={15} />
-              <span>Rechazar</span>
+              <span>{t('voice.decline')}</span>
             </button>
 
             <button onClick={acceptCall} className="voice-action-btn btn-accept">
               <Phone size={15} />
-              <span>Aceptar</span>
+              <span>{t('voice.accept')}</span>
             </button>
           </div>
         </div>
@@ -138,11 +140,11 @@ export default function UnifiedVoiceWidget({ variant = 'floating' }) {
           </div>
 
           <div className="outgoing-info">
-            <span className="outgoing-title">Llamando...</span>
-            <span className="outgoing-subtitle">Esperando respuesta</span>
+            <span className="outgoing-title">{t('voice.calling')}</span>
+            <span className="outgoing-subtitle">{t('voice.waitingAnswer')}</span>
           </div>
 
-          <button onClick={endCall} className="voice-icon-btn btn-hangup" title="Cancelar llamada">
+          <button onClick={endCall} className="voice-icon-btn btn-hangup" title={t('voice.cancelCall')} aria-label={t('voice.cancelCall')}>
             <PhoneOff size={15} />
           </button>
         </div>
@@ -164,7 +166,7 @@ export default function UnifiedVoiceWidget({ variant = 'floating' }) {
   if (!isCallConnected && variant === 'embedded') {
     return (
       <div className="unified-voice-embedded-idle">
-        <span className="voice-idle-text">Voz disponible</span>
+        <span className="voice-idle-text">{t('voice.available')}</span>
       </div>
     );
   }
@@ -178,7 +180,7 @@ export default function UnifiedVoiceWidget({ variant = 'floating' }) {
       {hasVideoStreams && (
         <div className="voice-video-grid animate-fade-in">
           {camOn && localVideo && (
-            <VideoStreamTile stream={localVideo} isLocal label="Tú" />
+            <VideoStreamTile stream={localVideo} isLocal label={t('voice.you')} />
           )}
           {Object.entries(remoteVideos || {}).map(([peerId, stream]) => {
             const member = (voicePool?.members || []).find(m => m.playerId === peerId);
@@ -186,7 +188,7 @@ export default function UnifiedVoiceWidget({ variant = 'floating' }) {
               <VideoStreamTile
                 key={peerId}
                 stream={stream}
-                label={member?.name || 'Amigo'}
+                label={member?.name || t('voice.friend')}
               />
             );
           })}
@@ -199,10 +201,10 @@ export default function UnifiedVoiceWidget({ variant = 'floating' }) {
           <span className={`voice-status-dot ${mutedActive ? 'muted' : 'active'}`} />
           <div className="voice-status-meta">
             <span className="voice-status-title">
-              {memberCount > 1 ? `Grupo (${memberCount})` : 'Llamada de Voz'}
+              {memberCount > 1 ? t('voice.group', { n: memberCount }) : t('voice.callTitle')}
             </span>
             <span className="voice-status-sub">
-              {mutedActive ? 'Silenciado' : 'Conectado P2P'}
+              {mutedActive ? t('voice.mutedLabel') : t('voice.connectedP2P')}
             </span>
           </div>
         </div>
@@ -213,7 +215,7 @@ export default function UnifiedVoiceWidget({ variant = 'floating' }) {
             onClick={toggleCam}
             disabled={camBusy}
             className={`voice-btn ${camOn ? 'active-cam' : ''}`}
-            title={camOn ? 'Apagar Cámara' : 'Encender Cámara'}
+            title={t(camOn ? 'voice.camOff' : 'voice.camOn')} aria-label={t(camOn ? 'voice.camOff' : 'voice.camOn')}
           >
             {camBusy ? <Loader2 size={15} className="voice-spin" /> : (camOn ? <Video size={15} /> : <VideoOff size={15} />)}
           </button>
@@ -222,7 +224,7 @@ export default function UnifiedVoiceWidget({ variant = 'floating' }) {
           <button
             onClick={toggleMute}
             className={`voice-btn ${mutedActive ? 'is-muted' : ''}`}
-            title={mutedActive ? 'Activar Micrófono' : 'Silenciar Micrófono'}
+            title={t(mutedActive ? 'voice.unmute' : 'voice.mute')} aria-label={t(mutedActive ? 'voice.unmute' : 'voice.mute')}
           >
             {mutedActive ? <MicOff size={15} /> : <Mic size={15} />}
           </button>
@@ -231,7 +233,7 @@ export default function UnifiedVoiceWidget({ variant = 'floating' }) {
           <button
             onClick={toggleDeafen}
             className={`voice-btn ${isDeafened ? 'is-muted' : ''}`}
-            title={isDeafened ? 'Activar Audio' : 'Ensordecer Audio'}
+            title={t(isDeafened ? 'voice.undeafen' : 'voice.deafen')} aria-label={t(isDeafened ? 'voice.undeafen' : 'voice.deafen')}
           >
             {isDeafened ? <VolumeX size={15} /> : <Volume2 size={15} />}
           </button>
@@ -243,7 +245,7 @@ export default function UnifiedVoiceWidget({ variant = 'floating' }) {
               setShowDevicesModal(false);
             }}
             className="voice-btn btn-invite"
-            title="Sumar amigo a la llamada"
+            title={t('voice.addFriend')} aria-label={t('voice.addFriend')}
           >
             <UserPlus size={15} />
           </button>
@@ -255,13 +257,13 @@ export default function UnifiedVoiceWidget({ variant = 'floating' }) {
               setShowInviteModal(false);
             }}
             className="voice-btn btn-gear"
-            title="Ajustes de audio y cámara"
+            title={t('voice.audioSettings')} aria-label={t('voice.audioSettings')}
           >
             <Settings2 size={15} />
           </button>
 
           {/* Colgar / Salir */}
-          <button onClick={endCall} className="voice-btn btn-hangup" title="Salir de la llamada">
+          <button onClick={endCall} className="voice-btn btn-hangup" title={t('voice.leaveCall')} aria-label={t('voice.leaveCall')}>
             <PhoneOff size={15} />
           </button>
         </div>
@@ -308,7 +310,7 @@ export default function UnifiedVoiceWidget({ variant = 'floating' }) {
 
           <div className="voice-invite-list">
             {onlineFriends.length === 0 ? (
-              <span className="voice-invite-empty">No hay otros amigos en línea</span>
+              <span className="voice-invite-empty">{t('voice.noFriendsOnline')}</span>
             ) : (
               onlineFriends.map(f => (
                 <div key={f.id} className="voice-invite-row">

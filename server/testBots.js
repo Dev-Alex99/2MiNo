@@ -1,7 +1,7 @@
 // Pruebas de la IA de los bots y del alta/baja de bots en la sala.
 
 const DominoGame = require('./gameLogic');
-const { chooseMove, choosePower, pickBotName, scoreMove } = require('./botLogic');
+const { chooseMove, choosePower, pickBotName } = require('./botLogic');
 
 function assert(condition, message) {
   if (!condition) throw new Error(`ASSERTION FAILED: ${message}`);

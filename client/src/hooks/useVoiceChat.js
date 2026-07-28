@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { socket } from '../socket';
 import { useT } from '../i18n/LanguageContext';
+import { crearDetector, rmsDe } from '../voice/vad';
 
 const MIC_CONSTRAINTS = {
   audio: {
@@ -38,12 +39,15 @@ export default function useVoiceChat({ roomId, playerId, name }) {
   const tRef = useRef(t);
   tRef.current = t;
 
-  // Estados de Voz y Cámara Video
-  const [joined, setJoined] = useState(false);
-  const [connecting, setConnecting] = useState(false);
+  // Estados de Voz y Cámara Video.
+  //
+  // Aquí vivían además `joined`, `connecting`, `error` y `peerStates`: cuatro
+  // estados que sólo se inicializaban —su setter no se llamaba nunca— y que
+  // ningún componente consultaba. Se han retirado. `speaking` estaba en las
+  // mismas, pero ahí sí había consumidores esperándolo (`PlayerSeats` y
+  // `VideoGrid` pintan quién habla), así que se ha cableado de verdad con la
+  // detección de voz en vez de borrarlo.
   const [muted, setMuted] = useState(false);
-  const [error, setError] = useState(null);
-  const [peerStates, setPeerStates] = useState({});
   const [speaking, setSpeaking] = useState({});
   const [camOn, setCamOn] = useState(false);
   const [camBusy, setCamBusy] = useState(false);
@@ -73,6 +77,20 @@ export default function useVoiceChat({ roomId, playerId, name }) {
   const rawStreamRef = useRef(null);
   const camStreamRef = useRef(null);
   const iceConfigRef = useRef(null);
+
+  // Detección de habla: contexto de audio, bucle de muestreo y detector.
+  const vozCtx = useRef(null);
+  const vozRaf = useRef(null);
+  const vozDetector = useRef(null);
+
+  // Avisa a la sala/grupo de que empiezo o dejo de hablar, y lo refleja también
+  // en mi propio indicador (el servidor sólo se lo manda a los demás).
+  const emitirHabla = useCallback((hablando) => {
+    setSpeaking(prev => ({ ...prev, [playerId]: hablando }));
+    const poolId = voicePoolRef.current.poolId;
+    if (poolId) socket.emit('voice_pool_speaking', { poolId, speaking: hablando });
+    if (roomId) socket.emit('voice_speaking', { speaking: hablando });
+  }, [playerId, roomId]);
 
   // Cargar Servidores ICE STUN
   const loadIceConfig = useCallback(async () => {
@@ -108,6 +126,56 @@ export default function useVoiceChat({ roomId, playerId, name }) {
     refreshDevices();
   }, [refreshDevices]);
 
+  // ─── Detección de actividad de voz ───
+  // `PlayerSeats` y `VideoGrid` llevaban tiempo pintando un indicador de "está
+  // hablando" a partir de `speaking`, pero ese objeto nunca se rellenaba: nadie
+  // medía el micrófono ni escuchaba el evento del servidor. Aquí se mide el
+  // stream local y se avisa SÓLO en los cambios (empieza/deja de hablar), para
+  // no convertir el socket en un chorro de mensajes.
+  const detenerDeteccionDeVoz = useCallback(() => {
+    if (vozRaf.current) { cancelAnimationFrame(vozRaf.current); vozRaf.current = null; }
+    if (vozCtx.current) {
+      try { vozCtx.current.close(); } catch { /* ya cerrado */ }
+      vozCtx.current = null;
+    }
+    vozDetector.current = null;
+  }, []);
+
+  const iniciarDeteccionDeVoz = useCallback((stream) => {
+    detenerDeteccionDeVoz();
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx || !stream || !stream.getAudioTracks || !stream.getAudioTracks().length) return;
+
+    try {
+      const ctx = new Ctx();
+      const fuente = ctx.createMediaStreamSource(stream);
+      const analizador = ctx.createAnalyser();
+      analizador.fftSize = 512;
+      analizador.smoothingTimeConstant = 0.4;
+      fuente.connect(analizador);
+
+      const muestras = new Uint8Array(analizador.fftSize);
+      const detector = crearDetector();
+      vozCtx.current = ctx;
+      vozDetector.current = detector;
+
+      const tic = () => {
+        vozRaf.current = requestAnimationFrame(tic);
+        // Silenciado ⇒ no se habla, por mucho que suene el micro.
+        if (mutedRef.current) {
+          if (detector.reiniciar()) emitirHabla(false);
+          return;
+        }
+        analizador.getByteTimeDomainData(muestras);
+        const cambio = detector.procesar(rmsDe(muestras), Date.now());
+        if (cambio !== null) emitirHabla(cambio);
+      };
+      vozRaf.current = requestAnimationFrame(tic);
+    } catch (e) {
+      console.warn('[voz] no se pudo iniciar la detección de habla:', e.message);
+    }
+  }, [detenerDeteccionDeVoz, emitirHabla]);
+
   // Garantizar Microfonía Activa
   const ensureMicStream = useCallback(async () => {
     if (localStreamRef.current) return localStreamRef.current;
@@ -121,12 +189,13 @@ export default function useVoiceChat({ roomId, playerId, name }) {
       localStreamRef.current = stream;
       stream.getAudioTracks().forEach(t => { t.enabled = !mutedRef.current; });
       refreshDevices();
+      iniciarDeteccionDeVoz(stream);
       return stream;
     } catch (e) {
       console.warn('[voz global] Error accediendo al micrófono:', e);
       return null;
     }
-  }, [loadIceConfig, refreshDevices]);
+  }, [loadIceConfig, refreshDevices, iniciarDeteccionDeVoz]);
 
   // Destruir Peer de Pool
   const destroyPoolPeer = useCallback((peerPlayerId) => {
@@ -307,9 +376,9 @@ export default function useVoiceChat({ roomId, playerId, name }) {
         });
       });
 
-      if (voicePoolRef.current.poolId) {
-        socket.emit('voice_pool_speaking', { poolId: voicePoolRef.current.poolId, speaking: !nextMuted });
-      }
+      // Antes se anunciaba aquí `speaking: !muted`, que no es hablar sino tener
+      // el micro abierto. Ahora lo decide la detección de voz real, que además
+      // apaga el indicador en cuanto se silencia (ver `iniciarDeteccionDeVoz`).
       return nextMuted;
     });
   }, []);
@@ -588,6 +657,14 @@ export default function useVoiceChat({ roomId, playerId, name }) {
       setIncomingCall(null);
     }
 
+    // Quién está hablando, según lo que anuncian los demás. El servidor manda
+    // el `playerId`, que es la clave por la que `PlayerSeats` y `VideoGrid`
+    // consultan el indicador.
+    function onHabla({ playerId: quien, speaking: hablando }) {
+      if (!quien) return;
+      setSpeaking(prev => (prev[quien] === !!hablando ? prev : { ...prev, [quien]: !!hablando }));
+    }
+
     socket.on('incoming_call', onIncomingCall);
     socket.on('call_outgoing', onCallOutgoing);
     socket.on('call_accepted', onCallAccepted);
@@ -596,6 +673,8 @@ export default function useVoiceChat({ roomId, playerId, name }) {
     socket.on('voice_pool_signal', onVoicePoolSignal);
     socket.on('call_declined', onCallDeclined);
     socket.on('call_timeout', onCallTimeout);
+    socket.on('voice_pool_speaking', onHabla);
+    socket.on('voice_speaking', onHabla);
 
     return () => {
       socket.off('incoming_call', onIncomingCall);
@@ -606,11 +685,16 @@ export default function useVoiceChat({ roomId, playerId, name }) {
       socket.off('voice_pool_signal', onVoicePoolSignal);
       socket.off('call_declined', onCallDeclined);
       socket.off('call_timeout', onCallTimeout);
+      socket.off('voice_pool_speaking', onHabla);
+      socket.off('voice_speaking', onHabla);
     };
   }, [createPoolPeer, destroyPoolPeer, playerId]);
 
+  // Al desmontar, cerrar el AudioContext de la detección de voz.
+  useEffect(() => detenerDeteccionDeVoz, [detenerDeteccionDeVoz]);
+
   return {
-    joined, connecting, muted, isMuted: muted, error, peerStates, speaking,
+    muted, isMuted: muted, speaking,
     toggleMute,
     camOn, camBusy, localVideo, remoteVideos, toggleCam,
     devices, selected, switching, selectMic, selectCam, selectSpeaker,

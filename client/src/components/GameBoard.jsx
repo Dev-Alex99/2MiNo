@@ -3,7 +3,6 @@ import { ZoomIn, ZoomOut, Maximize2, Move, ScrollText, Trophy } from 'lucide-rea
 import DominoTile from './DominoTile';
 import MoveLog from './MoveLog';
 import { useT } from '../i18n/LanguageContext';
-
 // Dimensiones reales de una ficha en el tablero (coinciden con el CSS fijado en .board-tile-wrap).
 const TILE_LONG = 96;   // largo de la ficha (dimensión mayor)
 const TILE_SHORT = 52;  // ancho de la ficha (dimensión menor)
@@ -11,7 +10,6 @@ const GAP = 8;          // separación entre fichas contiguas de una fila
 const PL = 32;          // radio de los círculos de extremo (placeholders)
 const HALF_L = TILE_LONG / 2;
 const HALF_S = TILE_SHORT / 2;
-
 /**
  * Calcula un layout de serpiente (boustrophedon) determinista y ordenado.
  *
@@ -31,21 +29,17 @@ function computeSnakeLayout(board, maxWidth) {
   if (!board || board.length === 0) {
     return { layout: [], leftPos: null, rightPos: null, width: 0, height: 0 };
   }
-
   const budget = Number.isFinite(maxWidth) && maxWidth > 0 ? maxWidth : 1000;
   // Cuántas fichas horizontales caben por fila dejando margen para los extremos.
   const perRow = Math.max(4, Math.floor((budget - TILE_LONG) / (TILE_LONG + GAP)));
-
   const items = [];
   let dir = 1;        // 1 => la fila avanza a la derecha, -1 => a la izquierda
   let colCount = 0;   // fichas acostadas/dobles ya colocadas en la fila actual
   let rowCy = 0;      // centro vertical de la fila actual
   let prev = null;
-
   for (let i = 0; i < board.length; i++) {
     const [a, b] = board[i];
     const isDouble = a === b;
-
     let cx;
     let cy;
     let w;
@@ -53,7 +47,6 @@ function computeSnakeLayout(board, maxWidth) {
     let horizontal;
     let display;
     let isCorner = false;
-
     if (prev === null) {
       // Primera ficha: acostada, centrada; la fila arranca hacia la derecha.
       w = TILE_LONG; h = TILE_SHORT; horizontal = true;
@@ -88,26 +81,22 @@ function computeSnakeLayout(board, maxWidth) {
       cy = rowCy;
       colCount += 1;
     }
-
     const item = { tile: board[i], display, cx, cy, w, h, horizontal, dir, isCorner };
     items.push(item);
     prev = item;
   }
-
   // Extremo izquierdo: siempre el lado "a" de la primera ficha (a su izquierda).
   const first = items[0];
   const leftPos = {
     x: first.cx - first.w / 2 - GAP - PL,
     y: first.cy
   };
-
   // Extremo derecho: el borde de crecimiento tras la última ficha, en su sentido.
   // Si la última ficha es una esquina, el crecimiento sale por debajo de ella.
   const last = items[items.length - 1];
   const rightPos = last.isCorner
     ? { x: last.cx + last.dir * (last.w / 2 + GAP + PL), y: last.cy + (HALF_L - HALF_S) }
     : { x: last.cx + last.dir * (last.w / 2 + GAP + PL), y: last.cy };
-
   // Límites del contenido para poder centrar y auto-encajar.
   let minX = Infinity;
   let maxX = -Infinity;
@@ -122,7 +111,6 @@ function computeSnakeLayout(board, maxWidth) {
   items.forEach((it) => account(it.cx, it.cy, it.w / 2, it.h / 2));
   account(leftPos.x, leftPos.y, PL, PL);
   account(rightPos.x, rightPos.y, PL, PL);
-
   // Centrar todo respecto a (0,0).
   const centerX = (minX + maxX) / 2;
   const centerY = (minY + maxY) / 2;
@@ -134,7 +122,6 @@ function computeSnakeLayout(board, maxWidth) {
   leftPos.y -= centerY;
   rightPos.x -= centerX;
   rightPos.y -= centerY;
-
   return {
     layout: items,
     leftPos,
@@ -143,17 +130,14 @@ function computeSnakeLayout(board, maxWidth) {
     height: maxY - minY
   };
 }
-
 // Clave estable de una ficha física, independiente de cómo esté orientada.
 const tileKey = (tile) => `${Math.min(tile[0], tile[1])}-${Math.max(tile[0], tile[1])}`;
-
 export default function GameBoard({
   board,
   selectedTileIndex,
   onPlay,
   isMyTurn,
   players,
-  currentPlayerId,
   canPlayLeft,
   canPlayRight,
   pendingTargetType,
@@ -171,27 +155,23 @@ export default function GameBoard({
   const containerRef = useRef(null);
   const boardRef = useRef(null);
   const dragRef = useRef({ active: false, sx: 0, sy: 0 });
-
   const [containerSize, setContainerSize] = useState({ w: 0, h: 0 });
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [manualView, setManualView] = useState(false);
   const [showMoveLog, setShowMoveLog] = useState(false);
-
   // Firma estable del tablero: evita recalcular el layout en ticks de estado
   // que no cambian las fichas (p. ej. cuentas regresivas de poderes).
   const boardSignature = useMemo(
     () => board.map((t) => `${t[0]}${t[1]}`).join('|'),
     [board]
   );
-
   const { layout, leftPos, rightPos, width, height } = useMemo(
     () => computeSnakeLayout(board, containerSize.w || 1000),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [boardSignature, containerSize.w]
   );
-
   // Escala ideal para que toda la serpiente entre en el contenedor.
   const fitScale = useMemo(() => {
     if (!width || !height || !containerSize.w || !containerSize.h) return 1;
@@ -201,7 +181,6 @@ export default function GameBoard({
     const sy = (containerSize.h - padding) / height;
     return Math.max(0.35, Math.min(1.05, Math.min(sx, sy)));
   }, [width, height, containerSize.w, containerSize.h, seatsPadding]);
-
   // Observar el tamaño del contenedor para el auto-encaje responsivo.
   useEffect(() => {
     const el = containerRef.current;
@@ -212,7 +191,6 @@ export default function GameBoard({
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-
   // Aplicar auto-encaje salvo que el usuario haya tomado control manual.
   useEffect(() => {
     if (!manualView) {
@@ -220,7 +198,6 @@ export default function GameBoard({
       setPosition({ x: 0, y: 0 });
     }
   }, [fitScale, manualView]);
-
   const resetView = useCallback(() => setManualView(false), []);
   const zoomIn = useCallback(() => {
     setManualView(true);
@@ -230,7 +207,6 @@ export default function GameBoard({
     setManualView(true);
     setScale((s) => Math.max(0.35, s - 0.15));
   }, []);
-
   // Rueda del ratón: listener nativo no pasivo para poder usar preventDefault
   // sin warnings y sin bloquear el scroll de la página.
   useEffect(() => {
@@ -247,7 +223,6 @@ export default function GameBoard({
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
   }, []);
-
   // Paneo con Pointer Events (soporta ratón y táctil).
   const handlePointerDown = useCallback(
     (e) => {
@@ -263,13 +238,11 @@ export default function GameBoard({
     },
     [position.x, position.y]
   );
-
   const handlePointerMove = useCallback((e) => {
     if (!dragRef.current.active) return;
     setManualView(true);
     setPosition({ x: e.clientX - dragRef.current.sx, y: e.clientY - dragRef.current.sy });
   }, []);
-
   const handlePointerUp = useCallback((e) => {
     dragRef.current.active = false;
     setIsDragging(false);
@@ -277,7 +250,6 @@ export default function GameBoard({
       try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (_) { /* noop */ }
     }
   }, []);
-
   // Resaltar la última ficha colocada: ayuda a seguir el hilo, sobre todo en
   // doble 9 donde el tablero puede llegar a 55 fichas.
   // Normalmente resaltamos la ficha de la última jugada. Si el último acto fue
@@ -289,7 +261,6 @@ export default function GameBoard({
   const lastPlayerName = highlightBy
     ? players.find((p) => p.id === highlightBy)?.name
     : null;
-
   return (
     <div
       ref={containerRef}
@@ -301,7 +272,6 @@ export default function GameBoard({
       style={{ cursor: isDragging ? 'grabbing' : 'grab', touchAction: 'none' }}
     >
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(16,185,129,0.12),rgba(0,0,0,0))] pointer-events-none" />
-
       {/* Controles de Vista flotantes */}
       <div className="zoom-controls">
         <button onClick={zoomIn} className="zoom-btn" title="+">
@@ -325,10 +295,8 @@ export default function GameBoard({
           </button>
         )}
       </div>
-
       {/* El indicador de turno y el reloj viven en la barra superior: aquí
           flotaban sobre el tablero y solapaban con los asientos. */}
-
       {/* Contenedor del Tablero (Afectado por Paneo y Zoom) */}
       <div
         ref={boardRef}
@@ -355,7 +323,6 @@ export default function GameBoard({
           )
         ) : (
           <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-
             {/* 1. Fichas de Dominó en Serpiente */}
             {layout.map((item) => {
               // Clave estable por ficha física (independiente de la orientación):
@@ -379,7 +346,6 @@ export default function GameBoard({
                   }}
                 >
                   {isLast && isDouble && <div className="shockwave-burst" />}
-
                   {/* Envoltorio interno: la animación de caída actúa aquí solo para la última ficha jugada,
                       evitando re-animar todas las fichas del tablero simultáneamente. */}
                   <div className={`board-tile-anim ${isLast ? 'animate-tile-drop' : ''}`}>
@@ -392,7 +358,6 @@ export default function GameBoard({
                 </div>
               );
             })}
-
             {/* 2. Controles del Extremo Izquierdo */}
             {leftPos && (
               <div
@@ -413,11 +378,9 @@ export default function GameBoard({
                     ←
                   </button>
                 )}
-
                 {activeEffects?.frozenEnd === 'left' && (
                   <div className="board-placeholder-circle frozen" title="Extremo Congelado" />
                 )}
-
                 {isMyTurn && pendingTargetType === 'end_target' && (
                   <button
                     onClick={() => onSelectEndTarget('left')}
@@ -430,7 +393,6 @@ export default function GameBoard({
                 )}
               </div>
             )}
-
             {/* 3. Controles del Extremo Derecho */}
             {rightPos && (
               <div
@@ -451,11 +413,9 @@ export default function GameBoard({
                     →
                   </button>
                 )}
-
                 {activeEffects?.frozenEnd === 'right' && (
                   <div className="board-placeholder-circle frozen" title="Extremo Congelado" />
                 )}
-
                 {isMyTurn && pendingTargetType === 'end_target' && (
                   <button
                     onClick={() => onSelectEndTarget('right')}
@@ -468,7 +428,6 @@ export default function GameBoard({
                 )}
               </div>
             )}
-
             {/* Target fallback cuando el tablero está vacío */}
             {isMyTurn && pendingTargetType === 'end_target' && board.length === 0 && (
               <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', display: 'flex', gap: '16px', zIndex: 30 }}>
@@ -480,7 +439,6 @@ export default function GameBoard({
                 </button>
               </div>
             )}
-
           </div>
         )}
       </div>

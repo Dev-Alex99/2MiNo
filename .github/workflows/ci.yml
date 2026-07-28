@@ -28,8 +28,14 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      - name: Tests (servidor)
-        run: pnpm test
+      - name: Tests (servidor + integración)
+        run: pnpm test:server
+
+      - name: Tests (paridad de traducciones)
+        run: pnpm test:i18n
+
+      - name: Tests (cliente)
+        run: pnpm test:client
 
       # El lint BLOQUEA. Estuvo en `continue-on-error: true` y por ahí se coló a
       # main un `no-undef` (findMe sin importar en gameHandler) con el que

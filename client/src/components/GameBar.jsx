@@ -17,7 +17,7 @@ import { useT } from '../i18n/LanguageContext';
  */
 export default function GameBar({
   players, playerId, roundNumber, teamsEnabled, teamScores, maxScore, onLeave,
-  currentPlayerId, turnEndsAt, turnSecondsRemaining, turnDurationSeconds = 30,
+  currentPlayerId, turnEndsAt, turnSecondsRemaining = 30,
   onOpenLeaderboard, onOpenStore
 }) {
   const { t } = useT();

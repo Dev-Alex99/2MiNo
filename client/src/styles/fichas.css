@@ -1,0 +1,127 @@
+/* Fichas de dominó y su interacción
+   Parte de index.css, que los importa EN ESTE ORDEN. La cascada depende de
+   ese orden: mover un import cambia qué regla gana. */
+/* --- DISEÑO DE LAS FICHAS DE DOMINÓ --- */
+.domino-tile {
+  position: relative;
+  width: 52px;
+  height: 96px;
+  background: var(--tile-bg);
+  border-radius: 9px;
+  box-shadow: 
+    0 5px 12px rgba(0, 0, 0, 0.35), 
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -3px 3px rgba(0, 0, 0, 0.15),
+    inset 1px 2px 2px rgba(255, 255, 255, 0.8),
+    inset -1px -2px 2px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 8px;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
+  transform-style: preserve-3d;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+/* Solo en dispositivos con puntero real: evita el "hover pegajoso" al tocar
+   en móvil, que dejaba la ficha levantada tras el tap. */
+@media (hover: hover) {
+  .hand-tile:hover {
+    transform: translateY(-18px) scale(1.06);
+    box-shadow:
+      0 15px 25px rgba(0, 0, 0, 0.5),
+      0 0 14px var(--primary);
+    z-index: 10;
+  }
+}
+
+/* La elevación obliga a reservar padding arriba en la fila de la mano, y ese
+   padding se lo quita al tablero. 18px se lee igual de bien que 28. */
+.domino-tile.selected {
+  transform: translateY(-18px) scale(1.05);
+  box-shadow:
+    0 12px 24px rgba(0, 0, 0, 0.5),
+    0 0 18px var(--primary);
+  border-color: var(--primary);
+}
+
+.domino-tile.playable {
+  box-shadow: 
+    0 5px 12px rgba(0, 0, 0, 0.35),
+    0 0 10px var(--primary-glow);
+}
+
+.domino-tile.disabled {
+  filter: brightness(0.55) saturate(0.5);
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.domino-tile .divider {
+  height: 2px;
+  background: rgba(0, 0, 0, 0.18);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.6);
+  width: 100%;
+  margin: 4px 0;
+  position: relative;
+}
+
+.domino-tile .divider::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #ffd700 0%, #b8860b 80%, #556b2f 100%);
+  box-shadow: 1px 1px 1px rgba(0, 0, 0, 0.4);
+}
+
+.pip-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  gap: 2px;
+  width: 100%;
+  height: 35px;
+}
+
+.pip {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--pip-color, var(--tile-pip));
+  justify-self: center;
+  align-self: center;
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.6);
+  opacity: 0;
+  transform: scale(0.5);
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.pip.active {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.domino-tile.horizontal {
+  width: 96px;
+  height: 52px;
+  flex-direction: row;
+  padding: 8px;
+}
+
+.domino-tile.horizontal .divider {
+  width: 2px;
+  height: 100%;
+  margin: 0 4px;
+}
+
+.domino-tile.horizontal .pip-grid {
+  height: 100%;
+  width: 35px;
+}
+

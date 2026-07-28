@@ -17,8 +17,9 @@ function runTests() {
 
   // 1. Agregar jugadores
   const p1 = game.addPlayer('p1', 'Alejandro', 'socket1');
-  const p2 = game.addPlayer('p2', 'Sofía', 'socket2');
-  const p3 = game.addPlayer('p3', 'Carlos', 'socket3');
+  // p2 y p3 se añaden por su efecto (sentarlos a la mesa); no se usa el retorno.
+  game.addPlayer('p2', 'Sofía', 'socket2');
+  game.addPlayer('p3', 'Carlos', 'socket3');
   
   assert(game.players.length === 3, 'Se agregaron 3 jugadores correctamente');
   assert(p1.name === 'Alejandro', 'Jugador 1 se llama Alejandro');

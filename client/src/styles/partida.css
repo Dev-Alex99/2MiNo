@@ -1,0 +1,704 @@
+/* Tablero, mano, chat rápido y modal de fin
+   Parte de index.css, que los importa EN ESTE ORDEN. La cascada depende de
+   ese orden: mover un import cambia qué regla gana. */
+/* --- TABLERO (GAME BOARD) --- */
+.game-board-container {
+  flex-grow: 1;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-table);
+  min-height: 0;
+  min-width: 0;
+}
+
+/* Abajo, no arriba: arriba chocaban con el asiento del jugador de enfrente y
+   con los avisos del sistema. */
+.zoom-controls {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  display: flex;
+  gap: 6px;
+  z-index: 20;
+}
+
+.zoom-btn {
+  background: rgba(0,0,0,0.65);
+  border: 1px solid rgba(255,255,255,0.08);
+  backdrop-filter: blur(8px);
+  color: white;
+  padding: 8px;
+  border-radius: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+.zoom-btn:hover {
+  background: rgba(0,0,0,0.85);
+  border-color: rgba(255,255,255,0.15);
+  transform: translateY(-1px);
+}
+
+.zoom-btn-text {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0 4px;
+}
+
+.turn-banner {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 20;
+  background: rgba(0,0,0,0.65);
+  border: 1px solid rgba(255,255,255,0.08);
+  backdrop-filter: blur(8px);
+  padding: 8px 16px;
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+.turn-banner-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Reloj de turno: al bajar de 10s el banner entero avisa. */
+.turn-banner.urgent {
+  border-color: rgba(239, 68, 68, 0.5);
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.25);
+}
+
+.turn-timer-value {
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  min-width: 26px;
+  text-align: right;
+}
+.turn-banner.urgent .turn-timer-value {
+  color: #f87171;
+}
+
+.turn-timer-track {
+  height: 3px;
+  width: 100%;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.turn-timer-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--primary);
+  transition: width 1s linear, background 0.3s;
+}
+.turn-banner.urgent .turn-timer-fill {
+  background: #ef4444;
+}
+
+.turn-pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 0 10px var(--primary);
+  animation: pulse-glow 2s infinite;
+}
+
+.turn-banner-label {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.turn-banner-name {
+  color: var(--primary);
+  font-weight: 800;
+  font-size: 0.75rem;
+}
+
+.board-canvas {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.05s ease-out;
+  width: 100%;
+  height: 100%;
+  will-change: transform;
+}
+
+/* Fichas en el tablero: tamaño FIJO independientemente del breakpoint.
+   El tablero es un lienzo con zoom/auto-encaje, así que la adaptación a
+   pantallas pequeñas la hace la escala, no el tamaño de la ficha. Esto evita
+   que la media query móvil descuadre el cálculo geométrico de la serpiente. */
+.board-tile-wrap {
+  /* Sin will-change: left/top no se componen en GPU, así que el hint no ayudaba
+     y reservaba memoria por cada ficha del tablero. */
+}
+
+/* Última ficha colocada. El anillo verde es estático; el resplandor que "late"
+   se hace con OPACITY sobre un pseudo-elemento (se compone en GPU), en vez de
+   animar box-shadow —que repinta la ficha entera cada frame y estaba SIEMPRE
+   corriendo durante toda la partida (la última ficha siempre lleva la clase). */
+.board-tile-wrap.last-played {
+  z-index: 5;
+}
+.board-tile-wrap.last-played .domino-tile {
+  box-shadow:
+    0 0 0 2px var(--primary),
+    0 5px 12px rgba(0, 0, 0, 0.35);
+}
+.board-tile-wrap.last-played::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 12px;
+  box-shadow: 0 0 22px 2px var(--primary-glow);
+  pointer-events: none;
+  z-index: -1;
+  animation: last-played-glow 2.4s ease-in-out infinite;
+}
+
+@keyframes last-played-glow {
+  0%, 100% { opacity: 0.4; }
+  50%      { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .board-tile-wrap.last-played::after { animation: none; opacity: 0.7; }
+}
+.board-tile-anim {
+  width: 100%;
+  height: 100%;
+}
+.board-tile-wrap .domino-tile {
+  width: 52px;
+  height: 96px;
+  padding: 8px;
+  cursor: default;
+}
+.board-tile-wrap .domino-tile.horizontal {
+  width: 96px;
+  height: 52px;
+  padding: 8px;
+}
+.board-tile-wrap .pip-grid {
+  height: 35px;
+}
+.board-tile-wrap .domino-tile.horizontal .pip-grid {
+  height: 100%;
+  width: 35px;
+}
+.board-tile-wrap .pip {
+  width: 6px;
+  height: 6px;
+}
+.board-tile-wrap .divider {
+  margin: 4px 0;
+}
+.board-tile-wrap .domino-tile.horizontal .divider {
+  margin: 0 4px;
+}
+
+.board-chain {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 80px 100px;
+  min-width: max-content;
+}
+
+.board-placeholder-circle {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 2px dashed var(--primary);
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--primary);
+  font-size: 1.35rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.25s;
+  box-shadow: 0 0 15px var(--primary-glow);
+  animation: pulse-glow 2s infinite;
+  flex-shrink: 0;
+}
+.board-placeholder-circle:hover {
+  background: rgba(16, 185, 129, 0.25);
+  transform: scale(1.1);
+  box-shadow: 0 0 25px var(--primary);
+}
+
+.empty-board-msg {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255,255,255,0.25);
+  padding: 24px 32px;
+  border: 2px dashed rgba(255,255,255,0.06);
+  border-radius: 20px;
+  max-width: 320px;
+  text-align: center;
+}
+
+.empty-board-msg-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 10px;
+}
+
+.empty-board-msg-text {
+  font-size: 0.7rem;
+  margin-top: 4px;
+}
+
+/* --- MANO DEL JUGADOR (PLAYER HAND) --- */
+.player-hand-container {
+  width: 100%;
+  background: linear-gradient(to top, rgba(2, 4, 10, 0.95) 0%, rgba(2, 4, 10, 0.4) 60%, transparent 100%);
+  /* env(safe-area-inset-bottom): deja libre la barra gestual/notch del móvil. */
+  padding: 8px 24px calc(14px + env(safe-area-inset-bottom, 0px)) 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  box-sizing: border-box;
+  flex-shrink: 0; /* la mano nunca se comprime: es la zona jugable */
+}
+
+.hand-status-row {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.turn-notification {
+  color: var(--primary);
+  font-weight: 700;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.15);
+  padding: 6px 16px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.turn-notification-ping {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 0 6px var(--primary);
+  animation: pulse-glow 1.5s infinite;
+}
+
+.waiting-turn-msg {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  padding: 6px 16px;
+  border-radius: 12px;
+}
+
+.hand-tiles-row {
+  display: flex;
+  /* "safe center": centra, pero al desbordar alinea al inicio para que la
+     primera ficha siga siendo alcanzable con scroll. Navegadores sin soporte
+     ignoran la 2ª línea y conservan el center normal. */
+  justify-content: center;
+  justify-content: safe center;
+  align-items: flex-end;
+  gap: 12px;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  /* No encadenar el scroll de la mano al tablero/página. */
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x;
+  /* padding-top holgado: la ficha seleccionada se eleva (translateY + scale) y
+     overflow-x:auto obliga a recortar por arriba. Debe cubrir 28px + el crecido
+     del scale, o la ficha elegida sale decapitada. */
+  padding: 26px 40px 8px 40px;
+  box-sizing: border-box;
+  min-height: 130px;
+}
+
+.tile-double-badge {
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--secondary);
+  color: white;
+  font-size: 0.55rem;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+}
+
+.select-hint-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  padding: 6px 14px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #6ee7b7;
+  animation: pulse-glow 2s infinite;
+}
+
+.select-hint-cancel {
+  font-size: 0.65rem;
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  color: white;
+  padding: 3px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.select-hint-cancel:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* --- CHAT RÁPIDO --- */
+.chat-fab-container {
+  position: fixed;
+  bottom: 24px;
+  left: 24px;
+  width: auto;
+  height: auto;
+  z-index: 1300;
+  pointer-events: none;
+}
+
+.chat-fab-container > * {
+  pointer-events: auto;
+}
+
+.chat-fab {
+  width: 48px;
+  height: 48px;
+  background: var(--secondary);
+  color: white;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 24px rgba(99, 102, 241, 0.35);
+  cursor: pointer;
+  transition: all 0.25s;
+}
+.chat-fab:hover {
+  transform: scale(1.05);
+  box-shadow: 0 10px 28px rgba(99, 102, 241, 0.5);
+}
+
+.chat-menu {
+  position: absolute;
+  bottom: 60px;
+  right: 0;
+  /* Nunca más ancho que la pantalla en móviles estrechos. */
+  width: min(280px, calc(100vw - 40px));
+  max-height: 60vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 15px 35px rgba(0,0,0,0.5);
+}
+
+.chat-tabs {
+  display: flex;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+  padding: 3px;
+  border-radius: 12px;
+}
+
+.chat-tab-btn {
+  flex-grow: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 8px;
+  border-radius: 9px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.2s;
+}
+.chat-tab-btn.active {
+  background: var(--secondary);
+  color: white;
+  box-shadow: 0 4px 10px rgba(99, 102, 241, 0.25);
+}
+
+.emojis-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.emoji-btn {
+  height: 44px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 12px;
+  font-size: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.emoji-btn:hover {
+  background: rgba(255,255,255,0.08);
+  transform: scale(1.08);
+}
+
+.phrases-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.phrase-btn {
+  text-align: left;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.05);
+  padding: 10px 14px;
+  border-radius: 10px;
+  color: var(--text-main);
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  width: 100%;
+}
+.phrase-btn:hover {
+  background: rgba(255,255,255,0.08);
+  color: white;
+}
+
+/* --- MODAL FIN DE RONDA / JUEGO --- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.85);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 200;
+}
+
+.modal-card {
+  width: 100%;
+  max-width: 400px;
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  overflow: hidden;
+  gap: 20px;
+}
+
+/* Botón secundario "Ver tablero" dentro del diálogo de fin de ronda/partida. */
+.end-view-board {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: -8px;
+  background: transparent;
+  border: 1px solid var(--glass-border);
+  color: var(--text-muted);
+  border-radius: 12px;
+  padding: 8px 14px;
+  font-family: var(--font-family);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+.end-view-board:hover {
+  color: #fff;
+  border-color: var(--primary);
+  background: rgba(16, 185, 129, 0.08);
+}
+
+/* Pastilla flotante que sustituye al diálogo mientras miras el tablero. */
+.end-peek-pill {
+  position: fixed;
+  bottom: 18px;
+  right: 18px;
+  z-index: 200;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(16, 185, 129, 0.5);
+  background: rgba(10, 15, 29, 0.92);
+  color: #34d399;
+  font-family: var(--font-family);
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  animation: scale-up 0.2s ease;
+}
+.end-peek-pill:hover { background: rgba(16, 185, 129, 0.18); }
+
+.modal-glow-line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 6px;
+}
+
+.modal-icon-circle {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+}
+
+.modal-icon-circle.winner {
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--primary);
+  animation: float 4s ease-in-out infinite;
+}
+
+.modal-icon-circle.round {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--accent);
+}
+
+.modal-title-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.modal-meta-label {
+  color: var(--text-muted);
+  font-size: 0.65rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+}
+
+.modal-title {
+  color: white;
+  font-weight: 900;
+  font-size: 1.65rem;
+}
+
+.modal-desc-box {
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.15);
+  border-radius: 16px;
+  padding: 10px 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #a7f3d0;
+}
+
+.modal-table {
+  width: 100%;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.04);
+  border-radius: 20px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.modal-table-title {
+  font-size: 0.65rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.1em;
+  text-align: left;
+  margin-bottom: 4px;
+}
+
+.modal-table-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-size: 0.8rem;
+}
+
+.modal-table-row.highlight {
+  background: rgba(255,255,255,0.04);
+  font-weight: 700;
+  color: white;
+}
+
+.modal-row-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.modal-row-score {
+  font-weight: 800;
+}
+

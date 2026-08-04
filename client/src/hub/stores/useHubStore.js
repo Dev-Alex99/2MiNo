@@ -44,12 +44,12 @@ export const useHubStore = create((set) => ({
     },
     {
       id: 'uno',
-      name: 'Uno Master',
+      name: 'Uno',
       subtitle: 'Cartas Rápido',
       category: 'Cartas',
       players: '2-4 Jugadores',
-      status: 'coming_soon',
-      badge: 'DESARROLLO',
+      status: 'available',
+      badge: 'NUEVO',
       icon: '🃏',
       color: 'from-red-600 to-rose-800',
       description: 'Partidas dinámicas de cartas. Haz coincidir colores y números y no olvides gritar ¡UNO!'

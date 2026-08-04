@@ -2502,3 +2502,297 @@
   min-width: 220px;
   justify-content: center;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   UNO
+   ═══════════════════════════════════════════════════════════════ */
+
+.uno-container {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px;
+  max-width: 900px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.uno-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  flex-wrap: wrap;
+}
+
+.uno-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #e2e8f0;
+  min-width: 0;
+}
+
+.uno-title { font-weight: 900; letter-spacing: 0.04em; }
+.uno-round, .uno-target {
+  font-size: 0.76rem;
+  color: #94a3b8;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.12);
+  white-space: nowrap;
+}
+
+.uno-voice-slot { display: flex; align-items: center; min-width: 0; }
+
+.uno-btn.btn-exit {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.14);
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  cursor: pointer;
+}
+
+/* ─── Jugadores ─── */
+.uno-players {
+  display: flex;
+  gap: 8px;
+  padding: 8px 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.uno-player {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 12px;
+  border-radius: 12px;
+  background: rgba(148, 163, 184, 0.08);
+  border: 1px solid transparent;
+  min-width: 96px;
+}
+
+/* Turno activo: el borde es la señal más barata de leer de un vistazo. */
+.uno-player.en-turno {
+  border-color: rgba(52, 211, 153, 0.6);
+  background: rgba(16, 185, 129, 0.14);
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.25);
+}
+
+.uno-player-nombre {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 700;
+  font-size: 0.82rem;
+  color: #e2e8f0;
+}
+
+.uno-player-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.76rem;
+  color: #94a3b8;
+}
+
+.uno-player-cartas::after { content: ' 🂠'; }
+.uno-player-puntos::after { content: ' pts'; }
+
+.uno-badge-uno {
+  font-weight: 900;
+  font-size: 0.68rem;
+  color: #0f172a;
+  background: #fbbf24;
+  padding: 1px 6px;
+  border-radius: 999px;
+}
+
+/* ─── Mesa ─── */
+.uno-mesa {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  padding: 10px 0;
+  flex-wrap: wrap;
+}
+
+.uno-mazo {
+  width: 58px;
+  height: 86px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  color: #cbd5e1;
+  background: repeating-linear-gradient(45deg, #1e293b, #1e293b 6px, #0f172a 6px, #0f172a 12px);
+  border: 2px solid rgba(148, 163, 184, 0.35);
+}
+
+.uno-descarte { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+
+.uno-color-actual {
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 2px 10px;
+  border-radius: 999px;
+  color: #0f172a;
+}
+
+.uno-info { display: flex; flex-direction: column; align-items: center; gap: 6px; color: #94a3b8; }
+
+.uno-deuda {
+  font-weight: 900;
+  font-size: 0.8rem;
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.18);
+  border: 1px solid rgba(248, 113, 113, 0.5);
+  padding: 2px 10px;
+  border-radius: 999px;
+}
+
+.uno-reloj {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums; /* el ancho no baila al contar atrás */
+}
+
+.uno-reloj.urgente {
+  color: #fca5a5;
+  animation: uno-pulso 1s ease-in-out infinite;
+}
+
+@keyframes uno-pulso { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+@media (prefers-reduced-motion: reduce) { .uno-reloj.urgente { animation: none; } }
+
+.uno-status {
+  text-align: center;
+  font-weight: 800;
+  font-size: 0.95rem;
+  color: #e2e8f0;
+  min-height: 1.4em;
+}
+
+/* ─── Cartas ─── */
+.uno-card {
+  width: 58px;
+  height: 86px;
+  border-radius: 10px;
+  border: 2px solid rgba(255, 255, 255, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  font-size: 1.5rem;
+  color: #fff;
+  text-shadow: 0 2px 3px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  flex: 0 0 auto;
+}
+
+.uno-card.color-rojo      { background: linear-gradient(160deg, #ef4444, #b91c1c); }
+.uno-card.color-amarillo  { background: linear-gradient(160deg, #f59e0b, #b45309); }
+.uno-card.color-verde     { background: linear-gradient(160deg, #22c55e, #15803d); }
+.uno-card.color-azul      { background: linear-gradient(160deg, #3b82f6, #1d4ed8); }
+/* Comodín sin color asignado: los cuatro colores en la propia carta. */
+.uno-card.color-comodin   { background: conic-gradient(#ef4444 0 25%, #f59e0b 0 50%, #22c55e 0 75%, #3b82f6 0); }
+.uno-card.color-dorso     { background: repeating-linear-gradient(45deg, #1e293b, #1e293b 6px, #0f172a 6px, #0f172a 12px); }
+
+.uno-color-actual.color-rojo     { background: #ef4444; }
+.uno-color-actual.color-amarillo { background: #f59e0b; }
+.uno-color-actual.color-verde    { background: #22c55e; }
+.uno-color-actual.color-azul     { background: #3b82f6; }
+
+/* Sólo lo jugable invita a pulsarse: el resto queda apagado y sin cursor. */
+.uno-card.jugable {
+  box-shadow: 0 0 0 3px rgba(250, 204, 21, 0.65), 0 6px 14px rgba(0, 0, 0, 0.35);
+}
+.uno-card.jugable:hover { transform: translateY(-8px); }
+.uno-card.inerte { opacity: 0.55; cursor: default; filter: saturate(0.7); }
+
+.uno-mano {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+  padding: 10px 4px;
+  min-height: 96px;
+}
+
+.uno-acciones {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* Cantar UNO se ARMA antes de jugar: el estado pulsado tiene que verse. */
+.uno-btn-cantar {
+  background: rgba(148, 163, 184, 0.18);
+  color: #cbd5e1;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+}
+.uno-btn-cantar.armado {
+  background: linear-gradient(135deg, #f59e0b, #d97706);
+  color: #0f172a;
+  border-color: #fbbf24;
+  box-shadow: 0 0 14px rgba(245, 158, 11, 0.55);
+}
+
+/* ─── Elegir color del comodín ─── */
+.uno-color-picker {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  align-items: center;
+}
+
+.uno-color-picker-title { font-weight: 800; color: #e2e8f0; }
+.uno-color-picker-opciones { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+
+.uno-color-opcion {
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-weight: 800;
+  color: #0f172a;
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+}
+.uno-color-opcion.color-rojo     { background: #ef4444; color: #fff; }
+.uno-color-opcion.color-amarillo { background: #f59e0b; }
+.uno-color-opcion.color-verde    { background: #22c55e; }
+.uno-color-opcion.color-azul     { background: #3b82f6; color: #fff; }
+
+.uno-color-cancelar {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+@media (max-width: 640px) {
+  .uno-card, .uno-mazo { width: 46px; height: 70px; font-size: 1.2rem; }
+  .uno-mano { gap: 5px; }
+  .uno-player { min-width: 78px; padding: 5px 9px; }
+}

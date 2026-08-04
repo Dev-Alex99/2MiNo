@@ -15,6 +15,7 @@
 //    siempre como empate.
 const assert = require('assert');
 require('./games/TicTacToeGame');
+require('./games/UnoGame');
 require('./gameLogic');
 const GameRegistry = require('./core/GameRegistry');
 
@@ -63,8 +64,12 @@ for (const gameType of GameRegistry.listGames().map(x => x.gameType)) {
       let res, threw = null;
       try { res = g.playBotTurn(bot.id); } catch (e) { threw = e; }
       ok(!threw, `[${gameType}] playBotTurn() no lanza excepción` + (threw ? ` (lanzó: ${threw.message})` : ''));
-      ok(res && res.action === 'played',
-        `[${gameType}] playBotTurn() JUEGA cuando es su turno (devolvió '${res && res.action}')`);
+      // Lo que importa es que el bot AVANCE el turno, no qué haga: en Uno puede
+      // no tener jugada legal y robar es progreso legítimo. Exigir 'played'
+      // codificaba una suposición del dominó y además era intermitente.
+      // 'none' sí es el fallo real: el bot no hace nada y la partida se cuelga.
+      ok(res && ['played', 'passed', 'skipped'].includes(res.action),
+        `[${gameType}] playBotTurn() avanza el turno cuando le toca (devolvió '${res && res.action}')`);
     }
   } else {
     ok(true, `[${gameType}] autopilota sus bots (el orquestador no debe programarlos)`);

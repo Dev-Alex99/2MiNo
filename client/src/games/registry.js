@@ -1,6 +1,7 @@
 import DominoBoard from './domino/DominoBoard';
 import DominoSpectatorBoard from './domino/DominoSpectatorBoard';
 import TicTacToeBoard from './tictactoe/TicTacToeBoard';
+import UnoBoard from './uno/UnoBoard';
 
 /**
  * Registro de tableros del hub: id de juego → componente que lo pinta.
@@ -38,6 +39,21 @@ const TABLEROS = {
     espectador: TicTacToeBoard,
     // No tiene variantes que configurar, y ni el emparejamiento por ELO ni los
     // torneos saben crear partidas suyas (ambos hacen `new DominoGame`).
+    opcionesDeSala: false,
+    clasificatoria: false,
+    torneos: false
+  },
+  uno: {
+    id: 'uno',
+    nombre: 'Uno',
+    icono: '🃏',
+    componente: UnoBoard,
+    // Vale el mismo tablero: el espectador nunca es el jugador de turno, así
+    // que sus cartas salen deshabilitadas y su mano llega vacía del servidor.
+    espectador: UnoBoard,
+    // El panel de opciones del lobby es del dominó (variante, parejas, poderes),
+    // así que no se ofrece: Uno juega a los 200 puntos por defecto. Ni cola por
+    // ELO ni torneos, que en el servidor crean partidas de dominó.
     opcionesDeSala: false,
     clasificatoria: false,
     torneos: false

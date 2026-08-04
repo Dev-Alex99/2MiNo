@@ -36,6 +36,7 @@ const registerGameHandlers = require('./handlers/gameHandler');
 const { registerVoiceHandlers, leaveVoice } = require('./handlers/voiceHandler');
 const identity = require('./identity');
 require('./games/TicTacToeGame');
+require('./games/UnoGame');
 
 // Red de seguridad del proceso. Socket.IO NO captura las excepciones de sus
 // manejadores: una sola línea que lance en cualquiera de los ~53 eventos (o en

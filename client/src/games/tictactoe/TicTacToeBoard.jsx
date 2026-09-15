@@ -1,6 +1,5 @@
 import React, { useEffect, useRef } from 'react';
 import { socket } from '../../socket';
-import UnifiedVoiceWidget from '../../components/UnifiedVoiceWidget';
 import { RotateCcw, LogOut, Sparkles, Bot as BotIcon, Timer } from 'lucide-react';
 import { playGameSound } from '../../audio';
 import { useT } from '../../i18n/LanguageContext';
@@ -87,9 +86,11 @@ export default function TicTacToeBoard({ gameState, playerId, onLeave }) {
           <span className="tictactoe-round">{t('ttt.round', { n: roundNumber })}</span>
         </div>
 
-        <div className="tictactoe-voice-slot">
-          <UnifiedVoiceWidget variant="embedded" />
-        </div>
+        {/* Aquí había una TERCERA instancia del widget de voz. Con las de
+            `App` y `GameBar` vivas a la vez, abrir esta partida disparaba TRES
+            `get_friends` idénticos y podía pintar TRES tarjetas de llamada
+            entrante con tres botones de «Aceptar». La voz de la partida vive
+            ahora en la cápsula anclada de `GameBar`, que es una sola. */}
 
         <div className="tictactoe-actions">
           <button

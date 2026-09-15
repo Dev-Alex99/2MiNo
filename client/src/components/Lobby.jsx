@@ -5,6 +5,7 @@ import LiveGames from './LiveGames';
 import LanguageSwitcher from './LanguageSwitcher';
 import { useT } from '../i18n/LanguageContext';
 import { useHubStore } from '../hub/stores/useHubStore';
+import { useGameStore } from '../store/useGameStore';
 import { capacidadesDe } from '../games/registry';
 
 export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuickPlay, publicRooms = [], roomsLoading, stats, invitedCode = '', onOpenProfile, onOpenLeaderboard, onOpenStore, onOpenTournament, onFindRanked, onOpenFriends, liveGames = [], onSpectate }) {
@@ -15,6 +16,10 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
   // poderes del dominó, y de ahí la sensación de "me mete en el otro juego".
   const selectedGameId = useHubStore(state => state.selectedGameId);
   const juego = capacidadesDe(selectedGameId);
+  // Se lee del store y no llega por props: las dos listas de abajo tienen que
+  // distinguir «no hay nada» de «no lo sabemos», y quien monta el lobby (el
+  // marco) no es dueño de ese matiz ni tiene por qué enterarse.
+  const isConnected = useGameStore(state => state.isConnected);
   const VARIANT_INFO = {
     6: { label: t('opt.double', { n: 6 }), desc: t('opt.d6desc') },
     9: { label: t('opt.double', { n: 9 }), desc: t('opt.d9desc') }
@@ -60,8 +65,10 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
     `${maxScore ?? (maxPip === 9 ? 200 : 100)} ${t('common.points')}`
   ].filter(Boolean).join(' · ');
 
+  // También lo llama el estado vacío del listado de salas, que no le pasa
+  // evento: sin la guarda, «Crear sala» desde ahí reventaba en preventDefault.
   const handleCreate = (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     if (!name.trim()) {
       setError(t('lobby.nameRequired'));
       return;
@@ -90,38 +97,35 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
       <div className="lobby-glow-1"></div>
       <div className="lobby-glow-2"></div>
 
-      {/* Perfil + selector de idioma, esquina superior */}
-      <div className="lobby-topbar">
+      {/* Barra superior del lobby.
+          Era `position: absolute; top:14px; right:14px` SIN `left`, sin
+          `max-width` y sin `flex-wrap`, con siete controles que suman ~610 px:
+          en 375 px arrancaba en x ≈ −250 y Hub, Tienda y Torneo quedaban
+          recortados e INALCANZABLES, porque un desbordamiento hacia la
+          izquierda no genera scroll y `.lobby-screen` lleva `overflow-x:
+          hidden`. Ahora es una banda en flujo que desplaza en horizontal.
+          Los `aria-label` repiten LITERALMENTE la etiqueta visible: bajo 640 px
+          el texto se oculta y el icono de lucide no aporta nombre accesible
+          (sus SVG no llevan aria-hidden), así que sin ellos la barra entera se
+          queda muda. */}
+      <div className="lobby-topbar" role="navigation" aria-label={t('lobby.subtitle')}>
         <button
           type="button"
-          className="lobby-profile-btn"
+          className="lobby-profile-btn lobby-btn-hub"
           onClick={returnToHub}
-          title="Volver al Hub Principal"
-          style={{
-            background: 'rgba(99, 102, 241, 0.25)',
-            border: '1px solid rgba(129, 140, 248, 0.6)',
-            color: '#a5b4fc',
-            fontWeight: 'bold'
-          }}
+          aria-label={t('hub.volver')}
         >
-          <Home size={16} />
-          <span className="lobby-btn-label">Hub</span>
+          <Home size={16} aria-hidden="true" />
+          <span className="lobby-btn-label">{t('hub.volver')}</span>
         </button>
 
         <button
           type="button"
           className="lobby-profile-btn store-btn-highlight"
           onClick={onOpenStore}
-          title={t('store.title')}
-          style={{
-            background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(217, 119, 6, 0.35))',
-            border: '1px solid rgba(251, 191, 36, 0.6)',
-            boxShadow: '0 0 12px rgba(245, 158, 11, 0.4)',
-            color: '#fbbf24',
-            fontWeight: 'bold'
-          }}
+          aria-label={t('lobby.store')}
         >
-          <ShoppingBag size={16} color="#fbbf24" />
+          <ShoppingBag size={16} aria-hidden="true" />
           <span className="lobby-btn-label">{t('lobby.store')}</span>
         </button>
 
@@ -129,29 +133,29 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
             en el servidor ambos hacen `new DominoGame`, así que desde otro
             juego te metían en una partida de dominó. */}
         {onOpenTournament && juego.torneos && (
-          <button type="button" className="lobby-profile-btn tournament-btn-highlight" onClick={onOpenTournament} title={t('lobby.tournament')}>
-            <Swords size={16} />
+          <button type="button" className="lobby-profile-btn tournament-btn-highlight" onClick={onOpenTournament} aria-label={t('lobby.tournament')}>
+            <Swords size={16} aria-hidden="true" />
             <span className="lobby-btn-label">{t('lobby.tournament')}</span>
           </button>
         )}
 
         {onOpenLeaderboard && (
-          <button type="button" className="lobby-profile-btn" onClick={onOpenLeaderboard} title={t('lobby.ranking')}>
-            <Trophy size={16} />
+          <button type="button" className="lobby-profile-btn" onClick={onOpenLeaderboard} aria-label={t('lobby.ranking')}>
+            <Trophy size={16} aria-hidden="true" />
             <span className="lobby-btn-label">{t('lobby.ranking')}</span>
           </button>
         )}
 
         {onOpenFriends && (
-          <button type="button" className="lobby-profile-btn" onClick={onOpenFriends} title={t('friend.title')}>
-            <Users size={16} />
+          <button type="button" className="lobby-profile-btn" onClick={onOpenFriends} aria-label={t('friend.title')}>
+            <Users size={16} aria-hidden="true" />
             <span className="lobby-btn-label">{t('friend.title')}</span>
           </button>
         )}
 
         {onOpenProfile && (
-          <button type="button" className="lobby-profile-btn" onClick={onOpenProfile} title={t('profile.title')}>
-            <Medal size={16} />
+          <button type="button" className="lobby-profile-btn" onClick={onOpenProfile} aria-label={t('profile.button')}>
+            <Medal size={16} aria-hidden="true" />
             <span className="lobby-btn-label">{t('profile.button')}</span>
           </button>
         )}
@@ -238,17 +242,26 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
               <Globe size={14} />
               {t('lobby.openRooms')}
             </label>
-            <RoomList rooms={publicRooms} loading={roomsLoading} onJoin={handleJoinFromList} />
+            <RoomList
+              rooms={publicRooms}
+              loading={roomsLoading}
+              sinConexion={!isConnected}
+              onJoin={handleJoinFromList}
+              onCrear={handleCreate}
+            />
           </div>
 
-          {/* Partidas en curso que se pueden ver (solo si hay alguna) */}
-          {liveGames.length > 0 && onSpectate && (
+          {/* Partidas en curso que se pueden ver.
+              Se monta SIEMPRE: con `liveGames.length > 0 &&` delante, el estado
+              vacío que LiveGames se molesta en pintar era inalcanzable por
+              construcción, y la sección desaparecía entera sin explicar por qué. */}
+          {onSpectate && (
             <div className="lobby-form-field">
               <label className="lobby-form-label">
                 <Eye size={14} />
                 {t('live.title')}
               </label>
-              <LiveGames games={liveGames} onWatch={onSpectate} />
+              <LiveGames games={liveGames} sinConexion={!isConnected} onWatch={onSpectate} onJugar={handleQuick} />
             </div>
           )}
 

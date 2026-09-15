@@ -275,14 +275,22 @@ function registerGameHandlers(io, socket) {
     const player = game.players.find(p => p.id === playerId);
     if (!player || player.socketId !== socket.id) return; // no suplantar a otro jugador
 
-    io.to(roomId).emit('receive_quick_message', {
+    const carga = {
       // De vuelta al cliente va el ALIAS: 'playerId' ya está traducido a id de
       // cuenta para el motor, y reemitirlo tal cual lo filtraría a la sala.
       playerId: seatAliases.aliasDe(roomId, playerId),
       playerName: player.name,
       text,
       type
-    });
+    };
+    // Una frase rápida viaja como CLAVE i18n y la traduce el receptor, para que
+    // cada quien la lea en su idioma. Se conserva 'text' como respaldo: un
+    // cliente antiguo manda la frase ya traducida y solo sabe pintar 'text', y
+    // t() devuelve la cadena tal cual cuando no es una clave que conozca, así
+    // que el mensaje se ve igual en ambos sentidos.
+    if (type === 'phrase') carga.key = text;
+
+    io.to(roomId).emit('receive_quick_message', carga);
   });
 
   // 10. Emoticonos animados sobre jugadores

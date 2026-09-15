@@ -24,16 +24,30 @@
   border: 1px solid rgba(0, 0, 0, 0.05);
 }
 
-/* Solo en dispositivos con puntero real: evita el "hover pegajoso" al tocar
-   en móvil, que dejaba la ficha levantada tras el tap. */
-@media (hover: hover) {
-  .hand-tile:hover {
-    transform: translateY(-18px) scale(1.06);
-    box-shadow:
-      0 15px 25px rgba(0, 0, 0, 0.5),
-      0 0 14px var(--primary);
-    z-index: 10;
-  }
+/* El hover de la ficha de la mano vive ahora en mano.css. Aquí levantaba 18px
+   CUALQUIER .hand-tile, también las que no se pueden jugar, y con los tres
+   estados nuevos esa elevación contradecía al estado: el hover decía "puedes
+   jugarla" encima de una ficha marcada como no jugable. Se MUEVE, no se
+   duplica; sigue dentro de @media (hover: hover) para no dejar el "hover
+   pegajoso" al tocar en móvil. */
+
+/* Orden deliberado: disabled -> playable -> selected. Estaba al revés y, como
+   una ficha seleccionada SIEMPRE es también jugable, el box-shadow de .playable
+   pisaba el de .selected y el halo de selección no se pintaba nunca.
+   De .disabled se cae `filter: brightness(.55)`, que es multiplicativo sobre un
+   color que elige el usuario en la tienda y en 7 de las 10 skins dejaba la
+   ficha apagada a 1,09-1,18:1 respecto a la normal (o sea, el estado no
+   existía), y `pointer-events: none`, porque la ficha tiene que seguir siendo
+   enfocable y anunciable: el rechazo lo hace el manejador. Los tres estados de
+   la MANO viven en mano.css, en canales que no dependen del color de la skin. */
+.domino-tile.disabled {
+  cursor: not-allowed;
+}
+
+.domino-tile.playable {
+  box-shadow:
+    0 5px 12px rgba(0, 0, 0, 0.35),
+    0 0 10px var(--primary-glow);
 }
 
 /* La elevación obliga a reservar padding arriba en la fila de la mano, y ese
@@ -46,16 +60,18 @@
   border-color: var(--primary);
 }
 
-.domino-tile.playable {
-  box-shadow: 
-    0 5px 12px rgba(0, 0, 0, 0.35),
-    0 0 10px var(--primary-glow);
-}
-
-.domino-tile.disabled {
-  filter: brightness(0.55) saturate(0.5);
-  cursor: not-allowed;
-  pointer-events: none;
+/* Con `interactivo` la ficha se renderiza como <button>: hay que neutralizar lo
+   que el agente de usuario le pone encima y que .domino-tile no declara. */
+button.domino-tile {
+  appearance: none;
+  -webkit-appearance: none;
+  font: inherit;
+  color: inherit;
+  text-align: inherit;
+  /* El agente de usuario centra el contenido de un botón flex; la ficha lo
+     quiere estirado, que es lo que hace un <div> y lo que asumen .pip-grid y
+     .divider. */
+  align-items: stretch;
 }
 
 .domino-tile .divider {

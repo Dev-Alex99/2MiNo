@@ -4,6 +4,12 @@
 # revisarla, no quedaba constancia de sus cambios y recrear el servicio era un
 # ejercicio de memoria. Aquí queda versionada junto al código que despliega.
 #
+# ⚠️ Este fichero NO se aplica solo. Un servicio creado a mano desde el panel
+# sigue usando SU configuración: si el servicio actual instala con `npm install`
+# y arranca desde `server/`, es que se creó así. Para que mande este fichero hay
+# que crear el servicio como Blueprint (New → Blueprint) o sincronizarlo desde
+# el panel del servicio.
+#
 # Los secretos NO se ponen aquí: van marcados con `sync: false` para que Render
 # los pida una vez y los guarde cifrados. El fichero es público, ellos no.
 services:
@@ -13,21 +19,33 @@ services:
     plan: free
     region: frankfurt
     branch: main
-    # El monorepo es pnpm: se instala desde la raíz y se arranca el servidor.
-    buildCommand: corepack enable && pnpm install --frozen-lockfile
+    # El repositorio es un WORKSPACE de pnpm: se instala desde la raíz, que es
+    # donde vive el único lockfile válido. Instalar con `npm install` dentro de
+    # `server/` funciona, pero ignora `pnpm-lock.yaml` y resuelve versiones
+    # nuevas en cada despliegue: se deja de desplegar lo que probó el CI.
+    #
+    # `--filter domino-server --prod` instala SÓLO lo que el servidor necesita
+    # en producción: sin el cliente y sin devDependencies (eslint, nodemon,
+    # socket.io-client), que no pintan nada en un servidor en marcha.
+    # `CI=true` evita que pnpm pida confirmación por consola al limpiar.
+    buildCommand: corepack enable && CI=true pnpm install --frozen-lockfile --filter domino-server --prod
     startCommand: node server/server.js
     healthCheckPath: /health
     autoDeploy: true
 
     envVars:
+      # Debe coincidir con `.node-version` y con el CI. Con `engines: ">=20"` a
+      # secas, Render cogía la última disponible (llegó a usar Node 26) y se
+      # ejecutaba en producción una versión que nadie había probado.
       - key: NODE_VERSION
-        value: "20"
+        value: "24"
 
-      # ── Obligatorio con base de datos ──
+      # ── OBLIGATORIO con base de datos ──
       # Firma los tokens de sesión. Las identidades quedan reclamadas en la BD y
-      # sobreviven al reinicio, así que si este secreto cambiara en cada arranque
-      # todos los jugadores serían rechazados y perderían su cuenta en silencio.
-      # Por eso el servidor SE NIEGA A ARRANCAR si hay DATABASE_URL y falta.
+      # sobreviven al reinicio, pero los tokens se firman con este secreto: si
+      # cambiara en cada arranque, todos los jugadores serían rechazados y
+      # perderían su cuenta en silencio. Por eso el servidor SE NIEGA A ARRANCAR
+      # si hay DATABASE_URL y falta.
       # `generateValue` hace que Render cree uno estable la primera vez.
       - key: AUTH_SECRET
         generateValue: true

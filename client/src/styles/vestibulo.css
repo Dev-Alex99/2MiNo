@@ -1,0 +1,651 @@
+/* Capa del VESTÍBULO: barra de identidad, invitación, carril de gente,
+ * métricas y catálogo del hub.
+ *
+ * Creada vacía por P3-MARCO y CEDIDA a P7-VESTIBULO, su único dueño (excepción
+ * documentada del contrato §2a).
+ *
+ * Se importa en index.css DESPUÉS de a11y.css, y ésa es la única posición desde
+ * la que sus reglas alcanzan a perfil-hub.css (importado en :20) y a
+ * responsive.css (:18) a igual especificidad. Es justo lo que hoy falta: por eso
+ * el hub acabó fabricándose su propio @media (max-width: 768px) privado en
+ * perfil-hub.css:656.
+ *
+ * TRES REGLAS QUE GOBIERNAN TODO LO DE ABAJO:
+ *  · Superficies OPACAS. poderes.css:451 aplica `* { backdrop-filter: none
+ *    !important }` bajo (pointer: coarse) —que incluye portátiles táctiles—, así
+ *    que una superficie translúcida deja asomar el texto de detrás. Aquí no hay
+ *    ni un blur.
+ *  · Sólo tokens. El hub tenía 350 hexadecimales escritos a mano y CERO usos de
+ *    los tokens del rediseño. Ningún color nuevo se declara aquí: los tokens
+ *    viven sólo en el :root de base.css (contrato §4).
+ *  · Un solo sistema de breakpoints: 480 / 768 / 1024. Nada más.
+ */
+
+/* ------------------------------------------------------------ la pantalla */
+
+/* `.hub-screen` declara `overflow-x: hidden`, y por especificación eso computa
+   el otro eje a `auto`: el hub se convertía en un contenedor de desplazamiento
+   propio anidado dentro del `#root { overflow-y: auto }` de base.css. Con
+   `.hub-glow-3` sobresaliendo 100 px por debajo de su caja, el hub dejaba
+   scrollear 100 px de nada. Los tres glow ya no se pintan (eran 1250x1250 px de
+   blur permanentemente compuestos que en táctil ni siquiera se aplicaban) y
+   aquí se devuelve el desbordamiento a `visible`: el único scroller es #root. */
+.hub-screen.vest {
+  overflow: visible;
+  background: radial-gradient(circle at top center, var(--sup-2) 0%, var(--sup-0) 62%);
+  color: var(--tx-1);
+  /* Toda cifra del vestíbulo con anchura fija: el contador «en línea» a
+     1.5rem/800 bailaba de ancho al pasar de 9 a 10. */
+  font-variant-numeric: tabular-nums;
+}
+
+.vest-cuerpo {
+  flex: 1;
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  /* 375 − 2x12 = 351 de ancho útil. El hub gastaba 48 de 375 en padding lateral
+     y no lo reducía en ningún breakpoint. */
+  padding: 12px 12px calc(16px + env(safe-area-inset-bottom));
+}
+
+/* --------------------------------------------------- banda 1 · identidad */
+
+.vest-barra {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sobrecapa);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  height: var(--vest-barra);
+  padding: 0 12px;
+  background: var(--sup-1);
+  border-bottom: 1px solid var(--linea);
+}
+
+.vest-yo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  /* Es el único que cede ancho, y puede: el nombre lleva su elipsis. */
+  flex: 0 1 auto;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 8px 0 0;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--tx-1);
+  font-family: var(--font-family);
+  text-align: left;
+  cursor: pointer;
+}
+.vest-yo:hover { background: var(--sup-2); }
+
+.vest-yo-avatar {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--tx-1);
+}
+
+.vest-yo-texto {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.vest-yo-nombre {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--tx-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Aquí falta `.vest-yo-cifras` (ELO · monedas bajo el nombre). No se declara
+   una regla sin consumidor: el dato viaja en `profile_data` y hoy el hub no
+   puede escucharlo sin registrar un segundo listener de ese evento, que es lo
+   que `useGameSocket.test.jsx` prohíbe. Cuando el perfil viva en un store,
+   vuelven la línea y su regla. */
+
+/* No se encoge: el que cede ancho es el control de perfil, que lleva el nombre
+   y sabe recortarlo con puntos suspensivos. Si el raíl se encogiera, los tres
+   objetivos táctiles bajarían de 44 en cuanto el nombre fuera largo, que es
+   justo cuando peor se acierta. */
+.vest-nav {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.vest-nav-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  /* 44x44, sin excepciones. Bajo 768 px estos botones perdían su texto y se
+     quedaban en cuatro cuadraditos anónimos de 48x32 sin nombre accesible. */
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--linea);
+  border-radius: 12px;
+  background: var(--sup-2);
+  color: var(--tx-2);
+  font-family: var(--font-family);
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+}
+.vest-nav-btn:hover {
+  background: var(--sup-3);
+  border-color: var(--linea-fuerte);
+  color: var(--tx-1);
+}
+
+/* Móvil primero: el raíl empieza siendo tres iconos de 44 y sólo recupera las
+   etiquetas a partir de 768. En 375 px la barra son 351 de ancho y el control de
+   perfil ya se lleva la mitad; con «Tienda», «Ranking» y «Amigos» escritos, los
+   cinco elementos suman ~330 y el selector de idioma se sale.
+   El nombre accesible NO depende de la etiqueta visible: cada botón lleva su
+   `aria-label` traducido, porque los SVG de lucide no traen `aria-hidden` y un
+   botón cuyo único hijo es un icono se anuncia vacío. */
+.vest-nav-label { display: none; }
+.vest-nav-btn { width: 44px; padding: 0; }
+
+@media (min-width: 768px) {
+  .vest-nav-label { display: inline; white-space: nowrap; }
+  .vest-nav-btn { width: auto; padding: 0 12px; }
+}
+
+.vest-nav-insignia {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: var(--laton-400);
+  color: var(--sup-0);
+  font-size: 0.66rem;
+  font-weight: 800;
+  line-height: 18px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* -------------------------------------------------- banda 0 · invitación */
+
+.vest-invitacion {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--laton-a20);
+  border: 1px solid var(--laton-400);
+}
+
+.vest-invitacion-texto {
+  flex: 1 1 100%;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--tx-1);
+}
+
+.vest-invitacion-campo {
+  flex: 1 1 180px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.vest-invitacion-campo .input-premium { min-height: 44px; }
+
+.vest-etiqueta {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--tx-3);
+}
+
+.vest-invitacion .btn-premium { min-height: 44px; flex: 0 0 auto; }
+
+/* --------------------------------------------- banda 0-bis · reanudación */
+
+/* La sala guardada que el servidor ya no tiene. La pinta el MARCO (App.jsx),
+   por encima de `.hub-screen`, así que sin reglas quedaba en flujo empujando el
+   hub entero hacia abajo. Va fija abajo, como un aviso: cuesta cero píxeles de
+   maquetación y no tapa la barra de identidad.
+   Por debajo de `--z-carril` y de `--z-linea` a propósito: un timbre entrante
+   nunca puede quedar detrás de un aviso descartable. */
+.vest-reanudar {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(64px + env(safe-area-inset-bottom));
+  z-index: var(--z-sobrecapa);
+  width: calc(100% - 24px);
+  max-width: 520px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: var(--sup-2);
+  border: 1px solid var(--linea-fuerte);
+  color: var(--tx-2);
+  font-size: 0.8rem;
+}
+.vest-reanudar .btn-premium {
+  min-height: 44px;
+  padding: 0 14px;
+  font-size: 0.78rem;
+}
+
+/* La OTRA banda: la sala que sigue viva. Es el caso contrario y no coincide
+   nunca con la de arriba (cuando la fantasma se enciende, `roomId` ya se ha
+   vaciado). Ésta sí va en flujo, dentro del cuerpo del hub. */
+.vest-reanudar.vest-reanudar-viva {
+  position: static;
+  transform: none;
+  width: 100%;
+  max-width: none;
+  justify-content: space-between;
+}
+
+/* ------------------------------------------------------ banda 2 · carril */
+
+.vest-carril {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vest-carril-titulo,
+.vest-catalogo-titulo {
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--tx-3);
+  margin: 0;
+}
+
+.vest-carril-lista {
+  display: flex;
+  gap: 8px;
+  margin: 0;
+  padding: 2px;
+  list-style: none;
+  min-height: var(--carril-alto);
+  overflow-x: auto;
+  overflow-y: visible;
+  scroll-snap-type: x proximity;
+}
+.vest-carril-lista > li { scroll-snap-align: start; }
+
+.vest-persona {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.vest-persona-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 72px;
+  min-height: 84px;
+  padding: 6px 4px;
+  border: 1px solid var(--laton-a20);
+  border-radius: 14px;
+  background: var(--laton-a20);
+  color: var(--laton-300);
+  font-family: var(--font-family);
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+.vest-persona-btn:hover { border-color: var(--laton-400); }
+
+/* La etiqueta de cada estado dice cuánto cuesta llamar AHORA, y lo dice con
+   color, con glifo y con palabra. NINGÚN estado de persona usa rojo: el rojo
+   está reservado al reloj crítico y a colgar. */
+.vest-persona-btn.estado-jugando,
+.vest-persona-btn.estado-en_sala {
+  background: var(--sup-3);
+  border-color: var(--linea);
+  color: var(--tx-3);
+}
+.vest-persona-btn.estado-en_llamada {
+  background: var(--verde-a12);
+  border-color: var(--verde-300);
+  color: var(--verde-300);
+}
+.vest-persona-btn.estado-no_molestar {
+  background: var(--sup-2);
+  border-color: var(--linea);
+  color: var(--tx-3);
+  cursor: default;
+}
+.vest-persona-btn.estado-no_molestar .vest-persona-nombre { text-decoration: line-through; }
+
+.vest-persona-avatar {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid var(--linea-fuerte);
+  background: var(--sup-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--tx-1);
+}
+
+.vest-persona-punto {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  /* El borde del color de la barra es lo que despega el punto del avatar. */
+  border: 2px solid var(--sup-1);
+  background: var(--tx-3);
+}
+.vest-persona-punto.punto-libre,
+.vest-persona-punto.punto-en_sala { background: var(--verde-400); }
+.vest-persona-punto.punto-jugando { background: var(--laton-400); }
+.vest-persona-punto.punto-en_llamada { background: var(--verde-300); }
+.vest-persona-punto.punto-no_molestar { background: var(--tx-3); }
+
+.vest-persona-nombre {
+  max-width: 100%;
+  min-width: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--tx-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vest-persona-estado {
+  font-size: 0.62rem;
+  line-height: 1;
+  color: inherit;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+/* La hoja de acciones de una persona. Es un desplegable en su sitio, no un
+   modal: durante una partida no puede robar el resto de la pantalla. */
+.vest-persona-acciones {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: var(--z-carril);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 208px;
+  padding: 6px;
+  border-radius: 14px;
+  background: var(--sup-2);
+  border: 1px solid var(--linea-fuerte);
+  box-shadow: 0 10px 24px rgb(0 0 0 / .5);
+}
+
+.vest-accion {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--linea);
+  border-radius: 10px;
+  background: var(--sup-3);
+  color: var(--tx-1);
+  font-family: var(--font-family);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.vest-accion:hover { border-color: var(--linea-fuerte); }
+.vest-accion.primaria {
+  min-height: 48px;
+  background: var(--laton-a20);
+  border-color: var(--laton-400);
+  color: var(--laton-300);
+  font-weight: 800;
+}
+
+.vest-carril-vacio {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-height: 60px;
+  padding: 12px;
+  border: 1px dashed var(--linea);
+  border-radius: 14px;
+  color: var(--tx-3);
+  font-size: 0.8rem;
+}
+.vest-carril-pista { color: var(--tx-2); }
+
+.vest-carril-accion {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  align-self: flex-start;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--linea);
+  border-radius: 10px;
+  background: var(--sup-2);
+  color: var(--tx-2);
+  font-family: var(--font-family);
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.vest-carril-accion:hover { border-color: var(--linea-fuerte); color: var(--tx-1); }
+
+/* ------------------------------------------------------ banda 3 · pulso */
+
+.vest-pulso {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--sup-1);
+  border: 1px solid var(--linea);
+}
+
+.vest-cifra {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.vest-cifra-valor {
+  font-size: 1.5rem;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--tx-1);
+  font-variant-numeric: tabular-nums;
+}
+/* El punto sólo late cuando hay conexión de verdad. Antes seguía pulsando
+   mientras el marco anunciaba «conexión perdida» tres píxeles más arriba. */
+.vest-cifra-valor.viva::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--verde-400);
+  vertical-align: middle;
+  animation: vest-latido 2s ease-in-out infinite;
+}
+
+.vest-cifra-label {
+  font-size: 0.68rem;
+  color: var(--tx-3);
+}
+
+.vest-pulso-nota {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--tx-3);
+}
+
+@keyframes vest-latido {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+/* -------------------------------------------------- banda 4 · catálogo */
+
+.vest-catalogo {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.vest-rejilla {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.vest-tarjeta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-height: 132px;
+  padding: 14px;
+  border: 1px solid var(--linea);
+  border-radius: 16px;
+  background: var(--sup-1);
+  color: var(--tx-1);
+  font-family: var(--font-family);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+.vest-tarjeta:hover {
+  background: var(--sup-2);
+  border-color: var(--linea-fuerte);
+}
+
+.vest-tarjeta-icono { font-size: 32px; line-height: 1; }
+
+.vest-tarjeta-titulo {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--tx-1);
+}
+
+.vest-tarjeta-caps {
+  font-size: 0.74rem;
+  color: var(--tx-3);
+}
+
+/* El «Jugar» interior es un <span>, no un <button>: como botón sin onClick
+   propio hacía que las tres tarjetas se anunciaran como tres botones idénticos
+   llamados «Jugar». El nombre accesible de la tarjeta entera es «Jugar a X». */
+.vest-tarjeta-jugar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: auto;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--verde-a12);
+  border: 1px solid var(--verde-a40);
+  color: var(--verde-300);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+.vest-tarjeta:hover .vest-tarjeta-jugar {
+  background: var(--verde-a24);
+  border-color: var(--verde-400);
+}
+
+.vest-proximamente {
+  margin: 0;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  font-size: 0.74rem;
+  color: var(--tx-3);
+}
+
+/* ------------------------------------------------------------ 480 / 768 */
+
+@media (min-width: 480px) {
+  .vest-cuerpo { padding: 16px; gap: 16px; }
+  .vest-rejilla { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (min-width: 768px) {
+  .vest-barra { padding: 0 20px; }
+  .vest-rejilla { grid-template-columns: repeat(3, 1fr); }
+  .vest-tarjeta { min-height: 176px; }
+}
+
+@media (min-width: 1024px) {
+  .vest-barra { height: 64px; padding: 0 24px; }
+  .vest-cuerpo { padding: 24px; }
+  .vest-carril-lista { min-height: 104px; }
+  .vest-persona-btn { width: 88px; min-height: 96px; }
+  .vest-persona-avatar { width: 56px; height: 56px; }
+  .vest-pulso { gap: 8px 40px; padding: 16px 20px; }
+}
+
+/* ------------------------------------------------------------ movimiento */
+
+/* El único movimiento nuevo del vestíbulo es el latido del punto de conexión, y
+   va con su bloque: `.pulse-dot`, al que sustituye, animaba `pulse-glow 2s
+   infinite` sin ninguno. */
+@media (prefers-reduced-motion: reduce) {
+  .vest-cifra-valor.viva::before { animation: none; }
+  .vest-tarjeta,
+  .vest-nav-btn,
+  .vest-persona-btn { transition: none; }
+}

@@ -3,15 +3,22 @@ import { Trophy, X, Zap, CalendarDays, Globe2 } from 'lucide-react';
 import { socket } from '../socket';
 import { useT } from '../i18n/LanguageContext';
 import { getDivision } from '../stats';
+import useModalA11y from '../hooks/useModalA11y';
+import { useCapacidades, hayPersistencia, ESPERA_MAXIMA_MS } from '../social/useSocialStore';
 
 export default function LeaderboardModal({ onClose }) {
   const { t } = useT();
   const [scope, setScope] = useState('global');
   const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(true);
+  // 'cargando' | 'listo' | 'sinDatos'; el tercero es el vigilante vencido.
+  const [estado, setEstado] = useState('cargando');
+  const [intento, setIntento] = useState(0);
+  const conProgreso = hayPersistencia(useCapacidades());
+
+  const { propsPanel, propsTitulo } = useModalA11y(onClose);
 
   useEffect(() => {
-    setLoading(true);
+    setEstado('cargando');
     socket.emit('get_leaderboard', { scope });
 
     function onData(data) {
@@ -19,47 +26,78 @@ export default function LeaderboardModal({ onClose }) {
       const list = Array.isArray(data) ? data : (data && Array.isArray(data.rows) ? data.rows : []);
       if (!data || Array.isArray(data) || data.scope === scope) {
         setRows(list);
-        setLoading(false);
+        setEstado('listo');
       }
     }
     socket.on('leaderboard_data', onData);
-    return () => socket.off('leaderboard_data', onData);
-  }, [scope]);
+    // El MISMO vigilante de 6 s que el resto de pantallas sociales: sin él, un
+    // servidor que acepta la petición y no contesta deja el «Cargando…» girando
+    // para siempre, porque no hay evento de error que lo apague.
+    const vigilante = setTimeout(() => setEstado((e) => (e === 'cargando' ? 'sinDatos' : e)), ESPERA_MAXIMA_MS);
+    return () => {
+      clearTimeout(vigilante);
+      socket.off('leaderboard_data', onData);
+    };
+  }, [scope, intento]);
 
   const isWeekly = scope === 'weekly';
 
   return (
-    <div className="modal-overlay animate-fade-in" style={{ zIndex: 1200 }} onClick={onClose}>
-      <div className="modal-card glass-panel animate-scale-up" style={{ maxWidth: '540px', width: '94%' }} onClick={e => e.stopPropagation()}>
-        <button className="modal-close-btn" onClick={onClose}><X size={18} /></button>
+    <div className="modal-overlay animate-fade-in" onClick={onClose}>
+      <div
+        className="modal-card glass-panel animate-scale-up modal-a11y ov-ranking"
+        {...propsPanel}
+        onClick={e => e.stopPropagation()}
+      >
+        <button type="button" className="modal-close-btn" onClick={onClose} aria-label={t('common.close')}>
+          <X size={18} aria-hidden="true" />
+        </button>
 
         <div className="modal-header-with-icon" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div className="modal-icon-circle winner" style={{ width: '44px', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Trophy size={24} color="#f59e0b" />
+            <Trophy size={24} color="#f59e0b" aria-hidden="true" />
           </div>
           <div>
-            <h2 className="modal-title" style={{ fontSize: '1.3rem', margin: 0 }}>{t('lb.title')}</h2>
+            <h2 className="modal-title" style={{ fontSize: '1.3rem', margin: 0 }} {...propsTitulo}>{t('lb.title')}</h2>
             <span style={{ fontSize: '0.8rem', color: '#9ca3af' }}>
               {isWeekly ? t('lb.subWeekly') : t('lb.subGlobal')}
             </span>
           </div>
         </div>
 
+        {/* La misma franja y el mismo dato que el perfil, la tienda y la agenda. */}
+        {!conProgreso && <p className="ov-degradado">{t('degradado.sinRanking')}</p>}
+
         {/* Pestañas Global / Semanal */}
         <div className="chat-tabs" style={{ marginTop: '14px' }}>
-          <button className={`chat-tab-btn ${!isWeekly ? 'active' : ''}`} onClick={() => setScope('global')}>
-            <Globe2 size={13} /> {t('lb.global')}
+          <button type="button" className={`chat-tab-btn ${!isWeekly ? 'active' : ''}`} aria-pressed={!isWeekly} onClick={() => setScope('global')}>
+            <Globe2 size={13} aria-hidden="true" /> {t('lb.global')}
           </button>
-          <button className={`chat-tab-btn ${isWeekly ? 'active' : ''}`} onClick={() => setScope('weekly')}>
-            <CalendarDays size={13} /> {t('lb.weekly')}
+          <button type="button" className={`chat-tab-btn ${isWeekly ? 'active' : ''}`} aria-pressed={isWeekly} onClick={() => setScope('weekly')}>
+            <CalendarDays size={13} aria-hidden="true" /> {t('lb.weekly')}
           </button>
         </div>
 
-        <div style={{ marginTop: '14px', maxHeight: '380px', overflowY: 'auto' }}>
-          {loading ? (
+        <div className="ov-ranking-cuerpo">
+          {estado === 'cargando' ? (
             <div style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>{t('lb.loading')}</div>
+          ) : estado === 'sinDatos' ? (
+            <div className="ov-vacio">
+              <p>{t('degradado.noCargado')}</p>
+              <button type="button" className="btn-premium btn-secondary" onClick={() => setIntento((n) => n + 1)}>
+                {t('degradado.reintentar')}
+              </button>
+            </div>
           ) : rows.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '24px', color: '#9ca3af' }}>{t('lb.empty')}</div>
+            /* Un vacío con salida: la tabla está vacía porque nadie ha jugado
+               todavía, y la acción siguiente es exactamente jugar. Cerrar el
+               ranking es lo que devuelve al hub, así que ese es el botón. */
+            <div className="ov-vacio">
+              <p>{conProgreso ? t('lb.empty') : t('degradado.sinRanking')}</p>
+              <button type="button" className="btn-premium btn-primary" onClick={onClose}>
+                {t('hub.jugar')}
+              </button>
+            </div>
           ) : (
             <table className="leaderboard-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
               <thead>
@@ -98,7 +136,9 @@ export default function LeaderboardModal({ onClose }) {
                         {player.wins || 0}
                       </td>
                       <td style={{ padding: '10px 8px', textAlign: 'right', fontWeight: 700, color: '#6366f1', whiteSpace: 'nowrap' }}>
-                        <Zap size={11} style={{ verticalAlign: '-1px' }} /> {player.elo || 1200}
+                        {/* Sin ELO no se rellena con 1200: una fila del ranking
+                            con un ELO inventado ordena mal y miente igual. */}
+                        <Zap size={11} style={{ verticalAlign: '-1px' }} aria-hidden="true" /> {player.elo != null ? player.elo : '—'}
                       </td>
                     </tr>
                   );

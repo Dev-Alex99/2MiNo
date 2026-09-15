@@ -2,6 +2,8 @@ import React from 'react';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { act } from '@testing-library/react';
 import useGameActions from './useGameActions';
+import useGameSocket from './useGameSocket';
+import { useGameStore } from '../store/useGameStore';
 import { render, resetStores, setGameStore, setHubStore } from '../test/utils';
 
 const socket = globalThis.__socket;
@@ -18,6 +20,27 @@ function Sonda(props) {
     setIncomingInvite: () => {},
     resetGameStatus: () => {},
     ...props
+  });
+  return null;
+}
+
+/**
+ * Sonda con las DOS capas cableadas como en la app: la que escucha y la que
+ * emite. Hace falta para el viaje completo de la identidad —entrar en una sala
+ * llega por socket, salir es una acción— sin montar `App` entero ni pulsar
+ * botones de una vista ajena.
+ */
+function SondaCompleta() {
+  const invitedCodeRef = React.useRef('');
+  const net = useGameSocket({ invitedCodeRef });
+  acciones = useGameActions({
+    tournament: net.tournament,
+    setTournament: net.setTournament,
+    setShowTournamentEntry: net.setShowTournamentEntry,
+    setSearchingRanked: net.setSearchingRanked,
+    incomingInvite: net.incomingInvite,
+    setIncomingInvite: net.setIncomingInvite,
+    resetGameStatus: net.resetGameStatus
   });
   return null;
 }
@@ -131,6 +154,44 @@ describe('useGameActions', () => {
     act(() => acciones.handleLeaveRoom());
 
     expect(socket.emitidos('leave_room')).toHaveLength(1);
+    expect(sessionStorage.getItem('domino_room_id')).toBeNull();
+    expect(sessionStorage.getItem('domino_player_id')).toBeNull();
+  });
+
+  /**
+   * EL VIAJE COMPLETO DE LAS DOS IDENTIDADES, que es el motivo de este paquete.
+   * Antes, salir de una sala dejaba `playerId` en cadena vacía — y `playerId`
+   * era también la dirección por la que te llamaban, así que el jugador volvía
+   * al hub siendo inllamable justo en la pantalla desde la que más se llama.
+   */
+  it('entrar en una sala y salir deja la cuenta intacta y el asiento vacío', () => {
+    render(<SondaCompleta />);
+    const cuentaAlEmpezar = useGameStore.getState().cuentaId;
+
+    act(() => socket.recibir('room_joined', { roomId: 'ABCD', playerId: 's_1a2b' }));
+    expect(useGameStore.getState().playerId).toBe('s_1a2b');
+    expect(useGameStore.getState().cuentaId).toBe(cuentaAlEmpezar);
+
+    act(() => acciones.handleLeaveRoom());
+
+    const s = useGameStore.getState();
+    expect(s.playerId).toBe('');
+    expect(s.roomId).toBe('');
+    expect(s.cuentaId).toBe(cuentaAlEmpezar);
+  });
+
+  it('salir del torneo también suelta el asiento de su última eliminatoria', () => {
+    setGameStore({ roomId: 'ABCD', playerId: 's_1a2b' });
+    sessionStorage.setItem('domino_room_id', 'ABCD');
+    sessionStorage.setItem('domino_player_id', 's_1a2b');
+    render(<Sonda tournament={{ id: 'T1' }} />);
+
+    act(() => acciones.handleExitTournament());
+
+    const s = useGameStore.getState();
+    expect(s.playerId).toBe('');
+    expect(s.roomId).toBe('');
+    expect(s.cuentaId).toBe('p_cuenta');
     expect(sessionStorage.getItem('domino_room_id')).toBeNull();
     expect(sessionStorage.getItem('domino_player_id')).toBeNull();
   });

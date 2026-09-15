@@ -1,51 +1,40 @@
-import React, { useEffect, useState } from 'react';
-import { Volume2, VolumeX, LogOut, Layers, Timer, Trophy, ShoppingBag } from 'lucide-react';
+import React, { useState } from 'react';
+import { Volume2, VolumeX, LogOut, Layers, Trophy, ShoppingBag } from 'lucide-react';
 import { toggleMute, getMuteState } from '../audio';
-import VoiceChat from './VoiceChat';
+import LineaCapsula from '../voice/LineaCapsula';
 import LanguageSwitcher from './LanguageSwitcher';
 import { useT } from '../i18n/LanguageContext';
 
 /**
  * Barra única de la partida, en móvil y en escritorio.
  *
- * Sustituye a la barra lateral de 320px: con los asientos alrededor del tablero
- * mostrando nombre, fichas, turno y cara, el marcador lateral repetía lo mismo
- * ocupando un tercio de la pantalla.
+ * Sustituye a la barra lateral de 320px: con la cinta de turno mostrando nombre,
+ * fichas, turno y cara, el marcador lateral repetía lo mismo ocupando un tercio
+ * de la pantalla.
  *
- * También se traga el indicador de turno, que antes flotaba sobre el tablero y
- * solapaba con los asientos y los controles de zoom.
+ * Ya NO lleva la señal de turno ni el reloj. La píldora era texto de 0,65rem a
+ * 4,25:1 con `max-width: 105px` en móvil, y el reloj no escalaba urgencia: los
+ * dos se han mudado al chip de la cinta, donde el canto de la persona a la que
+ * le toca ES la cuenta atrás. Aquí quedan las tres cosas que no son del turno:
+ * ronda, marcador y acciones.
+ *
+ * `style` existe para una sola cosa: GameView la monta DESPUÉS del tablero para
+ * que la tabulación entre directa en la mesa, y le devuelve su sitio en pantalla
+ * con `order: -1`. Las dos mitades de esa decisión tienen que leerse juntas, así
+ * que el número vive allí y no aquí.
  */
 export default function GameBar({
   players, playerId, roundNumber, teamsEnabled, teamScores, maxScore, onLeave,
-  currentPlayerId, turnEndsAt, turnSecondsRemaining = 30,
-  onOpenLeaderboard, onOpenStore
+  onOpenLeaderboard, onOpenStore, style
 }) {
   const { t } = useT();
   const [muted, setMuted] = useState(getMuteState());
   const [confirmLeave, setConfirmLeave] = useState(false);
 
-  // Cuenta atrás local: el servidor manda los segundos ya calculados y
-  // turnEndsAt cambia en cada rearme, así que basta resincronizar ahí.
-  const [secondsLeft, setSecondsLeft] = useState(turnSecondsRemaining);
-  useEffect(() => {
-    setSecondsLeft(turnSecondsRemaining);
-  }, [turnSecondsRemaining, turnEndsAt, currentPlayerId]);
-  useEffect(() => {
-    if (turnSecondsRemaining == null) return undefined;
-    const id = setInterval(() => {
-      setSecondsLeft(s => (s == null ? s : Math.max(0, s - 1)));
-    }, 1000);
-    return () => clearInterval(id);
-  }, [turnSecondsRemaining, turnEndsAt, currentPlayerId]);
-
   const me = players.find(p => p.id === playerId);
-  const active = players.find(p => p.id === currentPlayerId);
-  const isMyTurn = currentPlayerId === playerId;
-  const showTimer = secondsLeft != null;
-  const urgent = showTimer && secondsLeft <= 10;
 
   return (
-    <div className="game-bar">
+    <div className="game-bar" style={style}>
       <span className="game-bar-round">
         <Layers size={11} />
         R{roundNumber || 1}
@@ -64,32 +53,29 @@ export default function GameBar({
         </span>
       )}
 
-      {/* De quién es el turno. El asiento del jugador ya se ilumina, así que
-          aquí lo importante es el reloj. */}
-      {active && (
-        <span className={`game-bar-turn ${isMyTurn ? 'mine' : ''} ${urgent ? 'urgent' : ''}`}>
-          <span className="turn-pulse-dot" />
-          <span className="game-bar-turn-name">{isMyTurn ? t('game.turn') : active.name}</span>
-          {showTimer && (
-            <span className="game-bar-timer">
-              <Timer size={10} />
-              {secondsLeft}s
-            </span>
-          )}
-        </span>
-      )}
-
       <div className="game-bar-actions">
         <div className="game-bar-lang">
           <LanguageSwitcher compact />
         </div>
-        <VoiceChat playerId={playerId} players={players} />
+        {/* La voz dentro de la partida, por fin con superficie. Donde estaba
+            `<VoiceChat/>` había un nodo que `perfil-hub.css:2090` escondía con
+            `display:none`: el chat de voz existía en el DOM de la barra y no se
+            veía. Ahora es un chip de 32 px que en reposo dice «Entrar a la voz»
+            y con la línea viva la resume y abre la hoja. No cambia el reparto
+            vertical: su área táctil de 44 la pone un pseudo-elemento. */}
+        <LineaCapsula variante="anclada" />
 
+        {/* Los dos son sólo icono: sin `aria-label` no tienen nombre accesible,
+            porque `title` no basta en todos los lectores y en táctil no se ve
+            nunca. Y los dos textos pasan por t(): estaban en español duro, y el
+            del ranking además nombraba al proveedor («Supabase»), que es
+            fontanería y no le dice nada a quien juega. */}
         {onOpenStore && (
           <button
             onClick={onOpenStore}
             className="mute-btn"
-            title="Tienda de Skins"
+            title={t('bar.tienda')}
+            aria-label={t('bar.tienda')}
             style={{ color: '#fbbf24' }}
           >
             <ShoppingBag size={14} color="#fbbf24" />
@@ -100,7 +86,8 @@ export default function GameBar({
           <button
             onClick={onOpenLeaderboard}
             className="mute-btn"
-            title="Ver Ranking Supabase"
+            title={t('bar.ranking')}
+            aria-label={t('bar.ranking')}
           >
             <Trophy size={14} color="#f59e0b" />
           </button>

@@ -21,11 +21,17 @@ const TABLEROS = {
     icono: '🀁',
     componente: DominoBoard,
     espectador: DominoSpectatorBoard,
+    // Aforo real del juego en el servidor (DominoGame: 2 a 4). La tarjeta del
+    // hub lo anuncia y la sala de espera pinta sus huecos con él; antes cada
+    // pantalla se lo inventaba y la mesa salía siempre de cuatro.
+    jugadores: { min: 2, max: 4 },
     // Capacidades: qué partes del lobby tienen sentido para este juego.
     // Sin esto el lobby ofrecía a TODOS los juegos las opciones del dominó
     // (variante doble 6/9, parejas, poderes, blitz) y los botones de
     // clasificatoria y torneo, que sólo el dominó implementa en el servidor.
     opcionesDeSala: true,
+    parejas: true,
+    poderes: true,
     clasificatoria: true,
     torneos: true
   },
@@ -37,9 +43,12 @@ const TABLEROS = {
     // El propio tablero vale para espectar: sus casillas se deshabilitan solas
     // porque el turno nunca es del espectador.
     espectador: TicTacToeBoard,
+    jugadores: { min: 2, max: 2 },
     // No tiene variantes que configurar, y ni el emparejamiento por ELO ni los
     // torneos saben crear partidas suyas (ambos hacen `new DominoGame`).
     opcionesDeSala: false,
+    parejas: false,
+    poderes: false,
     clasificatoria: false,
     torneos: false
   },
@@ -51,10 +60,13 @@ const TABLEROS = {
     // Vale el mismo tablero: el espectador nunca es el jugador de turno, así
     // que sus cartas salen deshabilitadas y su mano llega vacía del servidor.
     espectador: UnoBoard,
+    jugadores: { min: 2, max: 4 },
     // El panel de opciones del lobby es del dominó (variante, parejas, poderes),
     // así que no se ofrece: Uno juega a los 200 puntos por defecto. Ni cola por
     // ELO ni torneos, que en el servidor crean partidas de dominó.
     opcionesDeSala: false,
+    parejas: false,
+    poderes: false,
     clasificatoria: false,
     torneos: false
   }
@@ -93,6 +105,14 @@ export function capacidadesDe(gameType) {
   return obtenerJuego(gameType) || POR_DEFECTO;
 }
 
+/**
+ * Los juegos jugables, en orden de registro.
+ *
+ * Existía desde el principio y no la llamaba nadie: el hub mantenía su propia
+ * copia del catálogo en `useHubStore` (cinco entradas, con un `color` que
+ * guardaba clases de Tailwind en un proyecto sin Tailwind). Ahora la consume
+ * `hub/catalogo.js`, que es el único sitio donde se compone la tarjeta.
+ */
 export function listarJuegos() {
   return Object.values(TABLEROS);
 }

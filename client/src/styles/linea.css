@@ -1,0 +1,798 @@
+/* Capa de LA LÍNEA: cápsula, timbre, hoja y medidores de calidad.
+ *
+ * Creada vacía por P3-MARCO y CEDIDA a P6-LINEA, su único dueño (excepción
+ * documentada del contrato §2a).
+ *
+ * Se importa en index.css DESPUÉS de a11y.css, y ésa es la única posición desde
+ * la que sus reglas alcanzan a voz.css y a perfil-hub.css a igual
+ * especificidad. Moverla "donde parece más ordenado" deja el rediseño sin
+ * aplicar: sin error en consola y sin que ningún test cambie de color.
+ *
+ * ─── TRES REGLAS QUE GOBIERNAN TODO ESTE ARCHIVO ───
+ *
+ * 1. TODA SUPERFICIE ES OPACA. `poderes.css:451` aplica
+ *    `* { backdrop-filter: none !important }` bajo `(pointer: coarse)` —que
+ *    incluye los portátiles táctiles—, así que una superficie que dependa del
+ *    desenfoque para separarse del fondo se queda transparente y encima del
+ *    tablero, sin error y sin test que lo cace. Aquí no hay ni un blur.
+ *
+ * 2. NINGUNA SEÑAL DEPENDE SÓLO DEL COLOR. Hablar = anillo verde MÁS medidor.
+ *    Silenciado = icono tachado MÁS color. Calidad = número de barras MÁS
+ *    palabra. Sin ruta = cero barras MÁS el glifo ⚠ MÁS la frase entera.
+ *
+ * 3. LA VOZ NO CUESTA UN PÍXEL DE LA PARTIDA. La pila del dominó
+ *    (--barra-alto 40 + --cinta-alto 56 + mesa + --riel-alto 56 + --mano-alto
+ *    116) no cambia: el chip anclado mide 32 DENTRO de los 40 de `.game-bar` y
+ *    su área táctil de 44 la pone un pseudo-elemento que desborda sin
+ *    desplazar. Todo lo demás es superposición fija.
+ */
+
+/* ══════════════════════════════════════════════════════ APILAMIENTO
+ *
+ * LOS z-index VAN EN CRUDO Y NO CON LOS TOKENS --z-*, y no es un olvido: hoy
+ * `--z-linea` vale 400 y `--z-timbre` 500, mientras `.modal-overlay` vale 1200
+ * (perfil-hub.css:1454) y `.legendary-vortex-overlay` 10000 (lobby.css:614).
+ * Usar los tokens HOY metería la hoja debajo del perfil y el timbre debajo de
+ * un efecto legendario — que es justo el defecto que el spec nombra: «un timbre
+ * no se puede contestar durante un efecto legendario». La escala entera la
+ * normaliza P9; hasta entonces la coherencia se mide contra los valores VIVOS.
+ * Los tres se mueven JUNTOS o se rompe el orden:
+ *
+ *   .linea-pila   1150   sobre el hub, bajo .modal-overlay (1200)
+ *   .linea-velo   1350   sobre .modal-overlay y sobre .ov-sobre-modal (1300)
+ *   .linea-timbre 10100  sobre .legendary-vortex-overlay (10000)
+ *
+ * Y NO se declara aquí ningún token: el :root es de base.css y de nadie más
+ * (CONTRATO §4). Los tres números viven en su regla, con su porqué al lado.
+ */
+
+/* ══════════════════════════════════════════════════════ PIEZAS COMUNES */
+
+.linea-btn {
+  min-height: 44px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 10px;
+  border: 1px solid var(--linea);
+  background: var(--sup-3);
+  color: var(--tx-1);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.linea-btn:hover { border-color: var(--linea-fuerte); }
+
+.linea-btn-primario {
+  background: var(--laton-400);
+  border-color: var(--laton-500);
+  color: #1a1206;
+  font-weight: 800;
+}
+
+.linea-btn-colgar { color: var(--reloj-critico); }
+
+.linea-btn-mini {
+  min-height: 36px;
+  padding: 0 10px;
+  font-size: 0.78rem;
+}
+
+.linea-btn-icono {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: 1px solid var(--linea);
+  background: var(--sup-3);
+  color: var(--tx-2);
+  cursor: pointer;
+}
+.linea-btn-icono.activo { color: var(--laton-300); border-color: var(--laton-400); }
+.linea-btn-icono.linea-colgar { color: var(--reloj-critico); }
+.linea-btn-icono.linea-btn-mini { width: 28px; height: 28px; border-radius: 8px; }
+
+/* PROHIBIDO el atributo `disabled` (CONTRATO §10). Lo que sí hay es
+ * `aria-disabled`, que no pinta nada por sí solo: el aspecto lo pone esto. */
+.linea-hoja [aria-disabled='true'],
+.linea-capsula [aria-disabled='true'] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ── Medidor de calidad de un par: tres barras Y su palabra ── */
+
+.linea-barras {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.linea-barras-grafico {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+}
+.linea-barras-grafico i {
+  display: block;
+  width: 3px;
+  border-radius: 1px;
+  background: var(--sup-3);
+}
+.linea-barras-grafico i:nth-child(1) { height: 5px; }
+.linea-barras-grafico i:nth-child(2) { height: 8px; }
+.linea-barras-grafico i:nth-child(3) { height: 12px; }
+.linea-barras-grafico i.viva { background: var(--verde-400); }
+
+.linea-barras-enlazado_justo .linea-barras-grafico i.viva { background: var(--laton-400); }
+.linea-barras-inestable .linea-barras-grafico i.viva { background: var(--reloj-aviso); }
+.linea-barras-ausente .linea-barras-grafico i.viva { background: var(--laton-400); }
+.linea-barras-probando .linea-barras-grafico i.viva,
+.linea-barras-negociando .linea-barras-grafico i.viva { background: var(--tx-3); }
+
+.linea-barras-alerta {
+  color: var(--reloj-critico);
+  font-size: 0.8rem;
+  line-height: 1;
+}
+
+.linea-barras-palabra {
+  font-size: 0.72rem;
+  color: var(--tx-3);
+  white-space: nowrap;
+}
+.linea-barras-sin_ruta .linea-barras-palabra { color: var(--reloj-critico); }
+
+/* ── Medidor de ENTRADA, 7 segmentos. Es el único elemento del diseño que
+ *    PRUEBA que tu micrófono funciona en lugar de afirmarlo. ── */
+
+.linea-nivel {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex: 1 1 auto;
+  min-width: 70px;
+}
+.linea-nivel i {
+  flex: 1 1 0;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--sup-3);
+}
+.linea-nivel i.viva { background: var(--verde-400); }
+
+/* ══════════════════════════════════════════════════════ CÁPSULA LIBRE
+ *
+ * Un solo contenedor fijo para lo que se apila abajo. El carril replegado y la
+ * cápsula NO pueden solaparse, y con dos elementos fijos independientes se
+ * solapan en cuanto uno crece.
+ */
+
+.linea-pila {
+  position: fixed;
+  left: 8px;
+  right: 8px;
+  bottom: calc(8px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 1150; /* bajo .modal-overlay (1200); ver la nota de apilamiento */
+  pointer-events: none;
+}
+.linea-pila > * { pointer-events: auto; }
+
+/* EL LANZADOR EN REPOSO.
+ *
+ * Es lo que hace que «se pueda iniciar una llamada en todo momento» sea cierto
+ * fuera de la partida: sin él, el hub tenía su carril de gente y el lobby su
+ * modal de amigos, pero el ESPECTADOR y el TORNEO no tenían ninguno de los dos
+ * y desde ahí sólo se podían RECIBIR llamadas.
+ *
+ * `align-self: flex-end` es obligatorio: `.linea-pila` es una columna que en
+ * escritorio mide 380 px de ancho, y sin esto el botón se estiraría a esos 380
+ * en vez de quedarse redondo. */
+.linea-lanzador {
+  position: relative;
+  align-self: flex-end;
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--sup-2);
+  border: 1px solid var(--linea);
+  color: var(--tx-2);
+  cursor: pointer;
+  transition: border-color .18s ease, color .18s ease;
+}
+.linea-lanzador:hover { border-color: var(--linea-fuerte); color: var(--tx-1); }
+
+/* El segundo chip de la barra de la partida: mismo tamaño que su vecino para no
+   hacer crecer `.game-bar`, que es lo que le robaría altura a la mesa. */
+.linea-chip-hoja { color: var(--tx-2); }
+.linea-chip-hoja:hover { color: var(--tx-1); }
+
+.linea-capsula {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--capsula-alto);
+  padding: 0 6px 0 12px;
+  border-radius: 14px;
+  /* OPACO. Barra ancha y no píldora: en un teléfono el pulgar llega mejor a una
+     barra que a un círculo de esquina. */
+  background: var(--sup-2);
+  border: 1px solid var(--linea);
+  color: var(--tx-1);
+}
+
+.linea-capsula-texto {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.linea-capsula-controles {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+/* Colgar, separado del resto: es la única acción de la barra que no se deshace. */
+.linea-capsula-controles .linea-colgar { margin-left: 6px; }
+
+@media (min-width: 1024px) {
+  .linea-pila {
+    left: auto;
+    right: 24px;
+    bottom: 24px;
+    width: 380px;
+  }
+}
+
+/* ══════════════════════════════════════════════════════ CHIP ANCLADO
+ *
+ * Dentro de los 40 px de `.game-bar`. Donde antes había un nodo que
+ * `perfil-hub.css:2090` escondía con `display:none` — la voz existía en el DOM
+ * de la partida y no tenía superficie ninguna.
+ */
+
+.linea-chip {
+  position: relative;
+  height: var(--capsula-chip);
+  min-width: var(--capsula-chip);
+  padding: 0 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border-radius: 8px;
+  background: var(--sup-3);
+  border: 1px solid var(--linea);
+  color: var(--tx-2);
+  cursor: pointer;
+  font-size: 0.72rem;
+}
+/* Área táctil de 44 px SIN desplazar nada: 32 + 6 por lado. El pseudo-elemento
+   desborda la barra y no participa del reparto vertical (`.game-bar` no tiene
+   `overflow`, así que ni se recorta ni empuja). */
+.linea-chip::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+}
+
+/* DENTRO DE LA BARRA DE LA PARTIDA EL CHIP NO PUEDE SER EL ELEMENTO MÁS ALTO.
+ * `.game-bar` no declara altura: la fija su contenido más alto más el padding,
+ * y hoy ese contenido son botones de 30 px (28 bajo 768, layout.css:324 y
+ * responsive.css:172). Un chip de 32 haría crecer la barra unos píxeles, y cada
+ * píxel que gana la barra lo pierde la mesa — que es exactamente lo que la
+ * cuarta regla del spec prohíbe. Se iguala a sus vecinos y conserva sus 44 de
+ * área táctil ensanchando el pseudo-elemento. `--capsula-chip` (32) sigue
+ * siendo la medida del diseño y la que usa el chip fuera de la barra. */
+.game-bar .linea-chip { height: 30px; }
+.game-bar .linea-chip::after { inset: -7px; }
+@media (max-width: 768px) {
+  .game-bar .linea-chip { height: 28px; }
+  .game-bar .linea-chip::after { inset: -8px; }
+}
+.linea-chip:hover { border-color: var(--linea-fuerte); }
+.linea-chip-viva { border-color: var(--verde-400); color: var(--verde-300); }
+.linea-chip-mudo { color: var(--tx-3); border-color: var(--linea-fuerte); }
+
+.linea-chip-n {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+/* Insignia de timbres en espera. Con la regla del reloj (turno propio y ≤10 s)
+   ESTA es toda la señal visible de que alguien está llamando. */
+.linea-chip-insignia {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  border-radius: 8px;
+  background: var(--laton-300);
+  color: #1a1206;
+  font-size: 0.62rem;
+  font-weight: 800;
+  line-height: 16px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* La cápsula de la sala de espera: mismo chip, con aire alrededor. */
+.waiting-room-voz {
+  display: flex;
+  justify-content: flex-start;
+  padding: 4px 0 8px;
+}
+
+/* ══════════════════════════════════════════════════════ EL TIMBRE
+ *
+ * ARRIBA, NO ABAJO, y es una decisión: el borde inferior de la pantalla es donde
+ * viven la mano de fichas y el riel de extremos. Una tarjeta que aparece de
+ * golpe bajo el pulgar durante un turno es una jugada accidental.
+ */
+
+.linea-timbre {
+  position: fixed;
+  top: calc(8px + env(safe-area-inset-top));
+  left: 12px;
+  right: 12px;
+  z-index: 10100; /* sobre .legendary-vortex-overlay (10000): un timbre SE CONTESTA */
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: var(--sup-1);
+  border: 1px solid var(--laton-400);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.5);
+  color: var(--tx-1);
+}
+
+.linea-timbre-cabecera {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.linea-timbre-avatar {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  border: 2px solid;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  animation: linea-anillo 1.4s ease-out infinite;
+}
+
+.linea-timbre-quien {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.linea-timbre-nombre {
+  font-weight: 700;
+  font-size: 0.95rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.linea-timbre-nombre:focus-visible { outline: none; }
+.linea-timbre-donde { font-size: 0.75rem; color: var(--tx-3); }
+
+.linea-timbre-reloj {
+  margin-left: auto;
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  font-size: 1.05rem;
+  color: var(--laton-300);
+}
+
+.linea-timbre-acciones {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.linea-timbre-acciones .linea-btn { min-height: 48px; }
+/* Rechazar A LA IZQUIERDA: la acción destructiva-por-accidente no cae bajo el
+   pulgar en reposo. Los dos con texto real, nunca dos teléfonos de colores. */
+.linea-btn-rechazar { background: var(--sup-3); color: var(--tx-2); }
+.linea-btn-contestar {
+  background: var(--verde-500);
+  border-color: var(--verde-600);
+  color: #04120c;
+  font-weight: 800;
+}
+
+@keyframes linea-anillo {
+  0% { box-shadow: 0 0 0 0 var(--verde-a40); }
+  70% { box-shadow: 0 0 0 12px rgb(16 185 129 / 0); }
+  100% { box-shadow: 0 0 0 0 rgb(16 185 129 / 0); }
+}
+
+@keyframes linea-latido {
+  from { opacity: 0.5; }
+  to { opacity: 1; }
+}
+
+/* Los anillos dejan de escalar y pasan a alternar opacidad. La VIBRACIÓN Y EL
+   SONIDO NO SE REDUCEN: son canales alternativos, no decoración. */
+@media (prefers-reduced-motion: reduce) {
+  .linea-timbre-avatar {
+    animation: linea-latido 1.4s steps(1, end) infinite alternate;
+    box-shadow: none;
+  }
+}
+
+@media (min-width: 1024px) {
+  .linea-timbre {
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    width: 380px;
+  }
+}
+
+/* ══════════════════════════════════════════════════════ LA HOJA
+ *
+ * Móvil: hoja inferior que TAPA el tablero, no lo desplaza. Si participara del
+ * flujo, `.game-board-container` cambiaría de ancho, `elegirPerRow` se
+ * recalcularía a media ronda y la serpiente entera se re-trazaría sola delante
+ * del jugador — justo lo que el SPEC del dominó prohíbe.
+ */
+
+.linea-velo {
+  position: fixed;
+  inset: 0;
+  z-index: 1350; /* sobre .modal-overlay (1200) y .ov-sobre-modal (1300) */
+  background: rgb(0 0 0 / 0.55);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.linea-hoja {
+  position: relative;
+  width: 100%;
+  max-height: min(560px, 78dvh);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px 12px calc(12px + env(safe-area-inset-bottom));
+  border-radius: 16px 16px 0 0;
+  border-top: 1px solid var(--linea);
+  background: var(--sup-1);
+  color: var(--tx-1);
+}
+.linea-hoja:focus-visible { outline: none; }
+
+.linea-hoja-asa {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--linea-fuerte);
+  align-self: center;
+  margin: 2px 0 4px;
+}
+
+.linea-hoja-cabecera {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.linea-hoja-titulo {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.linea-hoja-titulo:focus-visible { outline: none; }
+
+/* TRES BLOQUES, SIEMPRE EN EL MISMO ORDEN Y CON LA MISMA ALTURA MÍNIMA. Esa
+   constancia es la mitad del diseño: el jugador aprende dónde mirar UNA vez. */
+.linea-bloque {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--linea);
+  /* NO ENCOGER. `.linea-hoja` es una columna flex con `overflow-y: auto`, y por
+     omisión sus hijos tienen flex-shrink:1: cuando el contenido pasaba del alto
+     máximo, los bloques se comprimían por debajo de su contenido en vez de
+     dejar que la hoja hiciera scroll. Y como el bloque es `overflow: visible`,
+     lo que no cabía se derramaba ENCIMA del bloque siguiente. Medido en un
+     teléfono de 375: «Only one device of each type was found.» (572-587) se
+     pintaba sobre el título «Voice call» (571-585). El min-height de cada
+     bloque no lo evitaba: es un suelo, no un impedimento para encoger el
+     contenido que sobra por debajo de él. */
+  flex-shrink: 0;
+}
+.linea-bloque-tu { min-height: 104px; }
+.linea-bloque-llamada { min-height: 72px; }
+.linea-bloque-gente { min-height: 88px; }
+
+.linea-bloque-titulo {
+  margin: 0;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--tx-3);
+}
+
+.linea-sub {
+  margin: 4px 0 0;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--tx-3);
+}
+
+.linea-tu-fila {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.linea-aparato {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78rem;
+  color: var(--tx-2);
+}
+.linea-aparato-etiqueta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+.linea-aparato-select {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 36px;
+  border-radius: 8px;
+  border: 1px solid var(--linea);
+  background: var(--sup-2);
+  color: var(--tx-1);
+  padding: 0 8px;
+}
+
+.linea-error {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--reloj-critico);
+  background: var(--sup-2);
+}
+.linea-error-texto { font-size: 0.82rem; color: var(--tx-1); }
+.linea-error-salidas { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.linea-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.linea-lista-apagada { opacity: 0.55; }
+
+.linea-fila {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+}
+.linea-fila-avatar {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  border: 2px solid;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--tx-1);
+}
+.linea-fila-nombre {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.85rem;
+}
+.linea-fila-estado { font-size: 0.72rem; color: var(--tx-3); }
+.linea-fila-micro { color: var(--verde-400); flex: 0 0 auto; }
+/* Hablar: anillo verde MÁS el medidor de la fila. Nunca sólo el color. */
+.linea-fila-habla .linea-fila-avatar { box-shadow: 0 0 0 2px var(--verde-400); }
+
+.linea-sinruta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  /* Borde discontinuo + glifo + frase completa: tres canales para el mismo
+     hecho, porque «sin ruta» es el fallo ESPERADO cuando no hay retransmisión. */
+  border: 1px dashed var(--reloj-critico);
+  background: var(--sup-2);
+  font-size: 0.8rem;
+}
+.linea-sinruta-salidas { display: flex; flex-wrap: wrap; gap: 8px; }
+.linea-pista { font-size: 0.74rem; color: var(--tx-3); }
+
+.linea-mesa-fila {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--laton-400);
+  background: var(--laton-a20);
+}
+.linea-mesa-texto { font-size: 0.8rem; }
+.linea-mesa-acciones { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.linea-llamada-acciones { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.linea-cronica {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.linea-cronica li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.76rem;
+  color: var(--tx-2);
+}
+.linea-cronica li span { flex: 1 1 auto; min-width: 0; }
+
+.linea-plegable {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  background: none;
+  border: 0;
+  color: var(--tx-3);
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.linea-vacio { margin: 0; font-size: 0.8rem; color: var(--tx-3); }
+.linea-nota { margin: 0; font-size: 0.8rem; color: var(--laton-300); }
+.linea-codigo { margin: 4px 0 0; font-size: 0.78rem; color: var(--tx-3); }
+
+/* LA LÍNEA DE LA VERDAD, permanente y no sólo en el fallo. */
+.linea-pie {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--linea);
+  min-height: 28px;
+}
+.linea-verdad { font-size: 0.74rem; color: var(--tx-3); }
+.linea-fx {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  color: var(--tx-3);
+}
+
+@media (min-width: 1024px) {
+  /* Escritorio: popover anclado sobre la cápsula, `position: fixed` SIEMPRE.
+     `.unified-voice-settings-popover` y `.voice-invite-modal` usaban `absolute`
+     contra un ancestro que sólo tenía `position` en la variante flotante, así
+     que dentro de la barra de la partida aparecían donde no toca. */
+  .linea-velo {
+    align-items: flex-end;
+    justify-content: flex-end;
+    padding: 0 24px 88px;
+    background: rgb(0 0 0 / 0.35);
+  }
+  .linea-hoja {
+    width: 340px;
+    max-height: 440px;
+    border-radius: 14px;
+    border: 1px solid var(--linea);
+  }
+}
+
+/* Horizontal en un teléfono (812×375): con menos de 420 px de alto una hoja
+   inferior no deja ver nada. Pasa a panel lateral derecho a altura completa.
+   Es un parche honesto, igual que el del tablero, y se declara como tal. */
+@media (max-height: 420px) {
+  .linea-velo {
+    align-items: stretch;
+    justify-content: flex-end;
+    padding: 0;
+  }
+  .linea-hoja {
+    width: 320px;
+    max-height: 100dvh;
+    border-radius: 0;
+    border-left: 1px solid var(--linea);
+  }
+}
+
+/* ══════════════════════════════════════════════════════ LA CINTA DE TURNO
+ *
+ * El medidor de tres barras que sustituye al glifo del micro cuando alguien
+ * habla. Va aquí y no en cinta.css porque cinta.css no es de este paquete
+ * (contrato §3: nadie toca las hojas grandes antes de P9) y linea.css se
+ * importa DESPUÉS, así que alcanza a igual especificidad.
+ */
+.cinta-cara .linea-barras-mesa {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 11px;
+  gap: 1.5px;
+  padding: 2px;
+  border-radius: 4px;
+  background: var(--verde-300);
+}
+.cinta-cara .linea-barras-mesa i { width: 2px; background: var(--sup-0); }
+.cinta-cara .linea-barras-mesa i:nth-child(1) { height: 3px; }
+.cinta-cara .linea-barras-mesa i:nth-child(2) { height: 5px; }
+.cinta-cara .linea-barras-mesa i:nth-child(3) { height: 7px; }
+
+/* El aviso de la línea dentro de la crónica de la mesa: se distingue de un
+   mensaje de jugador por su canto, no por el color del texto. */
+.floating-toast-linea { border-left: 3px solid var(--verde-400); }
+
+/* ══════════════════════════════════════════════════════ LA SALA DE ESPERA
+ *
+ * Los dos botones destructivos de la lista de jugadores —quitar bot y
+ * expulsar— medían 26×26 (sala.css:252) y estaban pegados al de cambiar de
+ * sitio. Ahora piden confirmación en su sitio, y de paso suben a 40: la regla
+ * de 44 no llega aquí sin romper la fila, pero 26 es la mitad del mínimo y era
+ * el objetivo más pequeño de todo el producto.
+ *
+ * Va en linea.css y no en sala.css porque sala.css es de P9 y nadie toca las
+ * hojas grandes antes de la poda (CONTRATO §3); esta capa se importa después,
+ * así que alcanza a igual especificidad.
+ */
+.player-row .bot-remove-btn {
+  width: 40px;
+  height: 40px;
+}

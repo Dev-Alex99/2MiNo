@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { socket } from '../../socket';
-import UnifiedVoiceWidget from '../../components/UnifiedVoiceWidget';
 import { LogOut, Timer, RotateCcw, Bot as BotIcon, Layers, RefreshCw } from 'lucide-react';
 import { playGameSound } from '../../audio';
 import { useT } from '../../i18n/LanguageContext';
@@ -132,9 +131,8 @@ export default function UnoBoard({ gameState, playerId, onLeave }) {
           <span className="uno-target">{t('uno.target', { n: maxScore })}</span>
         </div>
 
-        <div className="uno-voice-slot">
-          <UnifiedVoiceWidget variant="embedded" />
-        </div>
+        {/* Sin widget de voz duplicado: la superficie de la voz dentro de la
+            partida es la cápsula anclada de `GameBar`, y es única. */}
 
         <button
           onClick={onLeave}

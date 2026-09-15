@@ -1,5 +1,5 @@
 import React from 'react';
-import { Users, Bot, Zap, Layers, RefreshCw, Globe, Trophy } from 'lucide-react';
+import { Users, Bot, Zap, Layers, RefreshCw, Globe, Trophy, Plus, WifiOff } from 'lucide-react';
 import { useT } from '../i18n/LanguageContext';
 
 /**
@@ -7,22 +7,45 @@ import { useT } from '../i18n/LanguageContext';
  * reemite cada vez que alguien entra, sale o arranca una partida), así que no
  * hace falta sondear ni un botón de refrescar.
  */
-export default function RoomList({ rooms, onJoin, loading }) {
+export default function RoomList({ rooms, onJoin, loading, onCrear, sinConexion }) {
   const { t } = useT();
+
+  // «No hay salas abiertas» y «no lo sabemos» no son lo mismo, y hasta ahora
+  // se decían igual: sin socket la lista se queda vacía (o congelada en la
+  // última que llegó) y el componente afirmaba que no había ninguna. Va
+  // ANTES que `loading`, que sin conexión tampoco es verdad: no se está
+  // buscando nada.
+  if (sinConexion) {
+    return (
+      <div className="room-list-empty">
+        <WifiOff size={13} aria-hidden="true" />
+        {t('net.lost')}
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="room-list-empty">
-        <RefreshCw size={13} className="voice-spin" />
+        <RefreshCw size={13} className="voice-spin" aria-hidden="true" />
         {t('rooms.searching')}
       </div>
     );
   }
 
+  // El vacío lleva su salida. El texto ya sugería «crea una y aparecerás aquí»
+  // y no había ningún botón para hacerlo sin bajar por el formulario entero.
   if (rooms.length === 0) {
     return (
       <div className="room-list-empty">
-        <Globe size={13} />
+        <Globe size={13} aria-hidden="true" />
         {t('rooms.empty')}
+        {onCrear && (
+          <button type="button" className="room-list-salida" onClick={() => onCrear()}>
+            <Plus size={13} aria-hidden="true" />
+            {t('lobby.createRoom')}
+          </button>
+        )}
       </div>
     );
   }

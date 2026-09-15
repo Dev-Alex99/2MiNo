@@ -1,0 +1,228 @@
+/* Mesa: lienzo del tablero, plano escalado, controles flotantes y la cámara
+   que sigue la jugada.
+   Se importa después de partida.css, responsive.css y poderes.css, así que a
+   igual especificidad gana: los overrides del tablero viven aquí y no allí. */
+
+/* ─── Presupuesto de la mesa por breakpoint ───
+   Los valores base (móvil: 0.70 y 12/8) están en el :root de base.css. Aquí
+   sólo se redefinen los tres tokens que cambian de tamaño de pantalla. El JS
+   los lee con getComputedStyle sobre el CONTENEDOR, así que hereda el valor del
+   breakpoint vigente sin que nadie tenga que sincronizar nada. */
+@media (min-width: 768px) and (max-width: 1024px) {
+  :root {
+    --mesa-esc-min: 0.80;
+    --mesa-pad-x: 16px;
+    --mesa-pad-y: 12px;
+  }
+}
+
+@media (min-width: 1025px) {
+  :root {
+    --mesa-esc-min: 0.85;
+    --mesa-pad-x: 24px;
+    --mesa-pad-y: 16px;
+  }
+}
+
+/* Móvil horizontal. La regla del diseño es "alto de mesa < 260 px", que sólo
+   conoce el JS al medir; aquí se aproxima por el alto del viewport, que es de
+   donde sale ese alto: con la pila de horizontal (barra 36 + cinta 40 + riel 44
+   + mano 75 = 195) la mesa baja de 260 px por debajo de unos 455 px de alto.
+   Va la última para ganar a los dos bloques de arriba a igual especificidad. */
+@media (orientation: landscape) and (max-height: 460px) {
+  :root {
+    --mesa-esc-min: 0.50;
+    --mesa-pad-x: 12px;
+    --mesa-pad-y: 8px;
+  }
+}
+
+/* ─── El contenedor es un scroll nativo, no un lienzo con paneo ───
+   Con esto vuelven gratis la inercia, las barras, el teclado y el pinch-zoom
+   del navegador, que `touch-action: none` mataba justo encima del tablero. */
+.game-board-container {
+  overflow-x: hidden;
+  overflow-y: auto;
+  /* Que el rebote del final de la mesa no arrastre la página de debajo. */
+  overscroll-behavior: contain;
+  scroll-behavior: smooth;
+  display: grid;
+  place-content: center;
+  /* `safe` centra cuando cabe y alinea al inicio cuando no: sin él la primera
+     ficha de una cadena más alta que la mesa queda inalcanzable. La línea de
+     arriba es el respaldo para quien no entienda la palabra clave. */
+  place-content: safe center;
+}
+
+.mesa-lienzo {
+  position: relative;
+}
+
+.mesa-plano {
+  position: relative;
+  transform-origin: 0 0;
+  will-change: transform;
+  transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.board-tile-wrap {
+  position: absolute;
+  /* left/top marcan el CENTRO de la ficha; el translate lo convierte en la
+     esquina. Lo asume también @keyframes double-shake (layout.css). */
+  transform: translate(-50%, -50%);
+}
+
+/* La rejilla de puntos del tablero recupera su separación: responsive.css:117
+   pone `gap: 1px` a TODAS las .pip-grid y partida.css sólo redefine su altura,
+   así que por debajo de 1024 px los pips del tablero se juntaban sin querer. */
+.board-tile-wrap .pip-grid {
+  gap: 2px;
+}
+
+/* ─── Última ficha jugada: anillo con el color de quien la jugó ───
+   El halo verde era el mismo para los cuatro jugadores, así que decía "esta es
+   la última" pero no "la puso Ana". Y su ::after con z-index:-1 caía en la capa
+   negativa del lienzo entero: se pintaba DEBAJO de las fichas vecinas. */
+.board-tile-wrap.last-played {
+  z-index: 5;
+  isolation: isolate;
+}
+
+.board-tile-wrap.last-played .domino-tile {
+  box-shadow:
+    0 0 0 3px var(--color-jugador, var(--verde-500)),
+    var(--ficha-sombra);
+}
+
+.board-tile-wrap.last-played::after {
+  box-shadow: 0 0 18px 2px var(--color-jugador, var(--verde-500));
+  /* Sin latido: el resplandor es decoración y estaba animándose sin parar
+     durante toda la partida (la última ficha siempre lleva la clase). */
+  animation: none;
+  opacity: 0.55;
+}
+
+/* ─── Controles flotantes ───
+   Tres: ajustar vista, bitácora y cuadro de torneo. Sin blur, porque
+   poderes.css lo desactiva con !important en cualquier pantalla táctil. */
+.mesa-controles {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  z-index: 20;
+  display: flex;
+  gap: 6px;
+}
+
+.mesa-controles button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 40px;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--linea);
+  border-radius: 12px;
+  background: var(--sup-1);
+  color: var(--tx-2);
+  font-family: inherit;
+  font-size: 0.7rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+}
+
+.mesa-controles button:hover {
+  background: var(--sup-2);
+  border-color: var(--linea-fuerte);
+  color: var(--tx-1);
+}
+
+/* En pantallas estrechas el rótulo se oculta a la vista pero NO al lector: si
+   se quitara del DOM, estos botones se anunciarían sólo por su icono. */
+@media (max-width: 640px) {
+  .mesa-controles button {
+    padding: 8px;
+  }
+  .mesa-controles button > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+/* ─── Chip de "seguir la jugada" ───
+   Aparece cuando el usuario desplaza a mano y la cámara se aparta. Es la salida
+   VISIBLE que antes no existía: manualView se encendía con 1 px de temblor y el
+   único modo de volver era un botón sin rótulo en móvil. */
+.mesa-seguir {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 21;
+  min-height: 40px;
+  padding: 8px 16px;
+  border: 1px solid var(--laton-400);
+  border-radius: 999px;
+  background: var(--sup-1);
+  color: var(--laton-300);
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  animation: mesa-seguir-entra 180ms ease-out;
+}
+
+.mesa-seguir:hover {
+  background: var(--laton-a20);
+}
+
+@keyframes mesa-seguir-entra {
+  from { opacity: 0; transform: translateX(-50%) translateY(6px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* ─── Mesa vacía ─── */
+.mesa-vacia {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  max-width: 320px;
+  padding: 24px 32px;
+  border: 2px dashed var(--linea);
+  border-radius: 20px;
+  color: var(--tx-3);
+  text-align: center;
+}
+
+.mesa-vacia strong {
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--tx-2);
+}
+
+.mesa-vacia span {
+  font-size: 0.7rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-board-container {
+    scroll-behavior: auto;
+  }
+  .mesa-plano {
+    transition: none;
+  }
+  .mesa-seguir {
+    animation: none;
+  }
+}

@@ -1,14 +1,20 @@
 /**
  * Detección de actividad de voz (VAD).
  *
- * `PlayerSeats` y `VideoGrid` llevaban desde siempre pintando un indicador de
- * "está hablando" a partir de `voice.speaking`, pero ese objeto nunca se
+ * `VideoGrid` y la cinta de turno llevaban desde siempre pintando un indicador
+ * de "está hablando" a partir de `voice.speaking`, pero ese objeto nunca se
  * rellenaba: el cliente sólo emitía su estado al pulsar silenciar, nadie
  * escuchaba la respuesta y el indicador jamás se encendía.
  *
  * Aquí vive la parte decidible sin navegador —convertir muestras de audio en
- * "habla / no habla"— para poder probarla. El acceso al micrófono y el envío por
- * socket quedan en `useVoiceChat`.
+ * "habla / no habla"— para poder probarla. El acceso al micrófono, el bucle de
+ * muestreo y el envío por socket están en `mediosLocales.js` (antes en
+ * `useVoiceChat`, que ya no existe).
+ *
+ * `rmsDe` lo usa además el MEDIDOR DE NIVEL: el mismo número que decide "habla /
+ * no habla" es el que alimenta los siete segmentos y su equivalente hablado. Es
+ * deliberado — dos medidas distintas del mismo micrófono acabarían discrepando
+ * delante del jugador.
  */
 
 // Entrar a "hablando" exige más energía que mantenerse: sin esa histéresis, una

@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Play, Pause, SkipBack, SkipForward, Rewind, Trophy, Gauge } from 'lucide-react';
 import { socket } from '../socket';
 import { useT } from '../i18n/LanguageContext';
+import useModalA11y from '../hooks/useModalA11y';
 import DominoTile from './DominoTile';
 
 // Reconstruye el estado del tablero después de cada entrada del registro.
@@ -43,6 +45,7 @@ export default function ReplayModal({ matchId, onClose }) {
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
   const boardRef = useRef(null);
+  const { propsPanel, propsTitulo } = useModalA11y(onClose);
 
   useEffect(() => {
     setLoading(true);
@@ -101,25 +104,34 @@ export default function ReplayModal({ matchId, onClose }) {
     return `${who}: ${currentMove.detail || ''}`;
   };
 
-  return (
-    <div className="modal-overlay animate-fade-in" style={{ zIndex: 1300 }} onClick={onClose}>
+  /**
+   * SALE POR PORTAL. Se renderizaba dentro del `.modal-overlay` del perfil, así
+   * que un clic en SU fondo burbujeaba hasta el `onClose` del perfil y cerraba
+   * los dos: para salir de una repetición había que perder el perfil entero.
+   * Con el portal tampoco hereda el `overflow: hidden` de la tarjeta del perfil,
+   * que le recortaba el tablero reconstruido.
+   */
+  return createPortal(
+    <div className="modal-overlay ov-sobre-modal animate-fade-in" onClick={onClose}>
       <div
-        className="modal-card glass-panel animate-scale-up"
-        style={{ maxWidth: '680px', width: '95%', maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}
+        className="modal-card glass-panel animate-scale-up modal-a11y ov-repeticion"
+        {...propsPanel}
         onClick={e => e.stopPropagation()}
       >
-        <button className="modal-close-btn" onClick={onClose}><X size={18} /></button>
+        <button type="button" className="modal-close-btn" onClick={onClose} aria-label={t('common.close')}>
+          <X size={18} aria-hidden="true" />
+        </button>
 
         {/* Cabecera */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px' }}>
           <div className="modal-icon-circle winner" style={{ width: '42px', height: '42px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Play size={20} color="#f59e0b" />
+            <Play size={20} color="#f59e0b" aria-hidden="true" />
           </div>
           <div style={{ minWidth: 0 }}>
-            <h2 className="modal-title" style={{ fontSize: '1.15rem', margin: 0 }}>{t('replay.title')}</h2>
+            <h2 className="modal-title" style={{ fontSize: '1.15rem', margin: 0 }} {...propsTitulo}>{t('replay.title')}</h2>
             {replay && (
               <span style={{ fontSize: '0.78rem', color: '#9ca3af', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Trophy size={12} color="#fbbf24" /> {replay.winner_name || '—'}
+                <Trophy size={12} color="#fbbf24" aria-hidden="true" /> {replay.winner_name || '—'}
               </span>
             )}
           </div>
@@ -128,7 +140,15 @@ export default function ReplayModal({ matchId, onClose }) {
         {loading ? (
           <div style={{ textAlign: 'center', padding: '48px 0', color: '#9ca3af' }}>{t('replay.loading')}</div>
         ) : !replay || maxStep === 0 ? (
-          <div style={{ textAlign: 'center', padding: '48px 0', color: '#9ca3af' }}>{t('replay.empty')}</div>
+          /* Un vacío con salida: la única acción posible aquí es volver al
+             historial, y decirlo evita quedarse mirando una frase gris
+             buscando un botón que no existía. */
+          <div className="ov-vacio">
+            <p>{t('replay.empty')}</p>
+            <button type="button" className="btn-premium btn-secondary" onClick={onClose}>
+              {t('common.close')}
+            </button>
+          </div>
         ) : (
           <>
             {/* Tablero reconstruido */}
@@ -173,6 +193,7 @@ export default function ReplayModal({ matchId, onClose }) {
               value={step}
               onChange={e => { setPlaying(false); setStep(Number(e.target.value)); }}
               className="replay-scrubber"
+              aria-label={t('replay.move')}
               style={{ width: '100%', accentColor: '#f59e0b', cursor: 'pointer' }}
             />
             <div style={{ textAlign: 'center', fontSize: '0.72rem', color: '#6b7280', marginTop: '2px' }}>
@@ -181,24 +202,36 @@ export default function ReplayModal({ matchId, onClose }) {
 
             {/* Controles */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginTop: '10px' }}>
-              <button className="btn-premium btn-secondary" style={ctrlStyle} title={t('replay.restart')}
+              {/* Los cinco llevaban sólo `title` o nada: lucide-react no marca
+                  sus SVG como decorativos, así que un botón cuyo único hijo es
+                  un icono se anuncia sin nombre. */}
+              <button type="button" className="btn-premium btn-secondary" style={ctrlStyle}
+                title={t('replay.restart')} aria-label={t('replay.restart')}
                 onClick={() => { setPlaying(false); setStep(0); }}>
-                <Rewind size={16} />
+                <Rewind size={16} aria-hidden="true" />
               </button>
-              <button className="btn-premium btn-secondary" style={ctrlStyle} title={t('replay.prev')}
+              <button type="button" className="btn-premium btn-secondary" style={ctrlStyle}
+                title={t('replay.prev')} aria-label={t('replay.prev')}
                 onClick={() => { setPlaying(false); setStep(s => Math.max(0, s - 1)); }}>
-                <SkipBack size={16} />
+                <SkipBack size={16} aria-hidden="true" />
               </button>
-              <button className="btn-premium btn-primary" style={{ ...ctrlStyle, width: '54px', height: '44px' }} onClick={togglePlay}>
-                {playing ? <Pause size={20} /> : <Play size={20} />}
+              {/* Reproducir/pausar es UN interruptor con nombre fijo y estado
+                  (`aria-pressed`), no dos nombres distintos: no hay clave de
+                  copy para «Pausa» y un botón que se renombra al pulsarlo se
+                  anuncia dos veces seguidas. */}
+              <button type="button" className="btn-premium btn-primary" style={{ ...ctrlStyle, width: '54px', height: '44px' }}
+                aria-label={t('history.watch')} aria-pressed={playing} onClick={togglePlay}>
+                {playing ? <Pause size={20} aria-hidden="true" /> : <Play size={20} aria-hidden="true" />}
               </button>
-              <button className="btn-premium btn-secondary" style={ctrlStyle} title={t('replay.next')}
+              <button type="button" className="btn-premium btn-secondary" style={ctrlStyle}
+                title={t('replay.next')} aria-label={t('replay.next')}
                 onClick={() => { setPlaying(false); setStep(s => Math.min(maxStep, s + 1)); }}>
-                <SkipForward size={16} />
+                <SkipForward size={16} aria-hidden="true" />
               </button>
-              <button className="btn-premium btn-secondary" style={{ ...ctrlStyle, width: '54px', fontSize: '0.8rem', fontWeight: 700 }}
-                title={t('replay.speed')} onClick={() => setSpeed(s => (s === 1 ? 2 : s === 2 ? 4 : 1))}>
-                <Gauge size={14} /> {speed}x
+              <button type="button" className="btn-premium btn-secondary" style={{ ...ctrlStyle, width: '54px', fontSize: '0.8rem', fontWeight: 700 }}
+                title={t('replay.speed')} aria-label={t('replay.speed')}
+                onClick={() => setSpeed(s => (s === 1 ? 2 : s === 2 ? 4 : 1))}>
+                <Gauge size={14} aria-hidden="true" /> {speed}x
               </button>
             </div>
 
@@ -215,7 +248,8 @@ export default function ReplayModal({ matchId, onClose }) {
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

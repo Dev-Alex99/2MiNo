@@ -1,0 +1,390 @@
+/* Cinta de turno: la fila de chips de jugadores, con el reloj como canto del
+   chip activo, que sustituye a los asientos flotantes sobre la mesa.
+   Se importa después de layout.css, voz.css y poderes.css: a igual
+   especificidad gana esta capa. */
+
+/* Alturas por breakpoint. El token vive en base.css y aquí solo se REDEFINE,
+   como hace mesa.css con --mesa-esc-min: quien lo lee es el contenedor, que
+   hereda el valor del breakpoint vigente. */
+@media (min-width: 768px) {
+  :root { --cinta-alto: 60px; }
+}
+@media (min-width: 1025px) {
+  :root { --cinta-alto: 64px; }
+}
+/* Móvil horizontal: la mesa se queda con ~180 px y la cinta tiene que encoger a
+   solo avatar y contador. Se detecta por alto de ventana, no por orientación,
+   porque un móvil alto en horizontal no tiene este problema. */
+@media (max-height: 460px) and (orientation: landscape) {
+  :root { --cinta-alto: 40px; }
+}
+
+/* --- LA BANDA --- */
+
+.cinta {
+  /* Orden visual del spec: la cinta se ve arriba aunque en el DOM vaya después
+     de la mano y el riel, que es lo que uno usa cada turno. */
+  order: 1;
+  flex: 0 0 auto;
+  position: relative;
+  z-index: 2;
+
+  display: flex;
+  align-items: stretch;
+  /* `safe` centra mientras quepa y alinea al inicio cuando no: con `center` a
+     secas el primer chip quedaría fuera de la caja de scroll e inalcanzable.
+     Mismo precedente que .hand-tiles-row. */
+  justify-content: safe center;
+  gap: 6px;
+
+  height: var(--cinta-alto);
+  padding: 6px 8px 2px;
+
+  /* Scroll horizontal solo si no caben. Con cuatro chips de 76 px y sus huecos
+     son 322 de los 351 útiles en un móvil de 375, así que en la práctica no
+     aparece nunca; está por si algún modo futuro sienta a más gente. */
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+
+  background: var(--sup-1);
+  border-bottom: 1px solid var(--linea);
+}
+.cinta::-webkit-scrollbar { height: 0; }
+
+/* Las dos regiones vivas. Se ocultan aquí, y no solo con .sr-only (que declara
+   a11y.css), porque son hijas del flex de la cinta: si la utilidad no estuviera
+   cargada, dos párrafos de texto romperían la fila entera. */
+.cinta-estado,
+.cinta-aviso {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* --- EL CHIP --- */
+
+.cinta-chip {
+  position: relative;
+  flex: 0 0 auto;
+  width: 76px;
+  height: 100%;
+
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px 3px 0;
+
+  border: 1px solid var(--linea);
+  border-radius: 8px;
+  background: var(--sup-2);
+  color: var(--tx-2);
+
+  /* Nada de backdrop-filter: poderes.css apaga el blur con !important en
+     punteros gruesos, así que una señal que dependiera de él no existiría en
+     táctil. El fondo es opaco a propósito. */
+  transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+
+/* Con 76 px al nombre le quedan 31 y se le come la cola a cualquiera de cinco
+   letras: "Chema" pide 36 y "Nando" 33, medido en un teléfono de 375. La banda
+   no estaba llena (338 de los 375), así que el chip se queda esa holgura. Se
+   aplica desde 375 px porque por debajo el ancho ya no da y es preferible un
+   nombre recortado a que la fila arranque con scroll horizontal. */
+@media (min-width: 375px) {
+  .cinta-chip { width: 82px; }
+}
+
+/* Mi chip: el primero y con la identidad marcada. Es el "sitio propio en la
+   mesa" que los asientos no daban, porque solo dibujaban rivales. */
+.cinta-chip-yo {
+  border-color: var(--linea-fuerte);
+  background: var(--sup-3);
+}
+
+/* Chip del turno: se eleva, gana anillo de latón y baja un hilo hasta el borde
+   de la mesa. Es la única decoración del diseño y hace una cosa concreta:
+   conectar a la persona con el tablero cuando hay cuatro chips iguales. */
+.cinta-chip-activo {
+  transform: translateY(-4px);
+  border-color: var(--laton-400);
+  box-shadow: 0 0 0 2px var(--laton-a20), 0 4px 10px rgb(0 0 0 / .45);
+  color: var(--tx-1);
+}
+.cinta-chip-activo::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  width: 1px;
+  /* 4 px de elevación + 2 px del relleno inferior de la banda: el hilo termina
+     justo en el borde superior de la mesa, dentro de la caja de recorte. */
+  height: 6px;
+  background: var(--laton-400);
+}
+
+/* Objetivo de un poder. Borde discontinuo + diana: forma y símbolo, no solo
+   color, porque el mismo estado tiene que leerse en las diez skins. */
+.cinta-chip-objetivo {
+  cursor: pointer;
+  border: 1px dashed var(--verde-400);
+  box-shadow: 0 0 0 2px var(--verde-a24);
+}
+.cinta-objetivo {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  font-size: .6rem;
+  line-height: 1;
+}
+
+/* --- EL RELOJ, QUE ES EL CANTO IZQUIERDO --- */
+
+.cinta-reloj {
+  flex: 0 0 auto;
+  align-self: stretch;
+  width: 3px;
+  overflow: hidden;
+  border-radius: 7px 0 0 7px;
+  background: transparent;
+  transition: width .2s ease;
+}
+/* En chips inactivos el canto es el color de equipo; en individual, nada. */
+.cinta-chip-equipo-0 .cinta-reloj { background: var(--equipo-0); }
+.cinta-chip-equipo-1 .cinta-reloj { background: var(--equipo-1); }
+
+.cinta-reloj-drenaje {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--reloj-ok);
+  transform-origin: top;
+  /* La transición la escribe JS una sola vez por turno; aquí solo se declara el
+     estado de partida por si el elemento se pinta antes del efecto. */
+  transform: scaleY(1);
+}
+
+.cinta-reloj-numeral {
+  position: absolute;
+  top: 2px;
+  right: 3px;
+  font-size: .55rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--laton-300);
+  line-height: 1;
+}
+
+/* Los dos tramos de urgencia. Solo aparecen en MI turno (la clase la pone JS
+   únicamente entonces): el reloj de un rival es un drenaje silencioso. Cambian
+   color Y grosor, dos canales, porque el color solo no basta. */
+.cinta-tramo-aviso .cinta-chip-activo .cinta-reloj,
+.cinta-tramo-critico .cinta-chip-activo .cinta-reloj { width: 5px; }
+
+.cinta-tramo-aviso .cinta-chip-activo .cinta-reloj-drenaje { background: var(--reloj-aviso); }
+.cinta-tramo-aviso .cinta-chip-activo .cinta-reloj-numeral { color: var(--reloj-aviso); }
+
+.cinta-tramo-critico .cinta-chip-activo .cinta-reloj-drenaje { background: var(--reloj-critico); }
+.cinta-tramo-critico .cinta-chip-activo .cinta-reloj-numeral { color: var(--reloj-critico); }
+.cinta-tramo-critico .cinta-chip-activo { border-color: var(--reloj-critico); }
+
+/* --- CARA: AVATAR, VÍDEO E INSIGNIAS --- */
+
+.cinta-cara {
+  position: relative;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* El color de identidad viene de colorDeJugador: hasta ahora .player-avatar
+     no declaraba fondo y su color salía de clases de Tailwind inexistentes, así
+     que todos los avatares eran cuadrados transparentes. */
+  background: var(--cinta-color-jugador, var(--sup-3));
+  color: var(--sup-0);
+}
+.cinta-avatar {
+  font-size: .6rem;
+  font-weight: 800;
+  letter-spacing: .04em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.cinta-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+
+/* El anillo de voz es un borde, no un halo animado: un latido infinito en la
+   cinta competiría con el reloj, que es la única urgencia real de la mesa. */
+.cinta-chip-voz .cinta-cara { box-shadow: inset 0 0 0 2px var(--verde-400); }
+
+.cinta-corona,
+.cinta-escudo,
+.cinta-micro,
+.cinta-habla {
+  position: absolute;
+  color: var(--sup-0);
+  border-radius: 50%;
+  background: rgb(255 255 255 / .82);
+  padding: 1px;
+}
+.cinta-corona { top: 0; left: 0; color: #7c4a03; background: var(--laton-300); }
+.cinta-escudo { bottom: 0; right: 0; background: var(--verde-300); }
+.cinta-micro { bottom: 0; left: 0; background: var(--verde-300); }
+.cinta-habla { top: 0; right: 0; background: var(--laton-300); }
+
+/* --- DATOS: NOMBRE, FICHAS, FALLOS, NIVEL --- */
+
+.cinta-datos {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+}
+
+.cinta-nombre {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  /* 0,68rem es el suelo: por debajo el nombre deja de ser identificable de un
+     vistazo, que es lo único que el chip tiene que resolver. */
+  font-size: .68rem;
+  font-weight: 700;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--tx-1);
+}
+.cinta-glifo-equipo { font-size: .5rem; line-height: 1; }
+.cinta-chip-equipo-0 .cinta-glifo-equipo { color: var(--equipo-0); }
+.cinta-chip-equipo-1 .cinta-glifo-equipo { color: var(--equipo-1); }
+
+/* Fichas restantes: la silueta es la señal primaria y el número la exacta. */
+.cinta-fichas {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  line-height: 1;
+}
+.cinta-fichas i {
+  width: 3px;
+  height: 7px;
+  border-radius: 1px;
+  background: var(--tx-3);
+  flex: 0 0 auto;
+}
+.cinta-cuenta {
+  margin-left: 3px;
+  font-size: .58rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--tx-2);
+}
+.cinta-poderes,
+.cinta-blitz {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  margin-left: 4px;
+  font-size: .55rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--laton-300);
+}
+.cinta-blitz-critico { color: var(--reloj-critico); }
+
+/* Fila de fallos: sobre qué números ha pasado cada uno. Es información pública
+   de derecho que hasta ahora solo tenía el bot; enseñarla es lo que convierte
+   "la IA ganó" en "la IA jugó bien". */
+.cinta-fallos {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  line-height: 1;
+}
+.cinta-fallo,
+.cinta-fallo-mas {
+  font-size: .5rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--tx-3);
+}
+/* Tachado: el número por sí solo no diría si es un fallo o un acierto. */
+.cinta-fallo { text-decoration: line-through; text-decoration-color: var(--reloj-critico); }
+
+/* Medidor de nivel del bot. Nace apagado (MOSTRAR_NIVEL_BOT) y solo se
+   renderiza cuando la escalera de dificultad sea real y esté medida. */
+.cinta-nivel { display: flex; gap: 1px; }
+.cinta-nivel i {
+  width: 4px;
+  height: 3px;
+  border-radius: 1px;
+  background: var(--linea-fuerte);
+}
+.cinta-nivel i.cinta-muesca-viva { background: var(--laton-400); }
+
+/* --- 1 CONTRA 1: LOS DOS CHIPS SE REPARTEN LA BANDA --- */
+
+.cinta[data-chips="2"] .cinta-chip { width: 160px; }
+.cinta[data-chips="1"] .cinta-chip { width: 200px; }
+
+/* --- ESPECTADOR: TODOS LOS JUGADORES, NINGUNO PROPIO --- */
+
+.cinta-espectador .cinta-chip { cursor: default; }
+
+/* --- TABLET Y ESCRITORIO --- */
+
+@media (min-width: 768px) {
+  .cinta-chip { width: 104px; }
+  .cinta[data-chips="2"] .cinta-chip { width: 180px; }
+}
+
+@media (min-width: 1025px) {
+  .cinta { gap: 10px; padding: 6px 12px 2px; }
+  .cinta-chip { width: 120px; gap: 6px; }
+  .cinta[data-chips="2"] .cinta-chip { width: 200px; }
+  .cinta-cara { width: 40px; height: 40px; }
+  .cinta-avatar { font-size: .8rem; }
+  .cinta-nombre { font-size: .78rem; }
+  .cinta-cuenta { font-size: .68rem; }
+  .cinta-reloj-numeral { font-size: .65rem; }
+}
+
+/* --- MÓVIL HORIZONTAL: SOLO AVATAR Y CONTADOR --- */
+
+@media (max-height: 460px) and (orientation: landscape) {
+  .cinta { padding: 4px 8px 2px; gap: 4px; }
+  .cinta-chip { width: 52px; }
+  .cinta[data-chips="2"] .cinta-chip { width: 96px; }
+  .cinta-nombre,
+  .cinta-fallos,
+  .cinta-nivel,
+  .cinta-fichas i { display: none; }
+  .cinta-cuenta { margin-left: 0; }
+}
+
+/* --- MOVIMIENTO REDUCIDO --- */
+
+@media (prefers-reduced-motion: reduce) {
+  .cinta-chip { transition: none; }
+  .cinta-reloj { transition: none; }
+  /* El drenaje del canto NO se apaga: no es decoración, es la única forma de
+     ver cuánto tiempo queda sin leer un número, y su desaparición es justo lo
+     que hay que percibir. Lo que se quita es el rebote de la elevación. */
+}

@@ -11,9 +11,7 @@
   --primary: #059669; /* Esmeralda Clásico */
   --primary-glow: rgba(5, 150, 105, 0.2);
   --secondary: #4f46e5; /* Índigo Pizarra */
-  --secondary-glow: rgba(79, 70, 229, 0.2);
   --accent: #d97706; /* Dorado / Ámbar Cálido */
-  --accent-glow: rgba(217, 119, 6, 0.25);
   --text-main: #f8fafc;
   --text-muted: #94a3b8;
   --glass: rgba(15, 23, 42, 0.82);
@@ -22,6 +20,137 @@
   --font-family: 'Outfit', sans-serif;
   --tile-bg: linear-gradient(135deg, #ffffff 0%, #f7f7ee 100%);
   --tile-pip: #0f172a;
+
+  /* ─── Geometría de la mesa ───
+     Único origen de verdad. El trazado del tablero las lee con getComputedStyle
+     (games/domino/mesaConfig.js) en vez de llevar los mismos números escritos en
+     JS: una medida que vive en dos lenguajes acaba divergiendo. */
+  --ficha-largo: 96px;
+  --ficha-corto: 52px;
+  --ficha-hueco: 8px;
+  --ficha-radio: 9px;
+  --mesa-margen: 8px;
+  /* Estos son los valores de móvil, que es el caso más apretado; mesa.css
+     redefine --mesa-esc-min y --mesa-pad-* por breakpoint dentro de :root. */
+  --mesa-esc-min: 0.70;
+  --mesa-esc-max: 1.35;
+  --mesa-pad-x: 12px;
+  --mesa-pad-y: 8px;
+  /* Alturas de las bandas fijas de la partida: la pila vertical suma 812. */
+  --barra-alto: 40px;
+  --cinta-alto: 56px;
+  --riel-alto: 56px;
+  --mano-alto: 116px;
+  --poderes-alto: 48px;
+
+  /* ─── Verde: escala propia, al lado de --primary ───
+     --primary no se retoca (55 usos en 8 archivos): retokenizarlo dentro del
+     rediseño de la partida repintaría lobby, tienda y hub de paso. */
+  --verde-300: #6ee7b7;
+  --verde-400: #34d399;
+  --verde-500: #10b981;
+  --verde-600: #059669;
+  --verde-a12: rgb(16 185 129 / .12);
+  --verde-a24: rgb(16 185 129 / .24);
+  --verde-a40: rgb(16 185 129 / .40);
+
+  /* ─── Latón ───
+     Sacado del propio objeto: es el perno divisor que ya vive dentro de cada
+     ficha (fichas.css:79). Único material cálido del producto, y por eso queda
+     libre como canal para decir "esto es tuyo / es tu turno". */
+  --laton-300: #ffd76a;
+  --laton-400: #e0a92b;
+  --laton-500: #b8860b;
+  --laton-a20: rgb(224 169 43 / .20);
+
+  /* ─── Reloj ───
+     Verde = jugada legal, latón = tu turno, ámbar-rojo = el reloj. Tres
+     significados en tres colores; hoy los tres son verde y ninguno señala. */
+  --reloj-ok: var(--laton-300);
+  --reloj-aviso: #f59e0b;
+  --reloj-critico: #f87171;
+
+  /* ─── Superficies OPACAS ───
+     Nada de blur: poderes.css:451 lo desactiva con !important en (pointer:
+     coarse), así que ninguna señal puede depender de él. */
+  --sup-0: #05070d;
+  --sup-1: #0b1018;
+  --sup-2: #131a25;
+  --sup-3: #1e2836;
+  --linea: #2a3546;
+  --linea-fuerte: #41506a;
+  --tx-1: #f8fafc;
+  --tx-2: #cbd5e1;
+  --tx-3: #94a3b8;
+
+  /* ─── Identidad de jugador ───
+     Ninguno es verde, ámbar ni rojo: esos tres ya significan estado. */
+  --jugador-1: #22d3ee;
+  --jugador-2: #c4b5fd;
+  --jugador-3: #fda4af;
+  --jugador-4: #e7d8b4;
+  --equipo-0: #10b981;
+  --equipo-1: #f43f5e;
+
+  /* ─── Ficha: derivados neutros ───
+     Claro y oscuro a la vez, para que se lean sobre las 10 skins, incluidas las
+     de fondo casi negro y las de marfil. */
+  --ficha-anillo-int: rgb(0 0 0 / .45);
+  --ficha-anillo-ext: rgb(255 255 255 / .35);
+  --ficha-sombra: 0 4px 10px rgb(0 0 0 / .45);
+
+  /* ─── Pips 6-9 ───
+     Derivados de la tinta de la skin, nunca colores fijos: la tienda manda
+     sobre TODOS los pips. El navegador sin color-mix cae al pip normal. */
+  --pip-6: var(--tile-pip);
+  --pip-7: var(--tile-pip);
+  --pip-8: var(--tile-pip);
+  --pip-9: var(--tile-pip);
+
+  /* ─── Foco ───
+     Dos colores opuestos porque el foco tiene que verse tanto sobre el tapete
+     verde como sobre el marfil de una ficha. */
+  --foco-ext: var(--laton-300);
+  --foco-int: #0b1220;
+
+  /* ─── Geometría del vestíbulo y de la línea ───
+     Ninguna es de color, y ninguna toca la pila de la partida: --barra-alto +
+     --cinta-alto + mesa + --riel-alto + --mano-alto siguen sumando lo mismo.
+     Por eso la cápsula tiene DOS medidas: fuera de la partida flota a 48, y
+     dentro es un chip de 32 que cabe en los 40 de .game-bar sin desplazar nada
+     (el área táctil de 44 la pone un pseudo-elemento que desborda la barra). */
+  --vest-barra: 56px;
+  --carril-alto: 92px;
+  --capsula-alto: 48px;
+  --capsula-chip: 32px;
+
+  /* ─── Escala de apilamiento ───
+     Un solo sistema para lo que hoy son veinte valores sueltos y dos
+     `999999 !important` (perfil-hub.css:2038 y :2057). El caso que la obliga:
+     .legendary-vortex-overlay va a 10000 (lobby.css:548) y el widget de voz a
+     9999, así que hoy un timbre no se puede contestar mientras corre un efecto
+     legendario. De ahí el orden: el timbre gana a todo porque es lo único que
+     caduca solo, y la línea gana a los modales porque colgar no puede quedar
+     detrás de una lista de amigos. */
+  --z-mesa: 1;
+  --z-sobrecapa: 100;
+  --z-carril: 200;
+  --z-modal: 300;
+  --z-efecto: 350;
+  --z-linea: 400;
+  --z-timbre: 500;
+}
+
+/* La ayuda de matiz para distinguir 7/8/9 se conserva, pero como mezcla: 72 %
+   de la tinta de la skin basta para dejar el contraste por encima de 6:1
+   (hoy el valor 6 va a 2,33:1 con un verde fijo inyectado desde JS). */
+@supports (color: color-mix(in srgb, red, blue)) {
+  :root {
+    --pip-6: color-mix(in srgb, var(--tile-pip) 72%, #059669);
+    --pip-7: color-mix(in srgb, var(--tile-pip) 72%, #b45309);
+    --pip-8: color-mix(in srgb, var(--tile-pip) 72%, #3730a3);
+    --pip-9: color-mix(in srgb, var(--tile-pip) 72%, #9f1239);
+  }
 }
 
 * {
@@ -83,11 +212,21 @@ body {
 button, a, input, [role="button"], .domino-tile, .power-card-slot {
   -webkit-tap-highlight-color: transparent;
 }
-/* Foco visible SOLO con teclado (no en clics de ratón). */
-button:focus-visible, a:focus-visible, input:focus-visible,
-[role="button"]:focus-visible, [tabindex]:focus-visible {
-  outline: 2px solid var(--accent, #34d399);
+/* Foco visible SOLO con teclado (no en clics de ratón).
+   Anillo doble: cualquier color único desaparece o sobre el tapete verde o
+   sobre el marfil de la ficha, así que van dos, uno claro y otro oscuro.
+   Se añaden select y textarea, que hasta ahora quedaban fuera de la lista.
+   Va con :is() y no con :where(): con especificidad cero perderían contra los
+   `outline: none` de reposo que declaran .input-premium (componentes.css:72),
+   .device-select (voz.css:273) y .friend-code-input (perfil-hub.css:836), que
+   se importan DESPUÉS de este archivo; el <select> del panel de voz, que es
+   justo uno de los casos que esta regla viene a arreglar, se quedaría sin
+   anillo. :is() iguala todas las ramas a la especificidad que ya tenían
+   [role="button"] y [tabindex] en la regla anterior. */
+:is(button, a, input, select, textarea, [role="button"], [tabindex]):focus-visible {
+  outline: 2px solid var(--foco-ext);
   outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--foco-int);
   border-radius: 8px;
 }
 button:focus:not(:focus-visible) { outline: none; }

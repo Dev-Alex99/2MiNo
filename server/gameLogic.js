@@ -73,6 +73,22 @@ const VARIANTS = {
   9: { handSize: 10, defaultMaxScore: 200 }
 };
 
+// Generador pseudoaleatorio sembrable (mulberry32, sin dependencias). Existe
+// para que una partida se pueda REPETIR: sin semilla, dos versiones de la IA
+// nunca juegan el mismo reparto y comparar su fuerza —o depurar un fallo de
+// CI— es imposible. En producción nadie siembra nada y el motor sigue usando
+// Math.random.
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 class DominoGame extends BaseGame {
   // Acepta tanto (roomId, options) como la firma legada (roomId, maxScore, options)
   constructor(roomId, maxScoreOrOptions = null, rawOptions = {}) {
@@ -93,6 +109,14 @@ class DominoGame extends BaseGame {
       isPublic = true, powerIntensity = 'normal', onePowerPerTurn = false, isBlitzMode = false,
       ranked = false
     } = options;
+
+    // Azar de la partida. Sin `rng` ni `seed` es Math.random, exactamente igual
+    // que antes; con cualquiera de los dos el reparto, el barajado del pozo y
+    // los poderes al azar se vuelven reproducibles. Mismo patrón de inyección
+    // que ya usa choosePower(game, playerId, random = Math.random).
+    this.rng = typeof options.rng === 'function'
+      ? options.rng
+      : (Number.isFinite(options.seed) ? mulberry32(options.seed) : Math.random);
 
     // Pública: aparece en la lista del lobby mientras espera jugadores.
     // Privada: solo se entra con el código.
@@ -180,16 +204,17 @@ class DominoGame extends BaseGame {
 
   // El administrador de la sala: por defecto quien la creó (primer humano).
   // Si se va, lo hereda el siguiente humano presente.
-  addMoveLog(playerName, action, detail, tile = null, side = null) {
+  addMoveLog(playerName, action, detail, tile = null, side = null, ends = null) {
     if (!this.moveLog) this.moveLog = [];
     this.moveLog.push({
-      id: `${Date.now()}_${Math.random()}`,
+      id: `${Date.now()}_${this.rng()}`,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
       player: playerName,
       action,
       detail,
       tile,
-      side // 'left' | 'right' | null — necesario para reconstruir el tablero en las repeticiones
+      side, // 'left' | 'right' | null — necesario para reconstruir el tablero en las repeticiones
+      ends // [izq, der] en los pases que SÍ revelan un fallo; null en el resto
     });
     if (this.moveLog.length > 50) this.moveLog.shift();
   }
@@ -208,7 +233,7 @@ class DominoGame extends BaseGame {
     if (this.status !== 'waiting') return null;
 
     const bot = {
-      id: `bot_${Math.random().toString(36).substring(2, 9)}`,
+      id: `bot_${this.rng().toString(36).substring(2, 9)}`,
       name,
       socketId: null,
       hand: [],
@@ -450,7 +475,7 @@ class DominoGame extends BaseGame {
 
   shuffle(array) {
     for (let i = array.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
+      const j = Math.floor(this.rng() * (i + 1));
       [array[i], array[j]] = [array[j], array[i]];
     }
   }
@@ -565,11 +590,24 @@ class DominoGame extends BaseGame {
     const tile = player.hand[move.tileIndex];
     if (!tile) return null;
 
+    const left = this.getLeftEnd();
+    const right = this.getRightEnd();
+
+    // El Comodín usa OTRA convención de volteo (playTile: por la izquierda solo
+    // gira si tile[0] coincide, por la derecha solo si coincide tile[1]), así
+    // que con una ficha que no encaja en ningún extremo —el caso para el que
+    // existe la carta— la fórmula normal devolvía justo el pip contrario al que
+    // queda expuesto. Y scoreMove construye TODA su valoración sobre este
+    // número: el bot que jugaba su propio Comodín razonaba sobre un tablero
+    // imaginario y se auto-ahogaba.
+    if (this.activeEffects.wildcardActive) {
+      if (move.side === 'left') return tile[0] === left ? tile[1] : tile[0];
+      return tile[1] === right ? tile[0] : tile[1];
+    }
+
     if (move.side === 'left') {
-      const left = this.getLeftEnd();
       return tile[1] === left ? tile[0] : tile[1];
     }
-    const right = this.getRightEnd();
     return tile[0] === right ? tile[1] : tile[0];
   }
 
@@ -637,6 +675,11 @@ class DominoGame extends BaseGame {
       this.lastPlacedTile = tile;
       this.lastPlacedBy = playerId;
       this.passedTurns = 0;
+      // La salida se registra igual que cualquier otra jugada: esta rama corta
+      // se saltaba el historial, así que toda reconstrucción del tablero (las
+      // repeticiones) arrancaba con una ficha de menos y con las orientaciones
+      // posteriores desplazadas.
+      this.addMoveLog(player.name, 'play', `[${tile[0]}|${tile[1]}] (Izq)`, tile, 'left');
       this.checkRoundEnd();
       if (this.status === 'playing') {
         if (this.activeEffects.doubleTurnActive) {
@@ -745,8 +788,6 @@ class DominoGame extends BaseGame {
     }
     if (this.hasValidMove(playerId)) return { success: false, error: 'srv.err.hasMovesNoPass' };
 
-    this.addMoveLog(player.name, 'pass', 'Pasó turno');
-
     // ¿Pasa por tener la mano muerta, o solo porque un poder le cerró el extremo?
     const byEffect = this.passForcedByEffectsOnly(playerId);
 
@@ -755,13 +796,22 @@ class DominoGame extends BaseGame {
     // OJO: si el pase fue por un extremo congelado o una maldición, NO revela
     // nada (puede tener la ficha y no poder soltarla); registrarlo alimentaría
     // a los bots con información falsa.
-    if (this.board.length > 0 && !byEffect) {
+    const revela = this.board.length > 0 && !byEffect;
+    if (revela) {
       const seen = this.playerPassedOn[playerId] || [];
       [this.getLeftEnd(), this.getRightEnd()].forEach(v => {
         if (!seen.includes(v)) seen.push(v);
       });
       this.playerPassedOn[playerId] = seen;
     }
+
+    // Los extremos viajan en la entrada del historial con el MISMO criterio que
+    // playerPassedOn: solo cuando el pase revela algo. Si no, la crónica diría
+    // «no tenía el 3 ni el 5» de alguien a quien solo le congelaron el extremo.
+    this.addMoveLog(
+      player.name, 'pass', 'Pasó turno', null, null,
+      revela ? [this.getLeftEnd(), this.getRightEnd()] : null
+    );
 
     // Un pase provocado por un efecto temporal NO cuenta para declarar tranca:
     // el tablero no está cerrado, solo está bloqueado un instante.
@@ -773,6 +823,16 @@ class DominoGame extends BaseGame {
       this.nextTurn();
     }
     return { success: true };
+  }
+
+  // Olvida lo que sabíamos de los pases de estos jugadores. Un pase solo prueba
+  // que esa MANO no tenía ninguno de los dos extremos; en cuanto una carta le
+  // mete fichas nuevas —o se la cambia entera— el registro deja de ser cierto y
+  // se convierte en información falsa para todo el que lo lea, la mesa y los
+  // bots. Robar del pozo no necesita esto: pasar exige pozo vacío (o robo
+  // desactivado), así que tras un pase la única vía de ganar fichas es un poder.
+  olvidarPases(ids) {
+    ids.forEach(id => { if (id) delete this.playerPassedOn[id]; });
   }
 
   nextTurn() {
@@ -1083,7 +1143,7 @@ class DominoGame extends BaseGame {
           return { success: false, error: 'srv.err.opponentNoPowers' };
         }
         // Robar carta al azar
-        const stolenIdx = Math.floor(Math.random() * targetPlayer.powers.length);
+        const stolenIdx = Math.floor(this.rng() * targetPlayer.powers.length);
         const stolenPower = targetPlayer.powers[stolenIdx];
         
         targetPlayer.powers.splice(stolenIdx, 1);
@@ -1146,7 +1206,7 @@ class DominoGame extends BaseGame {
         if (numPlayers < 2) return { success: false, error: 'srv.err.needTwoPlayers' };
         const passedTiles = this.players.map(p => {
           if (p.hand.length === 0) return null;
-          const idx = Math.floor(Math.random() * p.hand.length);
+          const idx = Math.floor(this.rng() * p.hand.length);
           const tile = p.hand[idx];
           p.hand.splice(idx, 1);
           return tile;
@@ -1207,11 +1267,32 @@ class DominoGame extends BaseGame {
         if (!targetPlayer) return { success: false, error: 'srv.err.selectOpponent' };
         // El maldito solo podrá jugar en un extremo (aleatorio) su próximo turno.
         this.activeEffects.cursedPlayerId = targetPlayer.id;
-        this.activeEffects.cursedSide = Math.random() < 0.5 ? 'left' : 'right';
+        this.activeEffects.cursedSide = this.rng() < 0.5 ? 'left' : 'right';
         break;
 
       default:
         return { success: false, error: 'srv.err.powerNotRecognized' };
+    }
+
+    // Qué manos ha tocado la carta: los pases registrados de esos jugadores ya
+    // no son verdad (ver olvidarPases). La lista NO coincide con MUTATES_HANDS:
+    // Ficha Dinamita solo toca el tablero y Robo del Destino solo mueve cartas
+    // de poder, así que ninguno de los dos invalida ninguna deducción.
+    switch (cardId) {
+      case 'smuggle': case 'draw_penalty': case 'magnetic_pull':
+        this.olvidarPases([targetPlayer && targetPlayer.id]);
+        break;
+      case 'mind_swap': // las manos se intercambian: los fallos quedarían en el jugador equivocado
+        this.olvidarPases([playerId, targetPlayer && targetPlayer.id]);
+        break;
+      case 'trade': case 'boneyard_reset': case 'second_wind':
+        this.olvidarPases([playerId]);
+        break;
+      case 'storm': case 'russian_roulette': // reparten a varios a la vez
+        this.olvidarPases(this.players.map(p => p.id));
+        break;
+      default:
+        break;
     }
 
     // Quitar la carta usada de la mano del jugador
@@ -1271,6 +1352,12 @@ class DominoGame extends BaseGame {
       lastPlacedTile: this.lastPlacedTile,
       lastPlacedBy: this.lastPlacedBy,
       roundNumber: this.roundNumber,
+      // Sobre qué números ha pasado cada jugador. Es información pública por
+      // derecho —en una mesa real todos ven los extremos abiertos cuando
+      // alguien pasa—, pero hasta ahora solo la tenía tabulada el bot: el
+      // humano se la memorizaba o la perdía. Solo lleva pases que revelan algo
+      // (los forzados por un poder no se registran, ver passTurn).
+      playerPassedOn: this.playerPassedOn,
       moveLog: (this.moveLog || []).slice(-40),
       isBlitzMode: this.isBlitzMode,
       blitzTimeRemaining: this.blitzTimeRemaining,
@@ -1308,8 +1395,11 @@ class DominoGame extends BaseGame {
           ready: p.ready,
           score: p.score,
           team: p.team,
-          inVoice: !!p.inVoice,
-          camOn: !!p.camOn,
+          // `inVoice` y `camOn` se han retirado: solo los escribía el camino de
+          // voz «en sala», que ningún cliente usaba, así que eran constantes
+          // false y hacían que el anillo de quién habla y los vídeos remotos no
+          // se encendieran JAMÁS. Quién está en la voz de la mesa viaja ahora
+          // por `table_voice`, aliasado y desacoplado del estado de partida.
           isBot: !!p.isBot,
           difficulty: p.isBot ? p.difficulty : undefined,
           handCount: p.hand.length,
@@ -1339,8 +1429,7 @@ class DominoGame extends BaseGame {
         ready: p.ready,
         score: p.score,
         team: p.team,
-        inVoice: !!p.inVoice,
-        camOn: !!p.camOn,
+        // Ver la nota de getGameStateForPlayer: `inVoice`/`camOn` retirados.
         isBot: !!p.isBot,
         difficulty: p.isBot ? p.difficulty : undefined,
         handCount: p.hand.length,
@@ -1382,13 +1471,21 @@ class DominoGame extends BaseGame {
   // La IA vive en botLogic, pero se invoca DESDE el juego para que el
   // orquestador no dependa de la IA específica de dominó.
   playBotTurn(botId) {
-    // require perezoso: botLogic requiere este módulo (dependencia circular).
-    const { chooseMove, choosePower } = require('./botLogic');
+    // require perezoso: la IA solo entra en el grafo de módulos si hay bots en
+    // la mesa. (Ya no hay ciclo que romper: botLogic dejó de requerir este
+    // módulo cuando el cerebro pasó a consumir la observación pública.)
+    const { chooseMove, choosePower, chooseFreezeEnd } = require('./botLogic');
     const result = { action: 'none', usedPower: false, tile: null };
 
     const powerId = choosePower(this, botId);
     if (powerId) {
-      const used = this.usePowerCard(botId, powerId, null, null);
+      // Congelar Extremo EXIGE un extremo, y hasta ahora se invocaba con null:
+      // usePowerCard lo rechazaba siempre, la carta se quedaba pegada en la
+      // mano del bot para siempre y una de cada cinco tiradas de poder se
+      // perdía en silencio. Qué extremo congelar es una decisión táctica (el
+      // que el rival SÍ podía jugar), así que la toma el cerebro.
+      const targetId = powerId === 'freeze' ? chooseFreezeEnd(this, botId) : null;
+      const used = this.usePowerCard(botId, powerId, targetId, null);
       if (used.success) result.usedPower = true;
     }
 
@@ -1420,6 +1517,8 @@ GameRegistry.register('domino', DominoGame, {
 module.exports = DominoGame;
 // Metadatos exportados para tests y para el cliente/servidor si los necesitan.
 module.exports.POWER_CATALOG = POWER_CATALOG;
+// Sembrador del azar: lo usan las suites que necesitan repetir una partida.
+module.exports.mulberry32 = mulberry32;
 module.exports.INTENSITY_RARITIES = INTENSITY_RARITIES;
 module.exports.RARITY_COPIES = RARITY_COPIES;
 

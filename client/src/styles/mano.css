@@ -1,0 +1,256 @@
+/* Mano: la fila de fichas del jugador y sus tres estados (jugable, no jugable,
+   elegida), cada uno en un canal distinto.
+   Se importa después de fichas.css y de responsive.css, que es de donde vienen
+   las reglas que hoy se pisan entre sí. */
+
+/* ==========================================================================
+   CONTENEDOR Y FILA
+   La mano ya no lleva fila de estado ni botón de robar/pasar (se mudaron al
+   riel), así que todo su alto es fila de fichas. El padding lateral pasa al
+   propio .hand-tiles-row: así el ancho útil de la fila es el ancho de pantalla
+   menos 24px y las 7 fichas de salida (7x44 + 6x6 = 344 de 351) no scrollean.
+   ========================================================================== */
+.player-hand-container {
+  /* Ancla del control de ordenación, que va absoluto para no gastar una fila
+     entera de alto en un control que se toca dos veces por partida. */
+  position: relative;
+  padding: 8px 0 calc(12px + env(safe-area-inset-bottom, 0px));
+  gap: 0;
+}
+
+.hand-tiles-row {
+  gap: 12px;
+  /* El padding superior tiene que cubrir la elevación de la ficha elegida MÁS
+     lo que crece con el scale, o el overflow-y:hidden la decapita; el inferior,
+     los 6px que baja la ficha no jugable. */
+  padding: 26px 24px 10px 24px;
+  min-height: 132px;
+}
+
+.mano-ficha {
+  width: 52px;
+  height: 96px;
+  /* Solo transform/opacity/box-shadow/filter: el `transition: all` heredado de
+     .domino-tile animaba también width y height al cambiar de breakpoint. */
+  transition:
+    transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 0.18s linear,
+    box-shadow 0.18s linear,
+    filter 0.18s linear;
+}
+
+/* ==========================================================================
+   LOS TRES ESTADOS, EN TRES CANALES QUE NO DEPENDEN DE LA SKIN
+   Los anillos se dibujan FUERA de la ficha, sobre el fondo constante de la
+   mano, no sobre el marfil (o el negro) que elige la tienda: por eso los tres
+   estados siguen distinguiéndose en las 10 skins. El estado anterior fiaba
+   todo a `filter: brightness()`, que es multiplicativo sobre un color de
+   usuario y en 7 de las 10 dejaba la ficha apagada a 1,09-1,18:1.
+   box-shadow no se puede acumular: cada estado repite las cuatro sombras
+   interiores de fichas.css o pierde el relieve de la ficha.
+   ========================================================================== */
+
+/* JUGABLE: elevación + anillo doble neutro (uno claro y otro oscuro, para que
+   se lea tanto sobre skin blanca como sobre skin negra) + sombra proyectada. */
+.mano-ficha.es-jugable {
+  transform: translateY(-6px);
+  box-shadow:
+    0 0 0 1.5px var(--ficha-anillo-int),
+    0 0 0 3px var(--ficha-anillo-ext),
+    var(--ficha-sombra),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -3px 3px rgba(0, 0, 0, 0.15),
+    inset 1px 2px 2px rgba(255, 255, 255, 0.8),
+    inset -1px -2px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* NO JUGABLE: canal estructural. Se asienta en la madera, pierde el relieve y
+   la sombra (queda plana, sin despegar del fondo) y baja a media opacidad.
+   6px hacia abajo y ni uno más: la fila es align-items:flex-end con
+   overflow-y:hidden y le cortaría la mitad inferior, que es justo la que se
+   mira para planificar. */
+.mano-ficha.no-jugable {
+  transform: translateY(6px);
+  opacity: 0.5;
+  filter: saturate(0.6);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+/* ELEGIDA: la mayor elevación del juego más el único anillo cálido. El latón
+   significa "esto es tuyo", así que no compite con el verde de "jugada legal"
+   ni con el ámbar del reloj. El hilo oscuro interior lo separa de una ficha
+   clara. */
+.mano-ficha.esta-elegida {
+  transform: translateY(-18px) scale(1.05);
+  border-color: var(--laton-500);
+  box-shadow:
+    0 0 0 1px var(--ficha-anillo-int),
+    0 0 0 4px var(--laton-400),
+    0 14px 26px rgb(0 0 0 / 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -3px 3px rgba(0, 0, 0, 0.15),
+    inset 1px 2px 2px rgba(255, 255, 255, 0.8),
+    inset -1px -2px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* Hover (venía de fichas.css:29-37, que levantaba 18px cualquier ficha de la
+   mano). Ahora solo acusa recibo y nunca contradice al estado: la jugable sube
+   un poco más, la no jugable y la elegida no se mueven. Sigue dentro de
+   @media (hover: hover) para no dejar el "hover pegajoso" al tocar en móvil. */
+@media (hover: hover) {
+  .mano-ficha:not(.es-jugable):not(.no-jugable):not(.esta-elegida):hover {
+    transform: translateY(-4px);
+    z-index: 10;
+  }
+  .mano-ficha.es-jugable:hover {
+    transform: translateY(-10px);
+  }
+}
+
+/* ==========================================================================
+   CONTROL DE ORDENACIÓN
+   Un solo botón de dos estados; su nombre accesible es la acción que hace, no
+   el estado en que está. Va en la esquina, fuera de la fila (que recorta por
+   arriba), y detrás de las fichas en el DOM para no robarle a la mano la
+   primera parada de tabulación.
+   ========================================================================== */
+.mano-orden {
+  position: absolute;
+  top: 0;
+  right: 6px;
+  width: 30px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--sup-2);
+  border: 1px solid var(--linea);
+  border-radius: 8px;
+  color: var(--tx-2);
+  cursor: pointer;
+  z-index: 2;
+  transition: color 0.15s linear, border-color 0.15s linear;
+}
+
+.mano-orden:hover {
+  color: var(--tx-1);
+  border-color: var(--linea-fuerte);
+}
+
+/* ==========================================================================
+   MÓVIL (<=1024px): fichas 44x82, hueco 6
+   7 fichas = 7x44 + 6x6 = 344px de los 351 útiles. La mano de salida no
+   scrollea, que es la condición que hace navegable la fila con flechas.
+   ========================================================================== */
+@media (max-width: 1024px) {
+  .player-hand-container {
+    padding: 5px 0 calc(5px + env(safe-area-inset-bottom, 0px));
+  }
+  .hand-tiles-row {
+    gap: 6px;
+    padding: 18px 12px 6px 12px;
+    min-height: 106px;
+  }
+  .mano-ficha {
+    width: 44px;
+    height: 82px;
+    padding: 6px;
+  }
+  .mano-ficha .pip-grid {
+    height: 30px;
+    gap: 2px;
+  }
+  .mano-ficha .pip {
+    width: 5px;
+    height: 5px;
+  }
+  .mano-ficha .divider {
+    margin: 3px 0;
+  }
+  /* Elevación proporcional a la ficha pequeña: con -18px el recorte superior
+     de la fila se comería la punta de la ficha elegida. */
+  .mano-ficha.esta-elegida {
+    transform: translateY(-14px) scale(1.05);
+  }
+}
+
+/* --- TABLET (768-1024): fichas 48x88, hueco 10 --- */
+@media (min-width: 768px) and (max-width: 1024px) {
+  .hand-tiles-row {
+    gap: 10px;
+    padding: 22px 16px 8px 16px;
+    min-height: 118px;
+  }
+  .mano-ficha {
+    width: 48px;
+    height: 88px;
+    padding: 7px;
+  }
+  .mano-ficha .pip-grid {
+    height: 32px;
+  }
+  .mano-ficha.esta-elegida {
+    transform: translateY(-16px) scale(1.05);
+  }
+}
+
+/* --- MÓVIL HORIZONTAL: el caso apretado. Se conservan los 30x58 que ya usaba
+   poderes.css:423; lo que cambia es que ahora los declara el dueño de la mano
+   y no un archivo de poderes. --- */
+@media (max-width: 1024px) and (orientation: landscape) {
+  .player-hand-container {
+    padding: 3px 0 calc(3px + env(safe-area-inset-bottom, 0px));
+  }
+  .hand-tiles-row {
+    gap: 5px;
+    padding: 12px 10px 4px 10px;
+    min-height: 74px;
+  }
+  .mano-ficha {
+    width: 30px;
+    height: 58px;
+    padding: 3px;
+  }
+  .mano-ficha .pip-grid {
+    height: 18px;
+    gap: 1px;
+  }
+  .mano-ficha .pip {
+    width: 3px;
+    height: 3px;
+  }
+  .mano-ficha .divider {
+    margin: 2px 0;
+  }
+  /* Aquí el hundimiento baja de 6 a 4px: la fila solo tiene 4px de padding
+     inferior y overflow-y:hidden recorta en el borde del padding, así que con
+     6px se comería los dos últimos píxeles de la ficha. Subir el padding en su
+     lugar le quitaría alto a la mesa, que en horizontal ya es el caso apretado. */
+  .mano-ficha.no-jugable {
+    transform: translateY(4px);
+  }
+  .mano-ficha.esta-elegida {
+    transform: translateY(-10px) scale(1.04);
+  }
+  .mano-orden {
+    width: 24px;
+    height: 18px;
+    right: 2px;
+  }
+}
+
+/* ==========================================================================
+   MOVIMIENTO REDUCIDO
+   Los tres estados son estáticos por construcción (posición, anillo, opacidad):
+   quitarles la transición no le quita información a nadie.
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  .mano-ficha,
+  .mano-orden {
+    transition: none;
+  }
+  .hand-tile-wrapper {
+    animation: none;
+  }
+}

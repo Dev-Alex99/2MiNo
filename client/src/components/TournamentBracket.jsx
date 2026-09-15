@@ -1,9 +1,13 @@
 import React from 'react';
-import { Trophy, X, Crown, Swords, Medal, CheckCircle2 } from 'lucide-react';
+import { Trophy, X, Crown, Swords } from 'lucide-react';
 import { useT } from '../i18n/LanguageContext';
+import useModalA11y from '../hooks/useModalA11y';
 
 export default function TournamentBracket({ gameState, onClose }) {
   const { t } = useT();
+  // Antes del `return null`: un hook por debajo de un return condicional es el
+  // «Rendered fewer hooks than expected» que ya se coló dos veces en este repo.
+  const { propsPanel, propsTitulo } = useModalA11y(onClose);
   if (!gameState) return null;
 
   const players = gameState.players || [];
@@ -20,15 +24,15 @@ export default function TournamentBracket({ gameState, onClose }) {
 
   return (
     <div className="modal-overlay animate-fade-in" onClick={onClose}>
-      <div className="modal-card glass-panel animate-scale-up bracket-modal-card" onClick={(e) => e.stopPropagation()}>
-        <button className="profile-close" onClick={onClose} aria-label={t('common.cancel')}>
-          <X size={18} />
+      <div className="modal-card glass-panel animate-scale-up bracket-modal-card modal-a11y" {...propsPanel} onClick={(e) => e.stopPropagation()}>
+        <button type="button" className="profile-close" onClick={onClose} aria-label={t('common.close')}>
+          <X size={18} aria-hidden="true" />
         </button>
 
         <div className="bracket-header">
-          <Trophy size={26} className="bracket-trophy-icon" />
+          <Trophy size={26} className="bracket-trophy-icon" aria-hidden="true" />
           <div>
-            <h3 className="bracket-title">{t('tourney.title')}</h3>
+            <h3 className="bracket-title" {...propsTitulo}>{t('tourney.title')}</h3>
             <span className="bracket-subtitle">{t('tourney.subtitle')}</span>
           </div>
         </div>
@@ -38,7 +42,7 @@ export default function TournamentBracket({ gameState, onClose }) {
           {/* Columna Semifinales */}
           <div className="bracket-column">
             <div className="bracket-phase-title">
-              <Swords size={14} /> {t('tourney.semis')}
+              <Swords size={14} aria-hidden="true" /> {t('tourney.semis')}
             </div>
 
             {/* Llave 1 */}
@@ -78,7 +82,7 @@ export default function TournamentBracket({ gameState, onClose }) {
           {/* Columna Gran Final */}
           <div className="bracket-column final-column">
             <div className="bracket-phase-title gold">
-              <Crown size={14} /> {t('tourney.final')}
+              <Crown size={14} aria-hidden="true" /> {t('tourney.final')}
             </div>
 
             <div className={`bracket-match-box final-match ${isFinalPhase ? 'active' : ''}`}>
@@ -96,7 +100,7 @@ export default function TournamentBracket({ gameState, onClose }) {
 
             {champion && (
               <div className="bracket-champion-box animate-scale-up">
-                <Crown size={22} className="text-amber-400" />
+                <Crown size={22} className="text-amber-400" aria-hidden="true" />
                 <span className="bracket-champ-label">{t('tourney.champion')}</span>
                 <span className="bracket-champ-name">{champion.name}</span>
               </div>

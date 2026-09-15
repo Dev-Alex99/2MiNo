@@ -114,15 +114,6 @@
   100% { transform: scale(1) rotate(0deg); filter: brightness(1); }
 }
 
-/* Animación del splash "TU TURNO" */
-@keyframes splash-in-out {
-  0% { transform: scale(0.5); opacity: 0; filter: blur(10px); }
-  20% { transform: scale(1.1); opacity: 1; filter: blur(0); }
-  35% { transform: scale(1); opacity: 1; }
-  85% { transform: scale(1); opacity: 1; filter: blur(0); }
-  100% { transform: scale(1.3); opacity: 0; filter: blur(10px); }
-}
-
 .animate-float {
   animation: float 6s ease-in-out infinite;
 }
@@ -139,45 +130,28 @@
   animation: tile-drop 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
 }
 
-/* --- BORDE DE PANTALLA Y ANUNCIO DE TURNO ACTIVO --- */
-.app-container.my-turn-active {
-  box-shadow: inset 0 0 35px rgba(16, 185, 129, 0.45);
-  animation: my-turn-screen-pulse 1.8s ease-in-out infinite alternate;
-}
+/* Aquí estaban las dos señales de turno que ya no se renderizan: el pulso
+   verde infinito del borde de pantalla (.app-container.my-turn-active, un
+   `box-shadow` animado sobre el contenedor de toda la aplicación, corriendo
+   durante turnos enteros y a 2,19:1) y el cartel a pantalla completa
+   (.turn-splash-overlay / .turn-splash-text, con su animación splash-in-out).
+   El turno se lee ahora en el canto del chip activo de la cinta, que no tapa
+   nada y no late.
 
-@keyframes my-turn-screen-pulse {
-  0% {
-    box-shadow: inset 0 0 25px rgba(16, 185, 129, 0.35), inset 0 0 8px rgba(16, 185, 129, 0.2);
+   --- MOVIMIENTO REDUCIDO ---
+   Este archivo declara las cuatro utilidades de animación que usa media
+   aplicación (modales, avisos, fichas que caen) y era el único de los que
+   animan que no tenía bloque de `prefers-reduced-motion`: con el ajuste puesto
+   seguían corriendo igual. Basta con apagar la animación; ninguna de las
+   cuatro deja estado en su fotograma final que haya que reponer a mano, porque
+   los elementos que las llevan no declaran ni `opacity` ni `transform` de
+   partida. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-float,
+  .animate-scale-up,
+  .animate-fade-in,
+  .animate-tile-drop {
+    animation: none;
   }
-  100% {
-    box-shadow: inset 0 0 55px rgba(16, 185, 129, 0.65), inset 0 0 16px rgba(52, 211, 153, 0.4);
-  }
-}
-
-.turn-splash-overlay {
-  position: absolute;
-  top: 45%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 150;
-  pointer-events: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.turn-splash-text {
-  font-size: 2.5rem;
-  font-weight: 900;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: #ffffff;
-  padding: 16px 36px;
-  background: radial-gradient(circle at center, rgba(16, 185, 129, 0.35), rgba(8, 12, 24, 0.92));
-  border: 2px solid #34d399;
-  border-radius: 20px;
-  box-shadow: 0 0 50px rgba(16, 185, 129, 0.6), inset 0 0 20px rgba(16, 185, 129, 0.4);
-  text-shadow: 0 0 20px rgba(52, 211, 153, 0.9);
-  animation: splash-in-out 1.6s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
 }
 

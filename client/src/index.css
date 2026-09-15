@@ -18,3 +18,21 @@
 @import './styles/responsive.css';
 @import './styles/poderes.css';
 @import './styles/perfil-hub.css';
+
+/* Capa nueva de la partida. Va al final a propósito: es la única posición desde
+   la que se puede corregir a partida.css, responsive.css y poderes.css sin
+   inflar la especificidad de cada selector. */
+@import './styles/mesa.css';
+@import './styles/cinta.css';
+@import './styles/mano.css';
+@import './styles/a11y.css';
+
+/* Capas del vestíbulo y de la línea. Son las TRES últimas, y ésa es la única
+   posición desde la que alcanzan a responsive.css (:18) y a perfil-hub.css
+   (:20) a igual especificidad: es exactamente lo que hoy falta, y el motivo de
+   que el hub acabara fabricándose su propio @media privado en
+   perfil-hub.css:656. Colocarlas «donde parece más ordenado» deja el rediseño
+   sin aplicar, sin error en consola y sin que ningún test cambie de color. */
+@import './styles/linea.css';
+@import './styles/vestibulo.css';
+@import './styles/overlays.css';

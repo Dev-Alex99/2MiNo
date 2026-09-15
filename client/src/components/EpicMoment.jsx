@@ -174,7 +174,7 @@ export default function EpicMoment({ moment, gameState, playerId }) {
       ctx.textAlign = 'center';
       ctx.fillStyle = accent;
       ctx.font = '800 104px Outfit, Arial, sans-serif';
-      ctx.fillText((moment.title || '').toUpperCase(), S / 2, S * 0.74);
+      ctx.fillText(moment.title || '', S / 2, S * 0.74);
       if (moment.sub) {
         ctx.fillStyle = '#e2e8f0';
         ctx.font = '600 46px Outfit, Arial, sans-serif';
@@ -204,11 +204,16 @@ export default function EpicMoment({ moment, gameState, playerId }) {
 
   return (
     <div className="epic-overlay" style={{ '--epic': accent }}>
-      <canvas ref={confettiCanvasRef} className="epic-confetti-canvas" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 0 }} />
-      <div className="epic-vignette" />
+      {/* Todo lo decorativo se apaga para el lector: el confeti, la viñeta y el
+          foco con la cara del protagonista no dicen nada que no diga el cartel.
+          El aria-hidden NO puede subir al overlay entero porque dentro vive el
+          botón de capturar, y ocultar el ancestro de algo enfocable es
+          justamente el defecto que se está arreglando. */}
+      <canvas ref={confettiCanvasRef} className="epic-confetti-canvas" aria-hidden="true" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 0 }} />
+      <div className="epic-vignette" aria-hidden="true" />
 
       <div className="epic-stage">
-        <div className="epic-spotlight">
+        <div className="epic-spotlight" aria-hidden="true">
           {showVideo ? (
             <video ref={videoRef} autoPlay playsInline muted className="epic-video" />
           ) : (
@@ -216,7 +221,11 @@ export default function EpicMoment({ moment, gameState, playerId }) {
           )}
         </div>
 
-        <div className="epic-banner">{(moment.title || '').toUpperCase()}</div>
+        {/* Las mayúsculas son cosa de .epic-banner (text-transform). En JS,
+            toUpperCase() sobre una cadena YA traducida no respeta las reglas de
+            cada idioma y además le da al lector de pantalla un texto que algunos
+            deletrean letra a letra. */}
+        <div className="epic-banner">{moment.title || ''}</div>
         {moment.sub && <div className="epic-sub">{moment.sub}</div>}
 
         <button className="epic-capture" onClick={captureMoment}>

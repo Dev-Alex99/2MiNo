@@ -2,7 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { Trophy, RefreshCw, ChevronRight, Award, Eye } from 'lucide-react';
 import { socket } from '../socket';
 import { useT } from '../i18n/LanguageContext';
+import useModalA11y from '../hooks/useModalA11y';
 
+/**
+ * El confeti anima por rAF durante 6 segundos sin preguntar nada. Se consulta
+ * en el render y no con un listener porque la preferencia no cambia a mitad de
+ * una pantalla de fin de ronda.
+ */
+function prefiereMenosMovimiento() {
+  return typeof window !== 'undefined'
+    && typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
 
 function ConfettiCanvas() {
   const canvasRef = React.useRef(null);
@@ -91,6 +102,13 @@ export default function EndGameModal({ gameState, playerId, tournamentMatch = fa
     return () => clearTimeout(id);
   }, []);
 
+  // Este diálogo no tiene botón de cerrar: su salida es «ver el tablero». Por
+  // eso Escape hace lo mismo que ese botón en vez de no hacer nada.
+  // El hook se llama SIEMPRE, aunque el panel tarde 4,1 s en existir: la ref de
+  // callback de propsPanel lo despierta cuando se monta.
+  const { propsPanel, propsTitulo } = useModalA11y(() => setPeek(true));
+  const sinMovimiento = prefiereMenosMovimiento();
+
   const teamLabel = (i) => (i === 0 ? t('team.a') : t('team.b'));
   const {
     status, roundWinner, gameWinner, players,
@@ -114,7 +132,7 @@ export default function EndGameModal({ gameState, playerId, tournamentMatch = fa
   if (peek) {
     return (
       <>
-        {isMeWinner && <ConfettiCanvas />}
+        {isMeWinner && !sinMovimiento && <ConfettiCanvas />}
         <button className="end-peek-pill" onClick={() => setPeek(false)}>
           <Trophy size={14} />
           {t('end.showResult')}
@@ -135,12 +153,13 @@ export default function EndGameModal({ gameState, playerId, tournamentMatch = fa
 
   return (
     <div className="modal-overlay animate-fade-in">
-      {isMeWinner && <ConfettiCanvas />}
-      <div className="modal-card glass-panel animate-scale-up">
-        
+      {isMeWinner && !sinMovimiento && <ConfettiCanvas />}
+      <div className="modal-card glass-panel animate-scale-up modal-a11y" {...propsPanel}>
+
         {/* Luces traseras de victoria */}
-        <div 
-          className="modal-glow-line" 
+        <div
+          className="modal-glow-line"
+          aria-hidden="true"
           style={{
             background: isMeWinner 
               ? 'linear-gradient(90deg, transparent, #10b981, transparent)' 
@@ -151,7 +170,7 @@ export default function EndGameModal({ gameState, playerId, tournamentMatch = fa
         {isGameEnd ? (
           /* PANTALLA FIN DE JUEGO */
           <>
-            <div className="modal-icon-circle winner">
+            <div className="modal-icon-circle winner" aria-hidden="true">
               <Trophy size={48} />
             </div>
 
@@ -159,7 +178,7 @@ export default function EndGameModal({ gameState, playerId, tournamentMatch = fa
               <span className="modal-meta-label">
                 {t('end.gameDone')}
               </span>
-              <h2 className="modal-title">
+              <h2 className="modal-title" {...propsTitulo}>
                 {isMeWinner ? t('end.congrats') : t('end.winner', { name: winnerLabel })}
               </h2>
             </div>
@@ -171,7 +190,7 @@ export default function EndGameModal({ gameState, playerId, tournamentMatch = fa
         ) : (
           /* PANTALLA FIN DE RONDA */
           <>
-            <div className="modal-icon-circle round">
+            <div className="modal-icon-circle round" aria-hidden="true">
               <Award size={36} />
             </div>
 
@@ -179,7 +198,7 @@ export default function EndGameModal({ gameState, playerId, tournamentMatch = fa
               <span className="modal-meta-label">
                 {t('end.roundEnd')}
               </span>
-              <h2 className="modal-title" style={{ fontSize: '1.4rem' }}>
+              <h2 className="modal-title" style={{ fontSize: '1.4rem' }} {...propsTitulo}>
                 {roundWinner === 'tie'
                   ? t('end.roundTie')
                   : (isMeWinner ? t('end.roundWon') : t('end.roundFor', { name: winnerLabel }))}

@@ -1,0 +1,314 @@
+/* Capa de las SOBRECAPAS: modales sociales, confirmaciones en línea, estados
+ * vacíos y la franja de modo degradado.
+ *
+ * Creada vacía por P3-MARCO y CEDIDA a P8-OVERLAYS, su único dueño (excepción
+ * documentada del contrato §2a).
+ *
+ * Se importa en index.css DESPUÉS de a11y.css: es la última capa y la única
+ * desde la que se corrige a perfil-hub.css y a responsive.css sin inflar la
+ * especificidad de cada selector.
+ */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   1. LA FRANJA DE MODO DEGRADADO
+   La MISMA en las cinco pantallas que la usan: perfil, tienda, ranking, agenda
+   y la banda de modo invitado del marco. Un solo aspecto para un solo dato
+   (`capacidades`), porque el problema que viene a cerrar es precisamente que
+   cada pantalla contaba una versión distinta de lo mismo.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.ov-degradado {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(217, 119, 6, 0.10);
+  border: 1px solid rgba(217, 119, 6, 0.35);
+  color: #fcd34d;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+
+.ov-degradado > span:first-child {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+
+/* La segunda línea es la salida («puedes llamar a los de tu mesa»), no el
+   problema: se dice más bajo para que no compita con él. */
+.ov-degradado-pista {
+  flex-basis: 100%;
+  color: #cbd5e1;
+  opacity: 0.85;
+}
+
+.ov-degradado .btn-premium {
+  padding: 6px 14px;
+  font-size: 0.75rem;
+  min-height: 32px;
+}
+
+/**
+ * LA FRANJA DEL MARCO ES OTRA COSA: la pinta App.jsx como hija directa de
+ * #root, EN FLUJO, por encima de un `.hub-screen` que declara `min-height:
+ * 100dvh`. Sin esto empujaba el hub hacia abajo y `body { overflow: hidden }`
+ * le recortaba el pie.
+ *
+ * `sticky` y no `fixed` A PROPÓSITO: #root es el contenedor de scroll
+ * (`overflow-y: auto` en base.css), así que la franja se queda pegada arriba
+ * mientras el hub se desplaza por debajo, y sigue ocupando su hueco en el
+ * flujo — con `fixed` taparía la cabecera del hub de forma permanente y sin
+ * manera de apartarla.
+ */
+#root > .ov-degradado {
+  position: sticky;
+  top: 0;
+  z-index: 1100; /* por debajo de .modal-overlay (1200), por encima del hub */
+  margin: 0;
+  border-radius: 0;
+  border-width: 0 0 1px;
+  padding: 10px 16px;
+  background: rgba(69, 39, 6, 0.96);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   2. ESTADOS VACÍOS CON SALIDA
+   Un vacío no es una línea de texto gris: dice qué pasa y ofrece la acción
+   siguiente. La acción es un botón de verdad, no una sugerencia.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.ov-vacio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 28px 16px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 0.85rem;
+}
+
+.ov-vacio p {
+  margin: 0;
+  max-width: 34ch;
+  line-height: 1.45;
+}
+
+.ov-vacio > svg {
+  opacity: 0.45;
+}
+
+.ov-vacio .btn-premium {
+  min-height: 44px;
+  padding: 0 20px;
+}
+
+.ov-vacio-pista {
+  font-size: 0.76rem;
+  color: #cbd5e1;
+  opacity: 0.8;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   3. CONFIRMACIÓN EN LÍNEA
+   Lo destructivo se confirma EN SU SITIO: sin `window.confirm` (que no se
+   traduce y se lleva el foco fuera de la app) y sin abrir otro diálogo encima,
+   que haría perder de vista a quién se está quitando.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.ov-confirmar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ov-confirmar-texto {
+  flex: 1 1 100%;
+  font-size: 0.76rem;
+  color: #cbd5e1;
+  line-height: 1.4;
+}
+
+.ov-confirmar .btn-premium {
+  min-height: 44px;
+  padding: 0 14px;
+  font-size: 0.76rem;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* No existía ninguna variante de peligro en componentes.css y lo destructivo
+   no puede parecerse a lo demás. */
+.ov-peligro {
+  background: rgba(239, 68, 68, 0.18);
+  border: 1px solid rgba(239, 68, 68, 0.55);
+  color: #fca5a5;
+}
+.ov-peligro:hover {
+  background: rgba(239, 68, 68, 0.32);
+  color: #fee2e2;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   4. ENDURECIMIENTO DE LOS MODALES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* El scroller que NADIE declaraba: sólo 2 de los 9 modales traían el suyo, así
+   que en una pantalla baja el contenido se cortaba sin más. Va aquí y no en
+   responsive.css porque `.modal-card.glass-panel` (perfil-hub.css:1458) declara
+   `overflow: hidden` con más especificidad y desde un archivo posterior. */
+.modal-card.glass-panel {
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+}
+
+/* Los que ya llevan su propio cuerpo con scroll conservan el recorte: si
+   heredaran el scroller de la tarjeta tendrían dos, anidados. */
+.modal-card.glass-panel.profile-card,
+.modal-card.glass-panel.ov-tienda,
+.modal-card.glass-panel.ov-repeticion {
+  overflow: hidden;
+}
+
+/* Anchos por modal. Estaban como `style` en línea, donde ganaban siempre a la
+   hoja y dejaban sin efecto el arreglo de responsive.css. */
+.ov-tienda { max-width: 660px; max-height: 85dvh; display: flex; flex-direction: column; }
+.ov-ranking { max-width: 540px; }
+.ov-repeticion { max-width: 680px; max-height: 88dvh; display: flex; flex-direction: column; }
+.ov-entrada { max-width: 420px; }
+.ov-busqueda { max-width: 380px; text-align: center; }
+
+.ov-ranking-cuerpo {
+  margin-top: 14px;
+  max-height: 380px;
+  overflow-y: auto;
+}
+
+/* Un modal montado ENCIMA de otro (la repetición sobre el perfil, la búsqueda
+   de rival sobre lo que haya). El valor sigue siendo el 1300 que traían en
+   línea; la normalización de la escala entera es de P9. */
+.ov-sobre-modal {
+  z-index: 1300;
+}
+
+/* 86vh en un móvil mide el viewport GRANDE, así que el pie de la lista queda
+   debajo de la barra del navegador y es inalcanzable (el body no scrollea). */
+.friends-modal-card {
+  max-height: 86dvh;
+  width: 100%;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   5. LA FILA DE AMIGO
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Sin `min-width: 0` un flex-item NO se encoge por debajo de su contenido: un
+   nombre de 16 caracteres empujaba la fila 11 px fuera de la tarjeta y el
+   último botón quedaba recortado por el `overflow: hidden` del panel. */
+.friend-card {
+  gap: 10px;
+  min-width: 0;
+}
+
+.friend-user-info,
+.friend-user-details {
+  min-width: 0;
+}
+
+.friend-username {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.friend-card-actions {
+  flex-shrink: 0;
+}
+
+/* 32 px es menos que el objetivo táctil mínimo, y son tres botones pegados de
+   los que uno borra a una persona. */
+.friend-action-icon,
+.friends-close-btn {
+  width: 44px;
+  height: 44px;
+}
+
+.friend-copy-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  border-radius: 12px;
+  background: rgba(245, 158, 11, 0.12);
+  color: #fbbf24;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.friend-copy-badge.copied {
+  border-color: rgba(16, 185, 129, 0.5);
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+}
+
+/* La región viva del diálogo existe SIEMPRE (vacía) para que el lector anuncie
+   el cambio; sin mensaje no puede ocupar ni un píxel. */
+.friend-flash-msg.vacio {
+  display: none;
+}
+
+/* El código de amigo dejó de ser un `div` con onClick y pasó a ser una tarjeta
+   con un botón dentro: el cursor de mano sobre toda ella prometía una acción
+   que ahora tiene su propio destino. */
+.friend-code-card {
+  cursor: default;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   6. LO QUE NO SE PUEDE PULSAR
+   El contrato prohíbe el atributo `disabled` (saca del orden de tabulación y
+   deja el botón sin nombre que leer). `aria-disabled` no cambia el aspecto por
+   sí solo, así que lo pinta esta capa.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.modal-overlay [aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.modal-overlay [aria-disabled='true']:hover {
+  transform: none;
+}
+
+/* Y los dos que tenían un aspecto propio colgado de `:disabled`, que al pasar a
+   `aria-disabled` dejó de alcanzarles: una misión a medias volvía a salir con
+   el degradado dorado de «reclamar», y un título bloqueado se iluminaba al
+   pasar el ratón como si se pudiera equipar. El aspecto lo trae la capa; lo que
+   NO vuelve es el atributo. */
+.mission-claim-btn[aria-disabled='true'] {
+  background: rgba(255, 255, 255, 0.08);
+  color: #9ca3af;
+  box-shadow: none;
+}
+.mission-claim-btn[aria-disabled='true']:hover,
+.profile-title-btn[aria-disabled='true']:hover {
+  filter: none;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.1);
+}

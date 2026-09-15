@@ -2,61 +2,15 @@
    Parte de index.css, que los importa EN ESTE ORDEN. La cascada depende de
    ese orden: mover un import cambia qué regla gana. */
 /* --- PAREJAS (2v2) ---
-   Dos colores fijos, uno por equipo, usados igual en el marcador, en las
-   tarjetas y en la sala de espera para que la pareja se lea de un vistazo. */
-.team-score-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
+   Dos colores fijos, uno por equipo, para que la pareja se lea de un vistazo.
 
-.team-score-card {
-  padding: 10px 12px;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(255, 255, 255, 0.02);
-  border-left: 3px solid var(--team-color, var(--primary));
-}
-.team-score-card.team-0 { --team-color: #10b981; }
-.team-score-card.team-1 { --team-color: #f43f5e; }
-.team-score-card.mine {
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.team-score-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 8px;
-}
-
-.team-score-name {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.8rem;
-  font-weight: 800;
-  color: var(--team-color);
-}
-
-.team-score-value {
-  font-size: 1.1rem;
-  font-weight: 900;
-  color: #fff;
-  font-variant-numeric: tabular-nums;
-}
-
-.team-score-members {
-  font-size: 0.65rem;
-  color: var(--text-muted);
-  margin: 2px 0 6px;
-}
-
-.team-score-card .player-score-bar { margin-top: 0; }
-.team-score-card .player-score-progress {
-  background: var(--team-color);
-}
-
+   El marcador de equipos que había aquí (.team-score-list/-card/-head/-name
+   /-value/-members, con su variable --team-color) vivía en la barra lateral
+   del tablero antiguo y no lo renderiza nadie desde que el marcador se mudó a
+   .game-bar: comprobado nombre a nombre contra todo client/src. Con él se va
+   --team-color, cuyos únicos lectores eran esas reglas. El chip de equipo, que
+   SÍ se sigue pintando en la sala de espera, nunca lo usó: lleva sus dos
+   colores escritos. */
 .team-chip {
   display: inline-flex;
   align-items: center;
@@ -69,10 +23,10 @@
 .team-chip.team-0 { background: rgba(16, 185, 129, 0.15); color: #6ee7b7; }
 .team-chip.team-1 { background: rgba(244, 63, 94, 0.15); color: #fda4af; }
 
-/* Franja lateral del equipo en la tarjeta de jugador */
-.player-card.on-team { border-left: 3px solid var(--team-color, transparent); }
-.player-card.on-team.team-0 { --team-color: #10b981; }
-.player-card.on-team.team-1 { --team-color: #f43f5e; }
+/* Aquí estaba la franja lateral del equipo en `.player-card.on-team`. La clase
+   `on-team` no se aplica en ningún JSX (cero apariciones, tampoco compuesta),
+   así que la regla no podía casar con nada. La franja de equipo que sí se ve
+   hoy es `.spec-player.team-0/1` de lobby.css, que no depende de esto. */
 
 .room-mode-tag.teams {
   background: rgba(16, 185, 129, 0.1);
@@ -269,121 +223,14 @@
   color: #f87171;
 }
 
-.player-hand-indicator {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  padding: 4px 8px;
-  border-radius: 8px;
-  flex-shrink: 0;
-}
-
-.player-tile-icon {
-  width: 6px;
-  height: 12px;
-  background: rgba(255, 255, 255, 0.7);
-  border-radius: 1px;
-}
-
-.player-tile-count {
-  color: white;
-  font-size: 0.75rem;
-  font-weight: 700;
-}
-
-.player-score-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 10px;
-  font-size: 0.75rem;
-}
-
-.player-score-label {
-  color: var(--text-muted);
-}
-
-.player-score-value {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-weight: 800;
-  color: white;
-}
-
-.player-score-bar {
-  width: 100%;
-  height: 4px;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 10px;
-  margin-top: 6px;
-  overflow: hidden;
-}
-
-.player-score-progress {
-  height: 100%;
-  border-radius: 10px;
-  background: linear-gradient(90deg, var(--primary) 0%, var(--secondary) 100%);
-  transition: width 0.5s ease-out;
-}
-
-.sidebar-bottom {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.info-box {
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.04);
-  border-radius: 16px;
-  padding: 12px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.info-box-left {
-  display: flex;
-  flex-direction: column;
-}
-
-.info-box-label {
-  color: var(--text-muted);
-  font-size: 0.65rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.info-box-value {
-  color: white;
-  font-weight: 800;
-  font-size: 0.85rem;
-  margin-top: 2px;
-}
-
-.info-box-deck {
-  display: flex;
-  gap: 2px;
-}
-
-.deck-mini-tile {
-  width: 10px;
-  height: 16px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 2px;
-  transform: rotate(12deg);
-}
-
-.room-code-value {
-  font-family: monospace;
-  font-weight: 800;
-  font-size: 1.1rem;
-  color: white;
-  letter-spacing: 0.05em;
-}
+/* Aquí terminaba el fichero con 117 líneas de la BARRA LATERAL del tablero
+   antiguo: el contador de fichas en mano (.player-hand-indicator,
+   .player-tile-icon, .player-tile-count), el marcador por jugador
+   (.player-score-row/-label/-value/-bar/-progress), el pie del panel
+   (.sidebar-bottom) y las cajas de información del mazo y del código de sala
+   (.info-box*, .deck-mini-tile, .room-code-value). Ninguna de las trece se
+   renderiza: el marcador es .game-bar, las fichas en mano son la cinta de
+   turno y el código de sala lo pinta la sala de espera con sus propias clases.
+   responsive.css:8-14 ya documentaba desde el rediseño de la partida que este
+   bloque estaba muerto; aquí se retira el original. */
 

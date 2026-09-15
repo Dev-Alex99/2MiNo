@@ -88,6 +88,10 @@ export default function useGameActions({
     sessionStorage.removeItem('domino_player_id');
 
     s.setRoomId('');
+    // Se vacía el ALIAS de asiento, que fuera de la sala no significa nada.
+    // `cuentaId` NUNCA se toca: es la persona, y es la dirección por la que la
+    // llaman. Vaciarla dejaría la voz apuntando a la cadena vacía justo cuando
+    // el jugador vuelve al hub, que es desde donde más se llama.
     s.setPlayerId('');
     s.setGameState(null);
     s.setSelectedTileIndex(null);
@@ -127,7 +131,12 @@ export default function useGameActions({
     socket.emit('leave_tournament', { playerId: getOrCreatePersistentPlayerId() });
     setTournament(null);
     sessionStorage.removeItem('domino_room_id');
+    sessionStorage.removeItem('domino_player_id');
     s.setRoomId('');
+    // Salir del torneo es salir de la sala de su última eliminatoria: el alias
+    // se queda pegado si no se limpia aquí, y era el único camino que dejaba
+    // `playerId` con un asiento de una sala en la que ya no estás.
+    s.setPlayerId('');
     s.setGameState(null);
   };
 

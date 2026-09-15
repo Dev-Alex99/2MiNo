@@ -1,228 +1,311 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, UserPlus, Check, Users, Copy, Zap, UserCheck, UserX, Swords, Phone, Search, Trash2 } from 'lucide-react';
 import { socket } from '../socket';
 import { useT } from '../i18n/LanguageContext';
-import { getOrCreatePersistentPlayerId } from '../store/useGameStore';
+import { useGameStore } from '../store/useGameStore';
 import { useVoice } from '../voice/VoiceContext';
+import useModalA11y from '../hooks/useModalA11y';
+import { useSocialStore, iniciarSocial, useCapacidades, hayAmigos } from '../social/useSocialStore';
 
+/**
+ * La agenda. Es la única puerta de todo el producto para llamar a alguien, así
+ * que su modo degradado importa tanto como el normal: sin persistencia no hay
+ * lista que enseñar, pero SÍ se puede hablar con quien está en tu mesa, y eso
+ * hay que decirlo en vez de pintar un código de amigo de cinco puntos suspensivos
+ * que al copiarse anunciaba «¡Copiado!» habiendo copiado la cadena vacía.
+ *
+ * Los datos ya no son suyos: vienen de useSocialStore, que mantiene UN solo
+ * suscriptor vivo aunque el modal esté cerrado. Antes se registraban aquí al
+ * montar y se retiraban al cerrar, así que la lista se perdía entera cada vez.
+ *
+ * PRÉSTAMOS DE COPY, los dos deliberados: `tourney.copied` («¡Copiado!») y
+ * `wait.removeBot` («Quitar a {name}»), porque el texto es exactamente el que
+ * hace falta y ya está en los tres idiomas. No hay claves `friend.copied` ni
+ * `friend.remove`, y declararlas es de P0-I18N, no de aquí. Si algún día
+ * existen, esto son dos sustituciones.
+ */
 export default function FriendsModal({ name, onClose }) {
   const { t } = useT();
   const voice = useVoice();
-  const pid = getOrCreatePersistentPlayerId();
-  const [friends, setFriends] = useState([]);
-  const [requests, setRequests] = useState([]);
-  const [myCode, setMyCode] = useState('');
-  const [addCode, setAddCode] = useState('');
-  const [msg, setMsg] = useState(null);
-  const [copied, setCopied] = useState(false);
-  const [activeTab, setActiveTab] = useState('all'); // 'all' | 'online' | 'requests'
+  const cuentaId = useGameStore((s) => s.cuentaId);
+  const capacidades = useCapacidades();
+  const conAgenda = hayAmigos(capacidades);
 
-  const flash = useCallback((text, type = 'ok') => {
-    setMsg({ text, type });
-    setTimeout(() => setMsg(null), 3000);
-  }, []);
+  const amigos = useSocialStore((s) => s.amigos);
+  const solicitudes = useSocialStore((s) => s.solicitudes);
+  const miCodigo = useSocialStore((s) => s.miCodigo);
+  const aviso = useSocialStore((s) => s.aviso);
+  const estado = useSocialStore((s) => s.estado);
+  const limpiarAviso = useSocialStore((s) => s.limpiarAviso);
+  const recargar = useSocialStore((s) => s.recargar);
 
+  const [codigoNuevo, setCodigoNuevo] = useState('');
+  const [copiado, setCopiado] = useState(false);
+  const [pestana, setPestana] = useState('todos'); // 'todos' | 'enLinea' | 'solicitudes'
+  const [porQuitar, setPorQuitar] = useState(null); // id del amigo con la confirmación abierta
+
+  const { propsPanel, propsTitulo } = useModalA11y(onClose);
+
+  useEffect(() => { iniciarSocial(); }, []);
+
+  // El aviso de «Solicitud enviada» se apaga solo; vive en el store porque la
+  // respuesta puede llegar con el modal cerrado.
   useEffect(() => {
-    socket.emit('get_friends', { playerId: pid });
-    socket.emit('get_profile', { playerId: pid, username: name || 'Jugador' });
+    if (!aviso) return undefined;
+    const id = setTimeout(limpiarAviso, 3000);
+    return () => clearTimeout(id);
+  }, [aviso, limpiarAviso]);
 
-    function onFriends(data) {
-      if (data) {
-        setFriends(data.friends || []);
-        setRequests(data.requests || []);
-      }
-    }
-    function onProfile(data) {
-      if (data && data.friend_code) setMyCode(data.friend_code);
-    }
-    function onAction(res) {
-      if (!res) return;
-      if (res.success) flash(res.accepted ? t('friend.accepted') : t('friend.sent'), 'ok');
-      else flash(t(res.error || 'friend.err.generic'), 'err');
-    }
-    socket.on('friends_data', onFriends);
-    socket.on('profile_data', onProfile);
-    socket.on('friend_action', onAction);
-    return () => {
-      socket.off('friends_data', onFriends);
-      socket.off('profile_data', onProfile);
-      socket.off('friend_action', onAction);
-    };
-  }, [pid, name, t, flash]);
+  /**
+   * LA PESTAÑA SE RECONCILIA CON LOS DATOS. La de solicitudes sólo existe
+   * mientras hay alguna, así que aceptar la última dejaba `pestana` apuntando a
+   * una pestaña que ya no se renderiza: ninguna de las dos ramas de la lista
+   * pintaba nada y quedaban 180 px en blanco sin forma de salir salvo cerrar.
+   */
+  useEffect(() => {
+    if (pestana === 'solicitudes' && solicitudes.length === 0) setPestana('todos');
+  }, [pestana, solicitudes.length]);
 
-  const copyCode = () => {
+  const copiarCodigo = () => {
+    if (!miCodigo) return; // sin código no se anuncia un copiado que no ha pasado
     try {
-      navigator.clipboard.writeText(myCode);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1600);
+      navigator.clipboard.writeText(miCodigo);
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 1600);
     } catch {
-      /* noop */
+      /* portapapeles bloqueado: el código sigue a la vista para copiarlo a mano */
     }
   };
 
-  const addFriend = (e) => {
+  const anadirAmigo = (e) => {
     e.preventDefault();
-    const c = addCode.trim().toUpperCase();
+    if (!conAgenda) return;
+    const c = codigoNuevo.trim().toUpperCase();
     if (c) {
-      socket.emit('friend_add', { playerId: pid, code: c });
-      setAddCode('');
+      socket.emit('friend_add', { playerId: cuentaId, code: c });
+      setCodigoNuevo('');
     }
   };
 
-  const respond = (otherId, accept) => socket.emit('friend_respond', { playerId: pid, otherId, accept });
-  const challenge = (friendId) => socket.emit('friend_challenge', { playerId: pid, name: name || 'Jugador', friendId });
+  const responder = (otherId, accept) => socket.emit('friend_respond', { playerId: cuentaId, otherId, accept });
+  const retar = (friendId) => socket.emit('friend_challenge', { playerId: cuentaId, name: name || 'Jugador', friendId });
 
-  const handleCall = (friendId) => {
+  const llamar = (friendId) => {
     if (voice && voice.callFriend) {
       voice.callFriend(friendId, name || 'Jugador');
       onClose();
     }
   };
 
-  const removeFriend = (friendId) => {
-    socket.emit('friend_remove', { playerId: pid, friendId });
+  const quitar = (friendId) => {
+    socket.emit('friend_remove', { playerId: cuentaId, otherId: friendId, friendId });
+    setPorQuitar(null);
   };
 
-  const filteredFriends = activeTab === 'online' ? friends.filter((f) => f.online) : friends;
+  const enLinea = amigos.filter((f) => f.online);
+  const listados = pestana === 'enLinea' ? enLinea : amigos;
 
   return (
-    <div className="modal-overlay animate-fade-in" style={{ zIndex: 1200 }} onClick={onClose}>
-      <div className="friends-modal-card animate-scale-up" onClick={(e) => e.stopPropagation()}>
-        {/* Header Modal */}
+    <div className="modal-overlay animate-fade-in" onClick={onClose}>
+      <div
+        className="friends-modal-card modal-a11y animate-scale-up"
+        {...propsPanel}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="friends-modal-header">
           <div className="friends-header-info">
             <div className="friends-icon-badge">
-              <Users size={20} />
+              <Users size={20} aria-hidden="true" />
             </div>
             <div>
-              <h2 className="friends-title">Amigos & Contactos</h2>
-              <span className="friends-subtitle">Conecta, llama y desafía a tus amigos</span>
+              <h2 className="friends-title" {...propsTitulo}>{t('friend.title')}</h2>
+              <span className="friends-subtitle">{t('friend.subtitle')}</span>
             </div>
           </div>
 
-          <button className="friends-close-btn" onClick={onClose}>
-            <X size={18} />
+          <button type="button" className="friends-close-btn" onClick={onClose} aria-label={t('common.close')}>
+            <X size={18} aria-hidden="true" />
           </button>
         </div>
 
-        {/* Tarjeta de Código de Amigo Propio */}
-        <div className="friend-code-card" onClick={copyCode} title="Haz clic para copiar tu código">
-          <div className="friend-code-info">
-            <span className="friend-code-label">Tu Código de Amigo</span>
-            <span className="friend-code-value">{myCode || '·····'}</span>
-          </div>
+        {/* La MISMA franja que el resto de pantallas sociales, con el mismo dato:
+            sin persistencia no hay agenda, pero la voz de la mesa sigue viva y
+            es lo único que hay que decir aquí. */}
+        {!conAgenda && (
+          <p className="ov-degradado">
+            <span>{t('degradado.sinAmigos')}</span>
+            <span className="ov-degradado-pista">{t('degradado.puedesLlamarMesa')}</span>
+          </p>
+        )}
 
-          <div className={`friend-copy-badge ${copied ? 'copied' : ''}`}>
-            {copied ? (
-              <>
-                <Check size={14} />
-                <span>¡Copiado!</span>
-              </>
-            ) : (
-              <>
-                <Copy size={14} />
-                <span>Copiar</span>
-              </>
-            )}
-          </div>
-        </div>
+        {/* El vigilante vencido: el servidor aceptó la petición y no contestó
+            nunca. Sin esto la lista se quedaba vacía y muda, indistinguible de
+            «todavía no tienes amigos». */}
+        {conAgenda && estado === 'sinDatos' && (
+          <p className="ov-degradado">
+            <span>{t('degradado.noCargado')}</span>
+            <button type="button" className="btn-premium btn-secondary" onClick={recargar}>
+              {t('degradado.reintentar')}
+            </button>
+          </p>
+        )}
 
-        {/* Formulario para Añadir Amigo */}
-        <form onSubmit={addFriend} className="friend-add-form">
-          <div className="friend-input-wrapper">
-            <Search size={16} className="friend-input-icon" />
-            <input
-              className="friend-code-input"
-              placeholder="Ingresa el código (ej. AB123)"
-              value={addCode}
-              maxLength={5}
-              onChange={(e) => setAddCode(e.target.value.toUpperCase())}
-            />
-          </div>
-          <button type="submit" className="friend-add-btn" disabled={!addCode.trim()}>
-            <UserPlus size={16} />
-            <span>Agregar</span>
-          </button>
-        </form>
+        {/* El bloque del código NO se renderiza sin agenda: pintaba '·····' de
+            adorno y su botón anunciaba un copiado de la cadena vacía. */}
+        {conAgenda && (
+          <div className="friend-code-card">
+            <div className="friend-code-info">
+              <span className="friend-code-label">{t('friend.yourCode')}</span>
+              <span className="friend-code-value">{miCodigo || '—'}</span>
+            </div>
 
-        {/* Mensajes de Notificación Flash */}
-        {msg && (
-          <div className={`friend-flash-msg ${msg.type}`}>
-            {msg.text}
+            <button
+              type="button"
+              className={`friend-copy-badge ${copiado ? 'copied' : ''}`}
+              onClick={copiarCodigo}
+              aria-disabled={miCodigo ? undefined : 'true'}
+              aria-label={t('friend.copyCode')}
+            >
+              {copiado ? (
+                <>
+                  <Check size={14} aria-hidden="true" />
+                  <span>{t('tourney.copied')}</span>
+                </>
+              ) : (
+                <>
+                  <Copy size={14} aria-hidden="true" />
+                  <span>{t('friend.copyCode')}</span>
+                </>
+              )}
+            </button>
           </div>
         )}
 
-        {/* Pestañas de Navegación */}
+        <form onSubmit={anadirAmigo} className="friend-add-form">
+          <div className="friend-input-wrapper">
+            <Search size={16} className="friend-input-icon" aria-hidden="true" />
+            <input
+              className="friend-code-input"
+              placeholder={t('friend.addPlaceholder')}
+              aria-label={t('friend.addPlaceholder')}
+              value={codigoNuevo}
+              maxLength={5}
+              readOnly={!conAgenda}
+              aria-disabled={conAgenda ? undefined : 'true'}
+              onChange={(e) => setCodigoNuevo(e.target.value.toUpperCase())}
+            />
+          </div>
+          {/* aria-disabled y rechazo en el manejador: con `disabled` el botón
+              sale del orden de tabulación y deja de tener nombre que leer. */}
+          <button
+            type="submit"
+            className="friend-add-btn"
+            aria-disabled={(!conAgenda || !codigoNuevo.trim()) ? 'true' : undefined}
+          >
+            <UserPlus size={16} aria-hidden="true" />
+            <span>{t('friend.add')}</span>
+          </button>
+        </form>
+
+        {/* Región viva propia del diálogo: existe siempre (vacía) para que el
+            lector anuncie el cambio, y sólo mientras el modal está abierto. */}
+        <div className={`friend-flash-msg ${aviso ? aviso.tipo : 'vacio'}`} role="status">
+          {aviso ? t(aviso.clave) : ''}
+        </div>
+
         <div className="friends-tabs">
           <button
-            className={`friend-tab ${activeTab === 'all' ? 'active' : ''}`}
-            onClick={() => setActiveTab('all')}
+            type="button"
+            className={`friend-tab ${pestana === 'todos' ? 'active' : ''}`}
+            aria-pressed={pestana === 'todos'}
+            onClick={() => setPestana('todos')}
           >
-            Todos ({friends.length})
+            {t('friend.list')} ({amigos.length})
           </button>
           <button
-            className={`friend-tab ${activeTab === 'online' ? 'active' : ''}`}
-            onClick={() => setActiveTab('online')}
+            type="button"
+            className={`friend-tab ${pestana === 'enLinea' ? 'active' : ''}`}
+            aria-pressed={pestana === 'enLinea'}
+            onClick={() => setPestana('enLinea')}
           >
-            En Línea ({friends.filter((f) => f.online).length})
+            {t('hub.enLinea')} ({enLinea.length})
           </button>
-          {requests.length > 0 && (
+          {solicitudes.length > 0 && (
             <button
-              className={`friend-tab ${activeTab === 'requests' ? 'active' : ''}`}
-              onClick={() => setActiveTab('requests')}
+              type="button"
+              className={`friend-tab ${pestana === 'solicitudes' ? 'active' : ''}`}
+              aria-pressed={pestana === 'solicitudes'}
+              onClick={() => setPestana('solicitudes')}
             >
-              Solicitudes ({requests.length})
+              {t('friend.requests')} ({solicitudes.length})
             </button>
           )}
         </div>
 
-        {/* Lista de Amigos / Solicitudes */}
         <div className="friends-list-container">
-          {/* Solicitudes de Amistad Pendientes */}
-          {activeTab === 'requests' || (requests.length > 0 && activeTab === 'all') ? (
-            requests.length > 0 && (
-              <div className="friends-section">
-                <div className="friends-section-title">
-                  <UserPlus size={14} /> Solicitudes Pendientes ({requests.length})
-                </div>
-                {requests.map((r) => (
-                  <div key={r.id} className="friend-card request-card">
-                    <div className="friend-user-info">
-                      <div className="friend-avatar-placeholder">
-                        {r.username.charAt(0).toUpperCase()}
-                      </div>
-                      <span className="friend-username">{r.username}</span>
-                    </div>
-
-                    <div className="friend-card-actions">
-                      <button className="friend-action-icon btn-accept-req" onClick={() => respond(r.id, true)} title="Aceptar Solicitud">
-                        <UserCheck size={16} />
-                      </button>
-                      <button className="friend-action-icon btn-decline-req" onClick={() => respond(r.id, false)} title="Rechazar">
-                        <UserX size={16} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+          {/* Las solicitudes se ven en su pestaña y, si las hay, también en la
+              general: son lo único que caduca. */}
+          {solicitudes.length > 0 && pestana !== 'enLinea' && (
+            <div className="friends-section">
+              <div className="friends-section-title">
+                <UserPlus size={14} aria-hidden="true" /> {t('friend.requests')} ({solicitudes.length})
               </div>
-            )
-          ) : null}
+              {solicitudes.map((r) => (
+                <div key={r.id} className="friend-card request-card">
+                  <div className="friend-user-info">
+                    <div className="friend-avatar-placeholder" aria-hidden="true">
+                      {(r.username || '?').charAt(0).toUpperCase()}
+                    </div>
+                    <span className="friend-username">{r.username}</span>
+                  </div>
 
-          {/* Lista de Amigos Registrados */}
-          {activeTab !== 'requests' && (
-            filteredFriends.length === 0 ? (
-              <div className="friends-empty-state">
-                <Users size={36} className="text-slate-600 mb-2" />
-                <p>No tienes amigos en esta lista</p>
-                <span className="text-xs text-slate-500">Comparte tu código para agregar a tus amigos</span>
+                  <div className="friend-card-actions">
+                    <button
+                      type="button"
+                      className="friend-action-icon btn-accept-req"
+                      onClick={() => responder(r.id, true)}
+                      aria-label={t('friend.acceptBtn')}
+                      title={t('friend.acceptBtn')}
+                    >
+                      <UserCheck size={16} aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      className="friend-action-icon btn-decline-req"
+                      onClick={() => responder(r.id, false)}
+                      aria-label={t('friend.declineBtn')}
+                      title={t('friend.declineBtn')}
+                    >
+                      <UserX size={16} aria-hidden="true" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {pestana !== 'solicitudes' && (
+            listados.length === 0 ? (
+              /* Un vacío que explica qué pasa y ofrece la acción siguiente. Sin
+                 agenda la acción es otra, porque el código no existe. */
+              <div className="ov-vacio">
+                <Users size={36} aria-hidden="true" />
+                <p>{conAgenda ? t('friend.empty') : t('degradado.sinAmigos')}</p>
+                {conAgenda ? (
+                  <button type="button" className="btn-premium btn-secondary" onClick={copiarCodigo} aria-disabled={miCodigo ? undefined : 'true'}>
+                    <Copy size={14} aria-hidden="true" /> {t('hub.compartirCodigo')}
+                  </button>
+                ) : (
+                  <span className="ov-vacio-pista">{t('degradado.puedesLlamarMesa')}</span>
+                )}
               </div>
             ) : (
-              filteredFriends.map((f) => (
+              listados.map((f) => (
                 <div key={f.id} className="friend-card">
                   <div className="friend-user-info">
                     <div className="friend-avatar-container">
-                      <div className="friend-avatar-placeholder">
-                        {f.username.charAt(0).toUpperCase()}
+                      <div className="friend-avatar-placeholder" aria-hidden="true">
+                        {(f.username || '?').charAt(0).toUpperCase()}
                       </div>
                       <span className={`friend-status-dot ${f.online ? 'online' : 'offline'}`} />
                     </div>
@@ -230,27 +313,61 @@ export default function FriendsModal({ name, onClose }) {
                     <div className="friend-user-details">
                       <span className="friend-username">{f.username}</span>
                       <div className="friend-elo-badge">
-                        <Zap size={11} className="text-amber-400" />
-                        <span>{f.elo || 1200} ELO</span>
+                        <Zap size={11} aria-hidden="true" />
+                        {/* Sin persistencia el ELO no existe; inventar 1200 es la
+                            misma mentira que las 500 monedas del perfil. */}
+                        <span>{f.elo != null ? `${f.elo} ELO` : '—'}</span>
                       </div>
                     </div>
                   </div>
 
-                  <div className="friend-card-actions">
-                    {f.online && (
-                      <>
-                        <button className="friend-action-icon btn-call" onClick={() => handleCall(f.id)} title="Llamada de Voz Directa">
-                          <Phone size={15} />
-                        </button>
-                        <button className="friend-action-icon btn-challenge" onClick={() => challenge(f.id)} title="Desafiar a Partida 1v1">
-                          <Swords size={15} />
-                        </button>
-                      </>
-                    )}
-                    <button className="friend-action-icon btn-remove" onClick={() => removeFriend(f.id)} title="Eliminar Amigo">
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
+                  {porQuitar === f.id ? (
+                    /* Confirmación EN SU SITIO: sin window.confirm y sin abrir
+                       otro diálogo encima, que haría perder de vista a quién se
+                       está quitando. Los dos botones SON la pregunta. */
+                    <div className="ov-confirmar" role="group" aria-label={t('wait.removeBot', { name: f.username })}>
+                      <button type="button" className="btn-premium ov-peligro" onClick={() => quitar(f.id)}>
+                        {t('wait.removeBot', { name: f.username })}
+                      </button>
+                      <button type="button" className="btn-premium btn-secondary" onClick={() => setPorQuitar(null)}>
+                        {t('common.cancel')}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="friend-card-actions">
+                      {f.online && (
+                        <>
+                          <button
+                            type="button"
+                            className="friend-action-icon btn-call"
+                            onClick={() => llamar(f.id)}
+                            aria-label={t('hub.llamarA', { name: f.username })}
+                            title={t('hub.llamarA', { name: f.username })}
+                          >
+                            <Phone size={15} aria-hidden="true" />
+                          </button>
+                          <button
+                            type="button"
+                            className="friend-action-icon btn-challenge"
+                            onClick={() => retar(f.id)}
+                            aria-label={t('friend.challenge')}
+                            title={t('friend.challenge')}
+                          >
+                            <Swords size={15} aria-hidden="true" />
+                          </button>
+                        </>
+                      )}
+                      <button
+                        type="button"
+                        className="friend-action-icon btn-remove"
+                        onClick={() => setPorQuitar(f.id)}
+                        aria-label={t('wait.removeBot', { name: f.username })}
+                        title={t('wait.removeBot', { name: f.username })}
+                      >
+                        <Trash2 size={14} aria-hidden="true" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))
             )

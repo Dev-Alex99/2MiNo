@@ -142,59 +142,10 @@
   min-width: 0;
 }
 
-/* --- SIDEBAR (SCOREBOARD) --- */
-.sidebar {
-  width: 320px;
-  background: rgba(8, 12, 24, 0.65);
-  backdrop-filter: blur(20px);
-  border-right: 1px solid var(--glass-border);
-  box-shadow: inset 0 0 20px var(--glass-glow), 10px 0 30px rgba(0,0,0,0.3);
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  box-sizing: border-box;
-  flex-shrink: 0;
-  z-index: 10;
-  height: 100%;
-}
-
-.sidebar-top {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  width: 100%;
-}
-
-.sidebar-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  width: 100%;
-}
-
-.sidebar-title-box {
-  display: flex;
-  flex-direction: column;
-}
-
-.sidebar-subtitle {
-  color: var(--text-muted);
-  font-size: 0.65rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-}
-
-.sidebar-title {
-  color: #fff;
-  font-weight: 800;
-  font-size: 1.25rem;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
+/* Aquí vivía la BARRA LATERAL de marcador (.sidebar y sus seis hijos), que
+   dejó de renderizarse cuando el marcador se mudó a .game-bar. Lo único que
+   sobrevivió de aquella era es .mute-btn, que la barra de partida reutiliza
+   para todos sus botones de icono. */
 .mute-btn {
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--glass-border);
@@ -223,12 +174,6 @@
   height: 1px;
   background: rgba(255, 255, 255, 0.06);
   width: 100%;
-}
-
-.sidebar-header-actions {
-  display: flex;
-  gap: 6px;
-  flex-shrink: 0;
 }
 
 /* --- CONFIRMACIÓN AL ABANDONAR --- */
@@ -280,63 +225,11 @@
 }
 .leave-confirm-no:hover { background: rgba(255, 255, 255, 0.1); }
 
-.sidebar-section-title {
-  color: var(--text-muted);
-  font-size: 0.65rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  margin-bottom: 10px;
-  display: block;
-}
-
-.players-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.player-card {
-  display: flex;
-  flex-direction: column;
-  padding: 12px 14px;
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.04);
-  transition: all 0.3s;
-  position: relative;
-  overflow: hidden;
-}
-
-.player-card.active-turn {
-  background: rgba(16, 185, 129, 0.06);
-  border-color: rgba(16, 185, 129, 0.25);
-  box-shadow: 0 0 15px rgba(16, 185, 129, 0.05);
-}
-
-.player-card.active-turn::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 4px;
-  height: 100%;
-  background: var(--primary);
-  box-shadow: 0 0 8px var(--primary);
-}
-
-.player-card-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.player-info-left {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
+/* Resto de la era "barra lateral": .sidebar-section-title, .players-list y la
+   familia .player-card (tarjeta, turno activo, filas). Las tres clases que
+   siguen SÍ tienen dueño vivo y por eso se quedan aquí:
+   .player-avatar y .player-badge-me las pinta la sala de espera, y
+   .player-meta / .player-name las reutiliza el tablero de Tres en Raya. */
 .player-avatar {
   width: 32px;
   height: 32px;
@@ -344,7 +237,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: white;
+  /* El fondo lo escribe WaitingRoom con colorDeJugador(); este es el respaldo
+     para cuando no hay color. Las iniciales van en tinta oscura porque los
+     cuatro tonos de identidad son claros: en blanco no se leerían. Es el mismo
+     par que usa .cinta-cara. */
+  background: var(--sup-3);
+  color: var(--sup-0);
   font-weight: 800;
   font-size: 0.75rem;
   box-shadow: 0 4px 8px rgba(0,0,0,0.2);
@@ -412,43 +310,11 @@
 .game-bar-score b.team-1 { color: #f43f5e; }
 .game-bar-sep { color: var(--text-muted); font-weight: 600; font-size: 0.62rem; }
 
-/* Turno + reloj. Antes flotaba sobre el tablero y tapaba a los jugadores. */
-.game-bar-turn {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 8px;
-  border-radius: 9px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--glass-border);
-  font-size: 0.65rem;
-  font-weight: 800;
-  color: var(--text-muted);
-  min-width: 0;
-  transition: all 0.25s;
-}
-.game-bar-turn.mine {
-  background: rgba(16, 185, 129, 0.14);
-  border-color: rgba(16, 185, 129, 0.4);
-  color: var(--primary);
-}
-.game-bar-turn.urgent {
-  border-color: rgba(239, 68, 68, 0.5);
-  color: #f87171;
-}
-.game-bar-turn-name {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.game-bar-timer {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  font-variant-numeric: tabular-nums;
-  flex-shrink: 0;
-}
-
+/* La píldora de turno (.game-bar-turn) y el reloj (.game-bar-timer) vivían
+   aquí. El turno ya no es un texto en la barra: es el canto que se drena del
+   chip de quien juega (cinta.css). El texto a 0,65rem recortado a 105px de
+   ancho era además la única señal de turno en escritorio, y a 4,25:1 no
+   llegaba al mínimo de contraste. */
 .game-bar-actions {
   margin-left: auto;
   display: flex;
@@ -472,129 +338,23 @@
   background: #141a2a;
 }
 
-.mobile-bar-round {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  font-size: 0.62rem;
-  font-weight: 800;
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
+/* Aquí acababa la era "barra lateral": la barra móvil paralela
+   (.mobile-bar-round/-score/-vs/-actions y .leave-confirm.mobile-leave), que
+   duplicaba lo que hoy hace .game-bar en los dos tamaños.
 
-.mobile-bar-score {
-  display: flex;
-  align-items: baseline;
-  gap: 2px;
-  font-size: 0.72rem;
-  font-weight: 800;
-  color: #fff;
-  font-variant-numeric: tabular-nums;
-  flex-shrink: 0;
-}
-.mobile-bar-score b.team-0 { color: #10b981; }
-.mobile-bar-score b.team-1 { color: #f43f5e; }
-.mobile-bar-vs { color: var(--text-muted); font-weight: 600; font-size: 0.6rem; }
+   Y aquí vivían LOS ASIENTOS FLOTANTES (.seat y sus dieciséis variantes). Se
+   pintaban en absoluto sobre el tablero con z-index 14 —por encima de los
+   botones de extremo, que quedaban atrapados dentro del contexto de apilamiento
+   de .board-canvas— y obligaban a descontarle 170 de los 375px de ancho al
+   tablero aunque en 1 contra 1 solo existiera uno. Los sustituye la cinta de
+   turno (.cinta, cinta.css), que está en flujo y cuesta ancho cero.
 
-.mobile-bar-actions {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-.mobile-bar-actions .mute-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-}
-
-.leave-confirm.mobile-leave {
-  position: absolute;
-  top: 100%;
-  right: 6px;
-  z-index: 45;
-  width: 230px;
-  margin-top: 4px;
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
-  background: #141a2a;
-}
-
-/* --- ASIENTOS ALREDEDOR DEL TABLERO (móvil) ---
-   Van flotando: no le quitan ni un píxel al tablero, que es justo el problema
-   que tenía la barra lateral. */
-.seat {
-  position: absolute;
-  z-index: 14;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  padding: 4px;
-  border-radius: 9px;
-  background: rgba(4, 10, 8, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  backdrop-filter: blur(6px);
-  width: 108px;
-  transition: border-color 0.2s, box-shadow 0.2s;
-  pointer-events: none; /* no roba el arrastre del tablero */
-}
-.seat.targetable {
-  pointer-events: auto;
-  cursor: pointer;
-  border-color: #34d399;
-  border-style: solid;
-  box-shadow: 0 0 16px rgba(52, 211, 153, 0.4), inset 0 0 8px rgba(52, 211, 153, 0.2);
-  animation: pulse-glow 1.2s ease-in-out infinite alternate;
-}
-.seat.targetable:hover {
-  transform: scale(1.08);
-  border-color: #10b981;
-  box-shadow: 0 0 24px rgba(16, 185, 129, 0.6);
-}
-
-.seat-top   { top: 6px;  left: 50%; transform: translateX(-50%); }
-.seat-left  { left: 6px;  top: 50%; transform: translateY(-50%); }
-.seat-right { right: 6px; top: 50%; transform: translateY(-50%); }
-
-/* Turno activo: el borde verde es la señal más barata de leer. */
-.seat.active {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 1px var(--primary), 0 0 12px var(--primary-glow);
-}
-.seat.talking .seat-face { box-shadow: 0 0 0 2px var(--primary); }
-
-.seat.team-0 { border-left: 2px solid #10b981; }
-.seat.team-1 { border-left: 2px solid #f43f5e; }
-
-.seat-face {
-  position: relative;
-  width: 92px;
-  height: 69px;
-  border-radius: 7px;
-  overflow: visible;
-  background: rgba(255, 255, 255, 0.06);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: box-shadow 0.15s;
-}
-
-/* Corona Dorada de Líder */
-.seat-crown {
-  position: absolute;
-  top: -14px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 1.15rem;
-  z-index: 25;
-  filter: drop-shadow(0 2px 6px rgba(251, 191, 36, 0.8));
-  animation: crown-float 2.4s ease-in-out infinite alternate;
-}
-
-@keyframes crown-float {
-  0% { transform: translateX(-50%) translateY(0) scale(1); }
-  100% { transform: translateX(-50%) translateY(-4px) scale(1.1); }
-}
+   Su par `pointer-events: none` / `.seat.targetable { pointer-events: auto }`
+   era el único camino por el que `player_target` y `smuggle_select_player`
+   llegaban a su manejador. NO se ha perdido: CintaTurno.jsx replica la misma
+   regla en JavaScript, cableando onClick/role/tabIndex sólo cuando el chip es
+   objetivo, y las cinco rutas de poderes tienen ahora cobertura en
+   App.test.jsx. */
 
 /* Impacto Ficha Doble ("¡Traz!") y Shockwave */
 .board-tile-wrap.last-played.double-impact {
@@ -631,87 +391,7 @@
   }
 }
 
-.seat-video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transform: scaleX(-1);
-}
-
-.seat-avatar {
-  font-size: 0.95rem;
-  font-weight: 800;
-  color: var(--text-muted);
-}
-
-.seat-shield { position: absolute; top: 2px; right: 2px; color: #818cf8; }
-.seat-mic { position: absolute; bottom: 2px; right: 2px; color: var(--primary); }
-
-.seat-name {
-  font-size: 0.68rem;
-  font-weight: 700;
-  color: #fff;
-  max-width: 100%;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* Las fichas como fichas de verdad, no barritas: se ve de un vistazo quién está
-   a punto de cerrar sin tener que leer un número. */
-.seat-tiles {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  flex-wrap: nowrap;
-}
-.seat-tiles i {
-  width: 4px;
-  height: 11px;
-  border-radius: 1px;
-  background: linear-gradient(to bottom, #fff 0%, #fff 45%, rgba(0,0,0,.35) 47%, #fff 49%, #fff 100%);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
-  flex-shrink: 0;
-}
-.seat-count {
-  font-size: 0.6rem;
-  font-weight: 800;
-  color: #fff;
-  margin-left: 4px;
-  font-variant-numeric: tabular-nums;
-}
-/* Última ficha: aviso de que va a cerrar. */
-.seat-tiles:has(i:only-of-type) .seat-count { color: #fbbf24; }
-
-/* Cartas de poder que le quedan */
-.seat-powers {
-  display: inline-flex;
-  align-items: center;
-  gap: 1px;
-  margin-left: 4px;
-  padding: 0 3px;
-  border-radius: 4px;
-  background: rgba(245, 158, 11, 0.18);
-  color: #fbbf24;
-  font-size: 0.55rem;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-  flex-shrink: 0;
-}
-
-/* Quedan pocas fichas: aviso. */
-.seat-tiles i:only-of-type,
-.seat.active .seat-tiles i { background: #fff; }
-
-.seat-target {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1rem;
-  background: rgba(99, 102, 241, 0.25);
-  border-radius: 9px;
-}
+/* Segunda mitad de los asientos (vídeo, avatar, escudo, micro, nombre, fichas,
+   contador, poderes y diana). Su equivalente vivo está en cinta.css: .cinta-cara,
+   .cinta-avatar, .cinta-fichas, .cinta-cuenta y .cinta-objetivo. */
 

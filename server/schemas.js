@@ -108,17 +108,60 @@ const sendEmoteSchema = z.object({
   targetPlayerId: z.string().max(64).optional().nullable()
 });
 
-const voiceCamSchema = z.object({
-  on: z.boolean().optional()
+// ─── Voz ───
+//
+// Los tres esquemas anteriores (voiceCamSchema, voiceSignalSchema y
+// voiceSpeakingSchema) se han retirado con los eventos que validaban.
+// `voiceSignalSchema` era además inservible: declaraba `{ to, data }` mientras
+// el payload real de la señalización es `{ toPlayerId, signal }`, así que
+// enchufarlo habría rechazado el 100 % del tráfico WebRTC — sin error visible y
+// sin log. Y su `z.any()` no validaba nada de lo que decía proteger.
+//
+// Los objetos EXTERNOS no son .strict() a propósito: durante la ventana de
+// tolerancia el cliente antiguo sigue mandando `poolId` en `accept_call`,
+// `end_call` y `voice_pool_signal`, y zod lo descarta en silencio en vez de
+// rechazar el evento entero. Los topes de longitud sí son estrictos: lo que
+// aquí pasa se reenvía tal cual al navegador de otra persona.
+
+const vozLlamarSchema = z.object({
+  targetPlayerId: z.string().trim().min(1).max(64)
 });
 
-const voiceSignalSchema = z.object({
-  to: z.string().trim().min(1),
-  data: z.any()
+const vozCallIdSchema = z.object({
+  callId: z.string().trim().min(1).max(64)
 });
 
-const voiceSpeakingSchema = z.object({
-  speaking: z.boolean().optional()
+const vozHablandoSchema = z.object({
+  speaking: z.boolean()
+});
+
+const vozDispSchema = z.object({
+  modo: z.enum(['libre', 'no_molestar'])
+});
+
+const vozParEstadoSchema = z.object({
+  peerPlayerId: z.string().trim().min(1).max(64),
+  estado: z.enum(['negociando', 'probando', 'enlazado_bien', 'enlazado_justo', 'inestable', 'sin_ruta'])
+});
+
+const vozSenalSchema = z.object({
+  toPlayerId: z.string().trim().min(1).max(64),
+  signal: z.union([
+    z.object({
+      description: z.object({
+        type: z.enum(['offer', 'answer', 'pranswer', 'rollback']),
+        sdp: z.string().max(20000).optional()
+      })
+    }),
+    z.object({
+      candidate: z.object({
+        candidate: z.string().max(1000),
+        sdpMid: z.string().max(64).nullable().optional(),
+        sdpMLineIndex: z.number().int().min(0).max(64).nullable().optional(),
+        usernameFragment: z.string().max(256).nullable().optional()
+      })
+    })
+  ])
 });
 
 // Helper de validación
@@ -149,8 +192,11 @@ module.exports = {
   roomOnlySchema,
   sendQuickMessageSchema,
   sendEmoteSchema,
-  voiceCamSchema,
-  voiceSignalSchema,
-  voiceSpeakingSchema,
+  vozLlamarSchema,
+  vozCallIdSchema,
+  vozHablandoSchema,
+  vozDispSchema,
+  vozParEstadoSchema,
+  vozSenalSchema,
   validate
 };

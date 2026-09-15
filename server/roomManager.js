@@ -1,8 +1,10 @@
 const DominoGame = require('./gameLogic');
 const GameRegistry = require('./core/GameRegistry');
 // La IA de dominó (chooseMove/choosePower) ya NO se usa aquí: cada juego pilota
-// sus bots vía game.playBotTurn(). Solo se conserva el generador de nombres.
-const { pickBotName } = require('./botLogic');
+// sus bots vía game.playBotTurn(). Del módulo solo se conservan el generador de
+// nombres y el ritmo de pensar, que es orquestación pura (un temporizador) pero
+// depende del nivel del bot, que es cosa de la IA.
+const { pickBotName, ritmoDePensarMs } = require('./botLogic');
 const seatAliases = require('./seatAliases');
 
 // Almacén de salas activas: roomId -> BaseGame (DominoGame, etc.)
@@ -292,7 +294,10 @@ function scheduleBotTurn(io, roomId) {
   const current = typeof game.getCurrentPlayer === 'function' ? game.getCurrentPlayer() : null;
   if (!current || !current.isBot) return;
 
-  const thinkMs = 700 + Math.floor(Math.random() * 900);
+  // El ritmo lo fija el nivel del bot: un 'fácil' impulsivo y un 'maestro' que
+  // se para de verdad en las jugadas críticas. Es la única señal de dificultad
+  // que el jugador percibe turno a turno, antes de ver ninguna estadística.
+  const thinkMs = ritmoDePensarMs(game, current);
 
   botTimers.set(roomId, setTimeout(() => {
     botTimers.delete(roomId);
@@ -483,6 +488,12 @@ function createRoomFor(io, socket, name, playerId, opts = {}) {
   return { roomId, playerId: actualPlayerId };
 }
 
+// Nivel de los bots del torneo por ronda. Antes TODOS se creaban como
+// 'dificil', que era un alias de 'normal': cuatro rondas contra el mismo rival
+// disfrazado. Ahora el cuadro sube de verdad —la final se juega contra un
+// maestro—, que es lo que un torneo con premio debería prometer.
+const NIVEL_BOT_TORNEO = { sf1: 'dificil', sf2: 'dificil', final: 'maestro' };
+
 // Crea una sala 1v1 para una partida de torneo y la arranca. `seats` son dos
 // plazas { seedIdx, id, name, isHuman, socketId }; cada humano se añade como
 // jugador y cada bot con addBot. Devuelve el mapa playerId -> seedIdx.
@@ -504,7 +515,7 @@ function createMatchRoom(io, { seats, maxScore, maxPip, tournamentId, slot }) {
       if (p) p.ready = true;
       seedByPlayerId[seat.id] = seat.seedIdx;
     } else {
-      const bot = game.addBot(seat.name, 'dificil');
+      const bot = game.addBot(seat.name, NIVEL_BOT_TORNEO[slot] || 'dificil');
       if (bot) seedByPlayerId[bot.id] = seat.seedIdx;
     }
   }

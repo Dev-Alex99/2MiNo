@@ -117,6 +117,18 @@
   background: rgba(245, 158, 11, 0.14); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.45);
 }
 .bracket-player.is-human { border-left: 3px solid #818cf8; }
+
+/* La corona del anfitrión y la del campeón. `text-amber-400` es un nombre de
+   Tailwind y este proyecto NO tiene Tailwind: la clase no estaba declarada en
+   ninguna hoja, así que las cuatro coronas (TournamentBracket:103,
+   TournamentHub:65, :92 y :140) salían en `currentColor` — gris de texto en
+   tres de los cuatro sitios. Se declara aquí, con el token de latón, porque
+   los tres ficheros que la escriben no son de este paquete y una regla es más
+   barata y menos arriesgada que tocarlos. Cuando su dueño pueda, el cambio
+   honesto es renombrarla a algo del proyecto (`.host-crown` ya existe en
+   sala.css y significa exactamente esto) y borrar estas dos líneas. */
+.text-amber-400 { color: var(--laton-300); }
+
 .tourney-advance-note {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   color: #c4b5fd; font-weight: 700; font-size: 0.9rem;
@@ -166,30 +178,14 @@
 }
 .ranked-find-btn:hover { filter: brightness(1.08); transform: translateY(-1px); }
 
-/* ─── Amigos ─── */
-.friend-row {
-  display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  padding: 8px 10px; margin-top: 6px; border-radius: 10px;
-  background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.06);
-}
-.friend-name { display: flex; align-items: center; gap: 8px; font-size: 0.88rem; color: #e2e8f0; font-weight: 600; min-width: 0; }
-.friend-dot { width: 8px; height: 8px; border-radius: 50%; background: #6b7280; flex-shrink: 0; }
-.friend-dot.online { background: #34d399; box-shadow: 0 0 6px rgba(52, 211, 153, 0.7); }
-.friend-elo { display: inline-flex; align-items: center; gap: 3px; font-size: 0.78rem; font-weight: 700; color: #818cf8; }
-.friend-accept, .friend-decline {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 30px; height: 30px; border-radius: 8px; cursor: pointer; border: none;
-}
-.friend-accept { background: rgba(16, 185, 129, 0.18); color: #34d399; }
-.friend-accept:hover { background: rgba(16, 185, 129, 0.3); }
-.friend-decline { background: rgba(239, 68, 68, 0.14); color: #f87171; }
-.friend-decline:hover { background: rgba(239, 68, 68, 0.26); }
-.friend-challenge-btn {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 30px; height: 30px; border-radius: 8px; cursor: pointer; border: none;
-  background: linear-gradient(135deg, #6366f1, #4f46e5); color: #fff;
-}
-.friend-challenge-btn:hover { filter: brightness(1.1); }
+/* ─── Amigos ───
+   Aquí estaba la PRIMERA lista de amigos (.friend-row, .friend-name,
+   .friend-dot, .friend-elo, .friend-accept, .friend-decline,
+   .friend-challenge-btn): la que se dibujaba en línea dentro del lobby antes
+   de que existiera FriendsModal. Ninguna de las siete aparece en un JSX — ojo
+   con `.friend-elo`, que sobrevive en el modal como `.friend-elo-badge` y es
+   otra clase, con otro color y otro tamaño. La lista viva es la de
+   `.friend-card` unas líneas más abajo. */
 
 /* ─── Toast de invitación de amigo ─── */
 .friend-invite-toast {
@@ -205,7 +201,11 @@
 .friend-invite-actions .btn-premium { padding: 8px 18px; font-size: 0.85rem; }
 
 /* =============================================================
-   SISTEMA DE ESTILOS DEL HUB MULTIJUGADOR (GAME HUB)
+   LO QUE QUEDA DEL HUB ANTIGUO: una sola regla, la de la pantalla.
+   HubDashboard la monta como `hub-screen vest` y styles/vestibulo.css se
+   encarga del resto (`.hub-screen.vest` le devuelve el desbordamiento a
+   `visible`, entre otras cosas). Se conserva porque es la base sobre la que
+   aquélla pisa, no por inercia.
    ============================================================= */
 
 .hub-screen {
@@ -221,457 +221,27 @@
   font-family: var(--font-family, 'Outfit', sans-serif);
 }
 
-/* Esferas de luz animadas en el fondo */
-.hub-glow-1 {
-  position: absolute; top: -100px; left: -100px; width: 400px; height: 400px;
-  background: rgba(99, 102, 241, 0.15); filter: blur(90px); border-radius: 50%;
-  pointer-events: none;
-}
-.hub-glow-2 {
-  position: absolute; top: 40%; right: -100px; width: 450px; height: 450px;
-  background: rgba(168, 85, 247, 0.12); filter: blur(100px); border-radius: 50%;
-  pointer-events: none;
-}
-.hub-glow-3 {
-  position: absolute; bottom: -100px; left: 30%; width: 400px; height: 400px;
-  background: rgba(16, 185, 129, 0.12); filter: blur(90px); border-radius: 50%;
-  pointer-events: none;
-}
+/* Aquí vivían las 451 líneas del HUB ANTIGUO, sustituido entero por
+   styles/vestibulo.css: las tres esferas de luz de 1250x1250 px con blur
+   permanente (.hub-glow-1/2/3 — la tercera sobresalía 100 px por debajo de su
+   caja y hacía que el hub dejara scrollear 100 px de nada), la cabecera
+   (.hub-topbar, .hub-brand*, .hub-title, .hub-subtitle, .hub-actions,
+   .hub-btn* y su @media privado de 768 px, el de los cuatro cuadraditos
+   anónimos de 48x32), el cuerpo (.hub-main-content, con el padding de 32/24
+   que nunca se reducía), el banner (.hub-hero*, .hub-pill), las métricas
+   (.hub-metrics-box, .hub-metric-*, .pulse-dot, .text-emerald, .text-indigo)
+   y el catálogo (.hub-section-*, .hub-games-grid, .hub-card* con
+   .badge-active/.badge-soon). Comprobado nombre a nombre contra todo
+   client/src: cero apariciones. Lo único que se queda de aquel bloque es
+   `.hub-screen`, aquí arriba, porque HubDashboard sigue montándolo como
+   `hub-screen vest`; el resto de la pantalla es `.vest-*`.
 
-/* Header Superior de Navegación */
-.hub-topbar {
-  width: 100%;
-  background: rgba(15, 23, 42, 0.85);
-  backdrop-filter: blur(16px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 16px 28px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  z-index: 50;
-  position: sticky;
-  top: 0;
-}
-
-.hub-brand {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.hub-brand-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
-  background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #ffffff;
-  box-shadow: 0 4px 18px rgba(99, 102, 241, 0.4);
-}
-
-.hub-brand-text {
-  display: flex;
-  flex-direction: column;
-}
-
-.hub-title {
-  font-size: 1.3rem;
-  font-weight: 900;
-  letter-spacing: 0.05em;
-  background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 50%, #818cf8 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-
-.hub-subtitle {
-  font-size: 0.72rem;
-  color: #94a3b8;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-
-/* Botones de acción del header */
-.hub-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.hub-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  border-radius: 12px;
-  font-size: 0.85rem;
-  font-weight: 700;
-  cursor: pointer;
-  border: 1px solid transparent;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-}
-
-.hub-btn:hover {
-  transform: translateY(-2px);
-}
-.hub-btn:active {
-  transform: translateY(0);
-}
-
-.hub-btn-store {
-  background: rgba(30, 41, 59, 0.9);
-  border-color: rgba(245, 158, 11, 0.4);
-  color: #fbbf24;
-}
-.hub-btn-store:hover {
-  background: rgba(245, 158, 11, 0.15);
-  box-shadow: 0 0 16px rgba(245, 158, 11, 0.3);
-}
-
-.hub-btn-ranking {
-  background: rgba(30, 41, 59, 0.9);
-  border-color: rgba(168, 85, 247, 0.4);
-  color: #c084fc;
-}
-.hub-btn-ranking:hover {
-  background: rgba(168, 85, 247, 0.15);
-  box-shadow: 0 0 16px rgba(168, 85, 247, 0.3);
-}
-
-.hub-btn-friends {
-  background: rgba(30, 41, 59, 0.9);
-  border-color: rgba(56, 189, 248, 0.4);
-  color: #38bdf8;
-}
-.hub-btn-friends:hover {
-  background: rgba(56, 189, 248, 0.15);
-  box-shadow: 0 0 16px rgba(56, 189, 248, 0.3);
-}
-
-.hub-btn-profile {
-  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
-  color: #ffffff;
-  box-shadow: 0 4px 16px rgba(79, 70, 229, 0.4);
-}
-.hub-btn-profile:hover {
-  box-shadow: 0 6px 20px rgba(79, 70, 229, 0.6);
-}
-
-/* Área Principal de Contenido */
-.hub-main-content {
-  flex: 1;
-  max-width: 1280px;
-  width: 100%;
-  margin: 0 auto;
-  padding: 32px 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 32px;
-  z-index: 10;
-}
-
-/* Banner Hero */
-.hub-hero {
-  position: relative;
-  border-radius: 24px;
-  padding: 36px;
-  background: linear-gradient(135deg, rgba(30, 27, 75, 0.7) 0%, rgba(15, 23, 42, 0.9) 100%);
-  border: 1px solid rgba(99, 102, 241, 0.25);
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(12px);
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  flex-wrap: wrap;
-}
-
-.hub-hero-info {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  max-width: 640px;
-}
-
-.hub-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 12px;
-  border-radius: 20px;
-  background: rgba(99, 102, 241, 0.15);
-  border: 1px solid rgba(129, 140, 248, 0.3);
-  color: #a5b4fc;
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  width: fit-content;
-}
-
-.hub-hero-title {
-  font-size: 2.2rem;
-  font-weight: 900;
-  color: #ffffff;
-  letter-spacing: -0.02em;
-}
-
-.hub-hero-desc {
-  font-size: 0.95rem;
-  color: #cbd5e1;
-  line-height: 1.6;
-}
-
-/* Métricas Rápidas */
-.hub-metrics-box {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  background: rgba(15, 23, 42, 0.8);
-  padding: 16px 24px;
-  border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.hub-metric-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-}
-
-.hub-metric-value {
-  font-size: 1.4rem;
-  font-weight: 800;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.text-emerald { color: #34d399; }
-.text-indigo { color: #818cf8; }
-
-.pulse-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #10b981;
-  box-shadow: 0 0 10px #10b981;
-  animation: pulse-glow 2s infinite;
-}
-
-.hub-metric-label {
-  font-size: 0.75rem;
-  color: #94a3b8;
-  font-weight: 600;
-}
-
-.hub-metric-divider {
-  width: 1px;
-  height: 36px;
-  background: rgba(255, 255, 255, 0.1);
-}
-
-/* Sección de Catálogo */
-.hub-section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.hub-section-title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.hub-section-title h3 {
-  font-size: 1.5rem;
-  font-weight: 800;
-  color: #ffffff;
-}
-
-.hub-section-subtitle {
-  font-size: 0.85rem;
-  color: #94a3b8;
-  font-weight: 500;
-}
-
-/* Grid de Juegos */
-.hub-games-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
-  gap: 24px;
-}
-
-/* Tarjeta de Juego */
-.hub-card {
-  background: rgba(15, 23, 42, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 20px;
-  padding: 24px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  position: relative;
-  overflow: hidden;
-  backdrop-filter: blur(10px);
-}
-
-.hub-card.available {
-  cursor: pointer;
-}
-
-.hub-card.available:hover {
-  transform: translateY(-6px);
-  background: rgba(15, 23, 42, 0.95);
-  border-color: rgba(99, 102, 241, 0.5);
-  box-shadow: 0 16px 32px rgba(99, 102, 241, 0.25);
-}
-
-.hub-card.disabled {
-  opacity: 0.65;
-  cursor: not-allowed;
-}
-
-.hub-card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-}
-
-.hub-card-icon {
-  font-size: 2.2rem;
-}
-
-.hub-card-badge {
-  font-size: 0.68rem;
-  font-weight: 800;
-  padding: 4px 10px;
-  border-radius: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.badge-active {
-  background: rgba(99, 102, 241, 0.2);
-  color: #a5b4fc;
-  border: 1px solid rgba(129, 140, 248, 0.4);
-}
-
-.badge-soon {
-  background: rgba(51, 65, 85, 0.6);
-  color: #94a3b8;
-  border: 1px solid rgba(100, 116, 139, 0.4);
-}
-
-.hub-card-body {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 20px;
-}
-
-.hub-card-category {
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: #94a3b8;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.hub-card-title {
-  font-size: 1.3rem;
-  font-weight: 800;
-  color: #ffffff;
-  transition: color 0.2s ease;
-}
-
-.hub-card.available:hover .hub-card-title {
-  color: #818cf8;
-}
-
-.hub-card-desc {
-  font-size: 0.82rem;
-  color: #94a3b8;
-  line-height: 1.5;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.hub-card-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-top: 16px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.hub-card-players {
-  font-size: 0.78rem;
-  color: #94a3b8;
-  font-weight: 600;
-}
-
-.hub-card-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
-  border-radius: 10px;
-  background: #4f46e5;
-  color: #ffffff;
-  font-size: 0.8rem;
-  font-weight: 800;
-  border: none;
-  cursor: pointer;
-  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4);
-  transition: all 0.2s ease;
-}
-
-.hub-card.available:hover .hub-card-btn {
-  background: #6366f1;
-  transform: scale(1.05);
-}
-
-.hub-card-locked {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 0.78rem;
-  color: #64748b;
-  font-weight: 700;
-}
-
-/* Responsivo para móviles */
-@media (max-width: 768px) {
-  .hub-topbar {
-    padding: 12px 16px;
-  }
-  .hub-actions {
-    gap: 8px;
-  }
-  .hub-btn span {
-    display: none; /* Iconos en móvil para ahorrar espacio */
-  }
-  .hub-hero {
-    padding: 24px;
-    flex-direction: column;
-    align-items: flex-start;
-  }
-  .hub-hero-title {
-    font-size: 1.6rem;
-  }
-}
+   Por qué importa que se vaya de AQUÍ y no se pise desde otra hoja:
+   perfil-hub.css se importa en index.css:20, después de responsive.css, así
+   que estas reglas ganaban a igual especificidad a cualquier arreglo móvil
+   del proyecto. Ése fue el motivo de que el hub acabara fabricándose su
+   propio @media privado. Vaciarlo es lo que devuelve el hub a la cascada
+   normal. */
 
 /* =============================================================
    ESTILOS PREMIUM PARA MODAL DE AMIGOS (FRIENDS MODAL)
@@ -1054,258 +624,54 @@
   background: rgba(239, 68, 68, 0.3);
 }
 
-.friends-empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 30px 10px;
-  text-align: center;
-  color: #94a3b8;
-  font-size: 0.85rem;
+/* Aceptar y rechazar una solicitud. Estas dos reglas son lo ÚNICO que se
+   rescata de la capa de voz muerta que había debajo: allí se llamaban
+   `.btn-accept` y `.btn-decline` y las gastaba la tarjeta de llamada
+   entrante. FriendsModal renombró sus botones a `-req` y se quedó sin
+   declararlas, así que hoy aceptar y rechazar son dos iconos de 32 px
+   idénticos, del mismo gris, uno al lado del otro. Se recolocan aquí con la
+   forma de sus vecinos (.btn-call, .btn-challenge, .btn-remove) y con sus
+   mismos colores: verde para lo que suma, rojo para lo que quita. Ni un color
+   nuevo, ni una decisión nueva. */
+.friend-action-icon.btn-accept-req {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
 }
+.friend-action-icon.btn-accept-req:hover {
+  background: rgba(16, 185, 129, 0.35);
+  transform: scale(1.08);
+}
+
+.friend-action-icon.btn-decline-req {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
+.friend-action-icon.btn-decline-req:hover {
+  background: rgba(239, 68, 68, 0.3);
+}
+
+/* `.friends-empty-state` se retiró: compartía elemento con `.ov-vacio`
+   (overlays.css, que se importa después) y ésta redeclara sus OCHO propiedades
+   una a una — display, flex-direction, align-items, justify-content, padding,
+   text-align, color y font-size —, así que ninguna de las de aquí llegaba a
+   aplicarse. Comprobado propiedad a propiedad, no de vista. El nombre muerto ya
+   no está tampoco en el JSX de FriendsModal. */
 
 /* =============================================================
-   ESTILOS OVERLAY DE VOZ Y CHAT FLOTANTE
+   Aquí estaban 240 líneas de la SEGUNDA capa de voz muerta, la del overlay
+   flotante que precedió al widget unificado: .global-voice-overlay, la
+   tarjeta de llamada entrante (.incoming-call-card, .incoming-call-header,
+   .incoming-avatar-ring, .incoming-info, .incoming-badge,
+   .incoming-caller-name, .incoming-call-actions, .voice-action-btn), la de
+   llamada saliente (.outgoing-call-card, .outgoing-avatar-ring,
+   .outgoing-info, .outgoing-title, .outgoing-subtitle, .voice-icon-btn,
+   .btn-hangup) y la barra de llamada activa (.active-call-bar,
+   .active-peer-info, .active-voice-dot, .active-peer-text, .active-peer-name,
+   .active-call-status, .active-call-divider, .active-call-controls,
+   .voice-control-btn). Cero apariciones en client/src: la llamada entrante la
+   pinta hoy `.linea-timbre` y la llamada en curso `.linea-capsula`, las dos
+   en styles/linea.css.
    ============================================================= */
-
-.global-voice-overlay {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  z-index: 1500;
-}
-
-/* 1. Card de Llamada Entrante */
-.incoming-call-card {
-  background: rgba(15, 23, 42, 0.96);
-  border: 1px solid rgba(99, 102, 241, 0.4);
-  padding: 20px;
-  border-radius: 20px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(16px);
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  min-width: 280px;
-}
-
-.incoming-call-header {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-
-.incoming-avatar-ring {
-  width: 46px;
-  height: 46px;
-  border-radius: 50%;
-  background: rgba(99, 102, 241, 0.2);
-  border: 1px solid rgba(129, 140, 248, 0.5);
-  color: #818cf8;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.incoming-info {
-  display: flex;
-  flex-direction: column;
-}
-
-.incoming-badge {
-  font-size: 0.7rem;
-  font-weight: 800;
-  color: #818cf8;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.incoming-caller-name {
-  font-size: 1.1rem;
-  font-weight: 800;
-  color: #ffffff;
-}
-
-.incoming-call-actions {
-  display: flex;
-  gap: 10px;
-}
-
-.voice-action-btn {
-  flex: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 10px;
-  border-radius: 12px;
-  font-size: 0.85rem;
-  font-weight: 700;
-  cursor: pointer;
-  border: none;
-  transition: all 0.2s ease;
-}
-
-.btn-accept {
-  background: #059669;
-  color: #ffffff;
-  box-shadow: 0 4px 14px rgba(5, 150, 105, 0.4);
-}
-.btn-accept:hover {
-  background: #10b981;
-}
-
-.btn-decline {
-  background: rgba(239, 68, 68, 0.2);
-  border: 1px solid rgba(248, 113, 113, 0.4);
-  color: #f87171;
-}
-.btn-decline:hover {
-  background: rgba(239, 68, 68, 0.35);
-}
-
-/* 2. Card Llamada Saliente */
-.outgoing-call-card {
-  background: rgba(15, 23, 42, 0.94);
-  border: 1px solid rgba(245, 158, 11, 0.4);
-  padding: 14px 18px;
-  border-radius: 18px;
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(16px);
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-
-.outgoing-avatar-ring {
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  background: rgba(245, 158, 11, 0.2);
-  border: 1px solid rgba(245, 158, 11, 0.4);
-  color: #fbbf24;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.outgoing-info {
-  display: flex;
-  flex-direction: column;
-}
-
-.outgoing-title {
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: #fbbf24;
-}
-
-.outgoing-subtitle {
-  font-size: 0.72rem;
-  color: #94a3b8;
-}
-
-.voice-icon-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  border: none;
-  transition: all 0.2s ease;
-}
-
-.btn-hangup {
-  background: #dc2626;
-  color: #ffffff;
-  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4);
-}
-.btn-hangup:hover {
-  background: #ef4444;
-}
-
-/* 3. Bar de Llamada Activa */
-.active-call-bar {
-  background: rgba(15, 23, 42, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 10px 16px;
-  border-radius: 18px;
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(16px);
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-
-.active-peer-info {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.active-voice-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #10b981;
-  box-shadow: 0 0 10px #10b981;
-  animation: pulse-glow 2s infinite;
-}
-
-.active-peer-text {
-  display: flex;
-  flex-direction: column;
-}
-
-.active-peer-name {
-  font-size: 0.88rem;
-  font-weight: 800;
-  color: #ffffff;
-}
-
-.active-call-status {
-  font-size: 0.7rem;
-  color: #34d399;
-  font-weight: 600;
-}
-
-.active-call-divider {
-  width: 1px;
-  height: 24px;
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.active-call-controls {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.voice-control-btn {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  background: rgba(30, 41, 59, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: #cbd5e1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-.voice-control-btn:hover {
-  background: rgba(51, 65, 85, 0.9);
-  color: #ffffff;
-}
-.voice-control-btn.muted {
-  background: rgba(239, 68, 68, 0.2);
-  border-color: rgba(248, 113, 113, 0.4);
-  color: #f87171;
-}
 
 /* =============================================================
    ESTILOS PARA MENÚ FLOTANTE DE CHAT RÁPIDO (CHAT.JSX)
@@ -1313,8 +679,15 @@
 
 .chat-fab-container {
   position: fixed;
-  bottom: 24px;
-  left: 24px;
+  /* ARRIBA DE LAS DOS BANDAS Y A LA DERECHA. Antes era `bottom: 24px; left: 24px`
+     y eso lo dejaba DENTRO de la banda de la mano: medido en un teléfono de 375,
+     el botón (24-72 x 740-788) tapaba las dos primeras fichas, que además son
+     las que se pulsan para jugar. Se sube por encima del riel y de la mano
+     usando sus propios tokens —así sigue bien si cambian de alto— y se pasa a la
+     derecha porque a esa altura la izquierda ya la ocupan los controles de la
+     mesa (centrar, crónica, cuadro). */
+  bottom: calc(var(--mano-alto, 116px) + var(--riel-alto, 56px) + 12px + env(safe-area-inset-bottom));
+  right: 24px;
   width: auto;
   height: auto;
   z-index: 1300;
@@ -1347,8 +720,11 @@
 .chat-menu {
   position: absolute;
   bottom: 60px;
-  left: 0;
+  /* Se abre hacia la IZQUIERDA porque su anclaje está a la derecha: con
+     `left: 0` los 280 px del panel se salían de la pantalla en un móvil. */
+  right: 0;
   width: 280px;
+  max-width: calc(100vw - 32px);
   background: rgba(15, 23, 42, 0.95);
   backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -1550,46 +926,11 @@
   background: rgba(255, 255, 255, 0.03);
 }
 
-/* Rank Badges */
-.rank-badge-top1 {
-  background: rgba(245, 158, 11, 0.2);
-  color: #fbbf24;
-  border: 1px solid rgba(245, 158, 11, 0.4);
-  font-weight: 900;
-  padding: 2px 8px;
-  border-radius: 8px;
-}
-
-.rank-badge-top2 {
-  background: rgba(148, 163, 184, 0.2);
-  color: #cbd5e1;
-  border: 1px solid rgba(148, 163, 184, 0.4);
-  font-weight: 800;
-  padding: 2px 8px;
-  border-radius: 8px;
-}
-
-.rank-badge-top3 {
-  background: rgba(180, 83, 9, 0.2);
-  color: #f97316;
-  border: 1px solid rgba(180, 83, 9, 0.4);
-  font-weight: 800;
-  padding: 2px 8px;
-  border-radius: 8px;
-}
-
-/* Divisiones ELO */
-.elo-division-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 0.72rem;
-  font-weight: 700;
-  padding: 2px 8px;
-  border-radius: 12px;
-  background: rgba(99, 102, 241, 0.15);
-  color: #a5b4fc;
-}
+/* Aquí estaban las insignias del ranking VIEJO: .rank-badge-top1/2/3 (oro,
+   plata y bronce para las tres primeras filas) y .elo-division-badge.
+   LeaderboardModal no las pinta —su primer puesto es `.winner`— y la división
+   del perfil es `.profile-rank-badge`, que lleva su color en línea. Ninguna
+   de las cuatro aparece en un JSX. */
 
 /* ─── PERFIL DE USUARIO ─── */
 .profile-stats-grid {
@@ -1599,18 +940,15 @@
   margin-bottom: 20px;
 }
 
-.profile-stat-card {
-  background: rgba(30, 41, 59, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 14px;
-  padding: 14px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  text-align: center;
-}
-
+/* `.profile-stat-card` se retira: la rejilla la sigue usando ProfileModal,
+   pero sus celdas son `.profile-stat` (lobby.css:1031), no ésta. Sólo se van
+   las once líneas de la tarjeta.
+   OJO, y NO se toca aquí: la rejilla, el número y la etiqueta están
+   declarados DOS veces, allí y aquí, con valores distintos (3 columnas fijas
+   contra auto-fit, 1.5rem contra 1.3rem, --text-muted contra #94a3b8). Ganan
+   éstas por orden de import, así que borrarlas no es podar: es cambiar de
+   aspecto el perfil sin decirlo. Unificarlas es una decisión visual, no una
+   supresión, y necesita a alguien mirando la pantalla. */
 .profile-stat-num {
   font-size: 1.3rem;
   font-weight: 800;
@@ -1637,556 +975,51 @@
   gap: 6px;
 }
 
-.achievement-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 10px;
-  margin-bottom: 20px;
-}
+/* Aquí estaban tres bloques muertos seguidos, 220 líneas:
 
-.achievement-card {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: rgba(30, 41, 59, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  opacity: 0.5;
-  transition: all 0.2s ease;
-}
+   (1) LOS LOGROS VIEJOS (.achievement-grid, .achievement-card con su
+       .unlocked, .achievement-icon, .achievement-info, .achievement-name,
+       .achievement-desc). ProfileModal pinta los logros con `.profile-ach`,
+       que declara lobby.css: era la misma sección implementada dos veces.
 
-.achievement-card.unlocked {
-  opacity: 1;
-  background: rgba(16, 185, 129, 0.1);
-  border-color: rgba(52, 211, 153, 0.3);
-}
+   (2) LA TIENDA VIEJA (.store-grid, .store-card-item, .store-item-preview,
+       .store-item-name, .store-item-desc, .store-action-btn con .equipped,
+       .buy y .equip). SkinStoreModal pinta su rejilla con estilos en línea y
+       sus botones con `.btn-premium`: ninguna de las ocho llegó nunca al DOM.
 
-.achievement-icon {
-  font-size: 1.3rem;
-}
+   (3) EL MODAL DE INVITAR A LA LLAMADA (.voice-invite-modal —la PRIMERA de
+       sus dos declaraciones, la que perdía contra la de más abajo y era ruido
+       puro—, .voice-invite-header/-title/-close/-list/-empty/-row/-name/-btn).
+       Invitar a alguien a la línea es hoy el bloque GENTE de la hoja
+       (linea.css). */
 
-.achievement-info {
-  display: flex;
-  flex-direction: column;
-}
+/* =============================================================
+   Aquí estaban las 330 líneas de la SUITE UNIFICADA DE VOZ, la TERCERA capa
+   muerta del mismo fichero y la última que llegó a verse en pantalla:
+   .unified-voice-wrapper con sus variantes .floating (z-index 9999) y
+   .embedded, la barra (.unified-voice-bar, .voice-bar-status,
+   .voice-status-dot/-meta/-title/-sub, .voice-bar-controls), la fila de seis
+   .voice-btn de 30x30 con .is-muted/.active-cam/.btn-hangup, la rejilla de
+   cámaras (.voice-video-grid/-card/-element/-label), los dos popovers
+   (.unified-voice-settings-popover y la SEGUNDA declaración de
+   .voice-invite-modal, ambos con `z-index: 999999 !important`),
+   .popover-header/-title/-close, el `.unified-voice-embedded-idle
+   { display: none }` que escondía la voz dentro de la partida, y el remate
+   .global-voice-overlay-root + .voice-control-btn.is-muted +
+   .active-voice-dot.muted-dot + .voice-panel.active-global-voice +
+   .voice-active-pill + .voice-live-dot/-text + .voice-mic-btn-sm +
+   .voice-hangup-sm-btn.
 
-.achievement-name {
-  font-size: 0.82rem;
-  font-weight: 700;
-  color: #ffffff;
-}
+   Con esto desaparecen los dos `999999 !important` del proyecto y el 9999 del
+   widget flotante, que era lo que perdía contra el 10000 de
+   `.legendary-vortex-overlay` (lobby.css) y hacía imposible contestar una
+   llamada durante un efecto legendario. El timbre de hoy vive en linea.css y
+   se declara por encima de ese 10000 a propósito.
 
-.achievement-desc {
-  font-size: 0.7rem;
-  color: #94a3b8;
-}
-
-/* ─── TIENDA DE SKINS Y TAPETES ─── */
-.store-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 16px;
-  max-height: 420px;
-  overflow-y: auto;
-  padding: 4px;
-}
-
-.store-card-item {
-  background: rgba(30, 41, 59, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
-  padding: 14px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: 12px;
-  transition: all 0.2s ease;
-  position: relative;
-  overflow: hidden;
-}
-
-.store-card-item:hover {
-  background: rgba(30, 41, 59, 0.9);
-  border-color: rgba(99, 102, 241, 0.4);
-  transform: translateY(-2px);
-}
-
-.store-item-preview {
-  height: 80px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 2rem;
-  box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.3);
-}
-
-.store-item-name {
-  font-size: 0.9rem;
-  font-weight: 800;
-  color: #ffffff;
-}
-
-.store-item-desc {
-  font-size: 0.72rem;
-  color: #94a3b8;
-  line-height: 1.4;
-}
-
-.store-action-btn {
-  width: 100%;
-  padding: 8px;
-  border-radius: 10px;
-  font-size: 0.8rem;
-  font-weight: 800;
-  border: none;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  transition: all 0.2s ease;
-}
-
-.store-action-btn.equipped {
-  background: rgba(16, 185, 129, 0.2);
-  border: 1px solid rgba(52, 211, 153, 0.4);
-  color: #34d399;
-}
-
-.store-action-btn.buy {
-  background: linear-gradient(135deg, #d97706, #b45309);
-  color: #ffffff;
-  box-shadow: 0 4px 12px rgba(217, 119, 6, 0.3);
-}
-.store-action-btn.buy:hover {
-  filter: brightness(1.1);
-}
-
-.store-action-btn.equip {
-  background: #4f46e5;
-  color: #ffffff;
-}
-.store-action-btn.equip:hover {
-  background: #6366f1;
-}
-
-/* Modal Emergente para Sumar Amigos a la Llamada */
-.voice-invite-modal {
-  position: absolute;
-  bottom: 60px;
-  right: 0;
-  width: 240px;
-  background: rgba(15, 23, 42, 0.95);
-  backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 16px;
-  padding: 12px;
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.5);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.voice-invite-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  padding-bottom: 6px;
-}
-
-.voice-invite-title {
-  font-size: 0.78rem;
-  font-weight: 800;
-  color: #ffffff;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.voice-invite-close {
-  background: transparent;
-  border: none;
-  color: #94a3b8;
-  cursor: pointer;
-}
-
-.voice-invite-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  max-height: 160px;
-  overflow-y: auto;
-}
-
-.voice-invite-empty {
-  font-size: 0.72rem;
-  color: #94a3b8;
-  text-align: center;
-  padding: 10px 0;
-}
-
-.voice-invite-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 6px 8px;
-  border-radius: 8px;
-  background: rgba(30, 41, 59, 0.6);
-}
-
-.voice-invite-name {
-  font-size: 0.8rem;
-  font-weight: 700;
-  color: #f8fafc;
-}
-
-.voice-invite-btn {
-  padding: 3px 8px;
-  border-radius: 6px;
-  background: #10b981;
-  color: #ffffff;
-  font-size: 0.72rem;
-  font-weight: 700;
-  border: none;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-.voice-invite-btn:hover {
-  background: #059669;
-}
-
-/* === SUITE UNIFICADA DE VOZ & VÍDEO (UNIFIED VOICE WIDGET) === */
-.unified-voice-wrapper {
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.unified-voice-wrapper.floating {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  z-index: 9999;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 10px;
-  pointer-events: auto;
-}
-
-.unified-voice-wrapper.embedded {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.unified-voice-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 8px 14px;
-  background: rgba(15, 23, 42, 0.9);
-  backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 20px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
-}
-
-.voice-bar-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.voice-status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-.voice-status-dot.active {
-  background: #10b981;
-  box-shadow: 0 0 8px #10b981;
-}
-.voice-status-dot.muted {
-  background: #ef4444;
-  box-shadow: 0 0 8px #ef4444;
-}
-
-.voice-status-meta {
-  display: flex;
-  flex-direction: column;
-}
-
-.voice-status-title {
-  font-size: 0.78rem;
-  font-weight: 800;
-  color: #f8fafc;
-  line-height: 1.1;
-}
-
-.voice-status-sub {
-  font-size: 0.65rem;
-  color: #94a3b8;
-}
-
-.voice-bar-controls {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.voice-btn {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #f8fafc;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.voice-btn:hover {
-  background: rgba(255, 255, 255, 0.18);
-  transform: translateY(-1px);
-}
-
-.voice-btn.is-muted {
-  background: rgba(239, 68, 68, 0.25) !important;
-  border-color: rgba(239, 68, 68, 0.5) !important;
-  color: #ef4444 !important;
-}
-
-.voice-btn.active-cam {
-  background: rgba(16, 185, 129, 0.25) !important;
-  border-color: rgba(52, 211, 153, 0.5) !important;
-  color: #34d399 !important;
-}
-
-.voice-btn.btn-hangup {
-  background: rgba(239, 68, 68, 0.2);
-  border-color: rgba(239, 68, 68, 0.4);
-  color: #ef4444;
-}
-.voice-btn.btn-hangup:hover {
-  background: #ef4444;
-  color: #ffffff;
-}
-
-/* Rejilla de Tarjetas de Vídeo Cámara */
-.voice-video-grid {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  max-width: 320px;
-}
-
-.voice-video-card {
-  position: relative;
-  width: 100px;
-  height: 75px;
-  border-radius: 12px;
-  overflow: hidden;
-  background: #090d16;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-}
-
-.voice-video-card.local {
-  border-color: rgba(16, 185, 129, 0.5);
-}
-
-.voice-video-element {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.voice-video-label {
-  position: absolute;
-  bottom: 4px;
-  left: 4px;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
-  padding: 1px 5px;
-  border-radius: 4px;
-  font-size: 0.62rem;
-  font-weight: 700;
-  color: #ffffff;
-}
-
-/* Popovers de Ajustes e Invitaciones desplegados HACIA ARRIBA */
-.unified-voice-settings-popover {
-  position: absolute;
-  bottom: calc(100% + 12px);
-  right: 0;
-  top: auto;
-  width: 300px;
-  max-height: 420px;
-  overflow-y: auto;
-  background: #0f172a !important;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 16px;
-  padding: 14px;
-  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.85);
-  z-index: 999999 !important;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.voice-invite-modal {
-  position: absolute;
-  bottom: calc(100% + 12px);
-  right: 0;
-  top: auto;
-  width: 270px;
-  max-height: 320px;
-  overflow-y: auto;
-  background: #0f172a !important;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 16px;
-  padding: 14px;
-  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.85);
-  z-index: 999999 !important;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.popover-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  padding-bottom: 8px;
-}
-
-.popover-title {
-  font-size: 0.8rem;
-  font-weight: 800;
-  color: #f8fafc;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.popover-close {
-  background: transparent;
-  border: none;
-  color: #94a3b8;
-  cursor: pointer;
-}
-.popover-close:hover {
-  color: #ffffff;
-}
-
-.unified-voice-embedded-idle {
-  display: none;
-}
-
-
-/* Global Voice Overlay Positioning & Z-Index Standardization */
-.global-voice-overlay-root {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  z-index: 9999;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  pointer-events: auto;
-}
-
-/* Indicador de Silencio Visual en Overlay Flotante */
-.voice-control-btn.is-muted {
-  background: rgba(239, 68, 68, 0.25) !important;
-  border-color: rgba(239, 68, 68, 0.6) !important;
-  color: #ef4444 !important;
-  box-shadow: 0 0 12px rgba(239, 68, 68, 0.3) !important;
-}
-
-.active-voice-dot.muted-dot {
-  background: #ef4444 !important;
-  box-shadow: 0 0 8px #ef4444 !important;
-}
-
-/* Integración Elegante de Llamada Activa dentro de Salas y Tableros */
-.voice-panel.active-global-voice {
-  background: transparent;
-  border: none;
-  padding: 0;
-}
-
-.voice-active-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 12px;
-  background: rgba(15, 23, 42, 0.85);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(16, 185, 129, 0.3);
-  border-radius: 20px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-}
-
-.voice-live-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #10b981;
-  box-shadow: 0 0 8px #10b981;
-}
-
-.voice-live-dot.muted {
-  background: #ef4444;
-  box-shadow: 0 0 8px #ef4444;
-}
-
-.voice-live-text {
-  font-size: 0.76rem;
-  font-weight: 800;
-  color: #f8fafc;
-}
-
-.voice-mic-btn-sm {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: #ffffff;
-  border-radius: 50%;
-  width: 26px;
-  height: 26px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-.voice-mic-btn-sm:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
-.voice-mic-btn-sm.muted {
-  background: rgba(239, 68, 68, 0.3);
-  border-color: rgba(239, 68, 68, 0.6);
-  color: #ef4444;
-}
-
-.voice-hangup-sm-btn {
-  background: rgba(239, 68, 68, 0.2);
-  border: 1px solid rgba(239, 68, 68, 0.4);
-  color: #ef4444;
-  border-radius: 50%;
-  width: 26px;
-  height: 26px;
-  display: flex;
-  align-items: center;
-}
+   `.unified-voice-wrapper` sobrevive en UN sitio y no es CSS: App.test.jsx
+   afirma que hay como mucho un nodo con esa clase. Es una cota, hoy vale cero
+   y sigue en verde sin el fichero.
+   ============================================================= */
 
 /* === ESTILOS TRES EN RAYA (TIC-TAC-TOE) === */
 .tictactoe-container {
@@ -2405,33 +1238,29 @@
   text-shadow: 0 0 16px rgba(244, 63, 94, 0.7);
 }
 
+/* La celda ganadora tenía además `animation: pulse 1s infinite`, y `pulse` no
+   está declarada en ninguna parte: ni en las 19 hojas, ni en index.html, ni
+   inyectada desde un .jsx. O sea, la línea decía que la celda late y la celda
+   nunca ha latido. Se retira, que es lo único que no cambia ni un píxel; la
+   victoria se sigue leyendo por el fondo, el borde y el halo. Si algún día se
+   quiere el latido de verdad, hay que declarar su @keyframes Y apagarlo en el
+   bloque de movimiento reducido (contrato §10), no resucitar este nombre. */
 .tictactoe-cell.winning-cell {
   background: rgba(251, 191, 36, 0.25) !important;
   border: 2px solid #fbbf24 !important;
   box-shadow: 0 0 24px rgba(251, 191, 36, 0.6) !important;
-  animation: pulse 1s infinite;
 }
 
 .tictactoe-footer-actions {
   margin-top: 8px;
 }
 
-
-
-
-
-
 /* ─── Tres en raya: piezas que el tablero usaba sin estilo ─── */
 
-/* La cabecera reparte marca | voz | acciones. `tictactoe-actions` y
-   `tictactoe-voice-slot` se usaban en el JSX pero no existían aquí. */
-.tictactoe-voice-slot {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 0;
-}
-
+/* La cabecera repartía marca | voz | acciones. El hueco de la voz
+   (`.tictactoe-voice-slot`) se retira: el tablero ya no monta ninguna pieza de
+   voz —la línea es global y su control anclado vive en la barra de juego—, y
+   comprobado que TicTacToeBoard.jsx no contiene la cadena 'voice'. */
 .tictactoe-actions {
   display: flex;
   align-items: center;
@@ -2544,7 +1373,9 @@
   white-space: nowrap;
 }
 
-.uno-voice-slot { display: flex; align-items: center; min-width: 0; }
+/* Aquí estaba `.uno-voice-slot`, el hueco de la voz en la cabecera. Se va por
+   lo mismo que su gemelo de tres en raya: UnoBoard.jsx ya no monta nada de
+   voz. */
 
 .uno-btn.btn-exit {
   display: inline-flex;

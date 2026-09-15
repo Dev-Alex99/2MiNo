@@ -22,7 +22,6 @@ const {
   getOnlineCount,
   incOnlineCount,
   decOnlineCount,
-  findMe,
   forgetSocket,
   removeSpectatorEverywhere,
   broadcastLobby,
@@ -33,8 +32,11 @@ const {
 
 const registerRoomHandlers = require('./handlers/roomHandler');
 const registerGameHandlers = require('./handlers/gameHandler');
-const { registerVoiceHandlers, leaveVoice } = require('./handlers/voiceHandler');
+const { registerVoiceHandlers } = require('./handlers/voiceHandler');
 const identity = require('./identity');
+const presence = require('./presence');
+const voicePools = require('./voicePools');
+const db = require('./db');
 require('./games/TicTacToeGame');
 require('./games/UnoGame');
 
@@ -94,6 +96,16 @@ async function getCloudflareIceServers() {
   }
 }
 
+// Qué clase de retransmisión hay configurada, SIN llamar a Cloudflare (esto lo
+// consulta el handshake, que corre en cada conexión). Es una CADENA, nunca un
+// booleano: el copy del cliente ramifica por ella, y `turnConfigured` seguiría
+// diciendo false mientras el servidor sirve tres URLs de openrelay reales.
+function modoTurn() {
+  if (process.env.CF_TURN_KEY_ID && process.env.CF_TURN_API_TOKEN) return 'cloudflare';
+  if (process.env.TURN_URL) return 'custom';
+  return 'free-fallback';
+}
+
 // /ice-config golpea la API de Cloudflare TURN: limitar por IP para que no se
 // use como amplificador ni agote la cuota.
 app.get('/ice-config', httpRateLimit({ windowMs: 60000, max: 30 }), async (req, res) => {
@@ -144,7 +156,11 @@ app.get('/health', httpRateLimit({ windowMs: 60000, max: 60 }), (req, res) => {
     rooms: rooms.size,
     sockets: getOnlineCount(),
     rssMB: +(m.rss / 1048576).toFixed(1),
-    heapMB: +(m.heapUsed / 1048576).toFixed(1)
+    heapMB: +(m.heapUsed / 1048576).toFixed(1),
+    // El margen de gracia de la voz NO es un número medido: si
+    // `graciasExpiradas` domina, sobra margen; si los reenganches llegan
+    // tarde, falta. Se ajusta con esto delante, no de oído.
+    voz: voicePools.instantanea()
   });
 });
 
@@ -177,23 +193,43 @@ io.on('connection', (socket) => {
   // operaciones sociales/económicas de ese socket no encontrarán identidad.
   socket.on('hello', (data) => {
     identity.beginHandshake(socket, data || {})
-      .then((res) => socket.emit('session', {
-        playerId: res.playerId,
-        token: res.token,
-        authed: res.authed,
-        reason: res.reason
-      }))
+      .then((res) => {
+        // La presencia se registra AQUÍ, en el handshake, y no como efecto
+        // colateral de `get_friends`/`get_profile`: los dos están en
+        // HEAVY_EVENTS, así que un paquete descartado por el cubo dejaba al
+        // jugador conectado pero INVISIBLE e INLLAMABLE, sin ningún síntoma.
+        if (res.playerId) {
+          const { becameOnline } = presence.register(socket.id, res.playerId);
+          presence.setActividad(socket.id, { estado: 'libre' });
+          if (becameOnline) {
+            try { require('./friendService').notifyFriendsOfPresence(io, res.playerId); } catch (e) { /* noop */ }
+          }
+        }
+        socket.emit('session', {
+          playerId: res.playerId,
+          token: res.token,
+          authed: res.authed,
+          reason: res.reason,
+          // Qué sabe hacer ESTE servidor. Sin esto el cliente inventa: el
+          // perfil se saca 1200 de ELO y 500 monedas mientras la tienda dice 0
+          // sobre el mismo monedero.
+          capacidades: {
+            persistencia: db.isEnabled(),
+            turnMode: modoTurn(),
+            amigos: db.isEnabled()
+          }
+        });
+      })
       .catch(() => socket.emit('session', { playerId: null, token: null, authed: false }));
   });
 
   // Registrar manejadores modularizados
-  const { leaveVoice: leaveVoiceSelf } = registerVoiceHandlers(io, socket);
-  registerRoomHandlers(io, socket, leaveVoiceSelf);
+  registerVoiceHandlers(io, socket);
+  registerRoomHandlers(io, socket);
   registerGameHandlers(io, socket);
 
   // Evento de Desconexión
   socket.on('disconnect', () => {
-    leaveVoice(io, socket, findMe(socket.id));
     console.log(`Cliente desconectado: ${socket.id}`);
 
     try { require('./tournamentManager').handleDisconnect(io, socket.id); } catch (e) { /* noop */ }

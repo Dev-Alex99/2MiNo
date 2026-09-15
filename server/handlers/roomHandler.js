@@ -35,6 +35,9 @@ const {
   claimMission,
   sendFriendRequest,
   respondFriendRequest,
+  removeFriend,
+  sonAmigos,
+  isEnabled,
   equipItem
 } = require('../db');
 const tournamentManager = require('../tournamentManager');
@@ -42,9 +45,12 @@ const matchmaking = require('../matchmaking');
 const presence = require('../presence');
 const identity = require('../identity');
 const seatAliases = require('../seatAliases');
-const { pushFriendsList, notifyFriendsOfPresence } = require('../friendService');
+const politica = require('../voicePolicy');
+const voicePools = require('../voicePools');
+const { abandonarVozDeMesa } = require('./voiceHandler');
+const { pushFriendsList, difundirPresencia } = require('../friendService');
 
-function registerRoomHandlers(io, socket, leaveVoiceFn) {
+function registerRoomHandlers(io, socket) {
   // Identidad autoritativa del socket: la que quedó vinculada en el handshake
   // `hello` tras demostrar su propiedad. El `playerId` que venga en el payload
   // se IGNORA por completo — es lo que permitía operar como otra persona.
@@ -75,6 +81,32 @@ function registerRoomHandlers(io, socket, leaveVoiceFn) {
     return ctx;
   };
 
+  // Qué está haciendo esta pestaña, para la presencia que ven los amigos. Se
+  // apunta aquí porque es donde el servidor se entera de que alguien se sienta
+  // o se levanta; `friendService` refina `en_sala`→`jugando` al emitir, porque
+  // una partida también puede arrancarla el reloj o un bot.
+  const apuntarActividad = (pid, roomId, nombre) => {
+    if (nombre) presence.recordarNombre(pid, nombre);
+    presence.setActividad(socket.id, roomId ? { estado: 'en_sala', roomId } : { estado: 'libre' });
+    if (pid) difundirPresencia(io, pid);
+  };
+
+  // Reglas de consentimiento compartidas con la voz: quién puede hacerle sonar
+  // algo a quién. `friend_challenge` también pasa por aquí — antes comprobaba
+  // solo que el otro estuviera conectado, ni siquiera la amistad.
+  const dependenciasDePolitica = () => ({
+    hayPersistencia: () => isEnabled(),
+    sonAmigos,
+    mismaMesa: (a, b) => {
+      for (const game of rooms.values()) {
+        if (game.players.some(p => p.id === a) && game.players.some(p => p.id === b)) return true;
+      }
+      return false;
+    },
+    estaEnLinea: (id) => presence.isOnline(id),
+    disponibilidadDe: (id) => presence.disponibilidadDe(id)
+  });
+
   // Emparejamiento clasificatorio (cola 1v1 por ELO)
   socket.on('join_queue', async ({ name } = {}) => {
     const pid = await authId();
@@ -84,11 +116,13 @@ function registerRoomHandlers(io, socket, leaveVoiceFn) {
   socket.on('leave_queue', () => matchmaking.leaveQueue(socket.id));
 
   // ─── Amigos ───
+  // `presence.register` YA NO vive aquí: se hace en el handshake `hello`.
+  // `get_friends` y `get_profile` están en HEAVY_EVENTS, así que un paquete
+  // descartado por el cubo dejaba al jugador conectado pero invisible e
+  // inllamable para sus amigos, sin ningún síntoma.
   socket.on('get_friends', async () => {
     const pid = await authId();
     if (!pid) return;
-    const { becameOnline } = presence.register(socket.id, pid);
-    if (becameOnline) notifyFriendsOfPresence(io, pid);
     await pushFriendsList(io, pid);
   });
 
@@ -96,7 +130,16 @@ function registerRoomHandlers(io, socket, leaveVoiceFn) {
     const pid = await authId();
     if (!pid || !code) return;
     const res = await sendFriendRequest(pid, code);
-    socket.emit('friend_action', res);
+    // El id de cuenta del objetivo NO vuelve al cliente. Antes se emitía `res`
+    // entero, con `target.id` dentro: quien solo conocía un código de cinco
+    // caracteres se llevaba el identificador permanente de esa persona — que es
+    // exactamente la dirección que necesita `call_friend`.
+    socket.emit('friend_action', {
+      success: !!res.success,
+      accepted: !!res.accepted,
+      error: res.error,
+      username: res.target ? res.target.username : undefined
+    });
     if (res.success) {
       await pushFriendsList(io, pid);
       if (res.target && res.target.id) {
@@ -115,19 +158,41 @@ function registerRoomHandlers(io, socket, leaveVoiceFn) {
     if (res.success && accept) await pushFriendsList(io, otherId);
   });
 
+  // Deshacer una amistad (y, con `bloquear`, cerrarle la puerta). El cliente
+  // emitía este evento desde hacía tiempo y NO había ningún manejador: una
+  // amistad aceptada era permanente, y con ella el permiso de llamada.
+  socket.on('friend_remove', async ({ otherId, bloquear } = {}) => {
+    const pid = await authId();
+    if (!pid || !otherId) return;
+    const res = await removeFriend(pid, otherId, { bloquear: !!bloquear });
+    socket.emit('friend_action', { success: !!res.success, removed: true, blocked: !!res.blocked });
+    if (res.success) {
+      await pushFriendsList(io, pid);
+      await pushFriendsList(io, otherId);
+    }
+  });
+
   // Retar a un amigo: crea una sala privada y le envía una invitación.
   socket.on('friend_challenge', async ({ name, friendId } = {}) => {
     const pid = await authId();
     if (!pid || !friendId) return;
     if (roomsAtCapacity()) return socket.emit('friend_action', { success: false, error: 'friend.err.generic' });
-    const set = presence.socketsOf(friendId);
-    if (!set || !set.size) {
-      socket.emit('friend_action', { success: false, error: 'friend.err.offline' });
-      return;
+
+    // Mismo freno que la voz: retar también hace aparecer algo en la pantalla
+    // de otra persona. Sin esto bastaba con conocer un id para invitar a
+    // cualquiera, y el «no molestar» no significaba nada aquí.
+    const permiso = await politica.puedeLlamar(pid, friendId, dependenciasDePolitica());
+    if (!permiso.ok) {
+      const error = permiso.code === 'desconectado' ? 'friend.err.offline' : 'friend.err.generic';
+      return socket.emit('friend_action', { success: false, error, code: permiso.code });
     }
+    const set = presence.socketsOf(friendId);
+    if (!set || !set.size) return socket.emit('friend_action', { success: false, error: 'friend.err.offline' });
+
     const safeName = String(name || 'Jugador').trim().slice(0, 20);
     const created = createRoomFor(io, socket, safeName, pid, { isPublic: false, powersEnabled: false });
     getOrCreateUser(created.playerId, safeName);
+    apuntarActividad(pid, created.roomId, safeName);
     socket.emit('room_created', conAlias(created));
     broadcastGameState(io, created.roomId);
     for (const sid of set) io.to(sid).emit('friend_invited', { fromName: safeName, roomId: created.roomId });
@@ -169,8 +234,7 @@ function registerRoomHandlers(io, socket, leaveVoiceFn) {
   socket.on('get_profile', async ({ username } = {}) => {
     const pid = await authId();
     if (!pid) return;
-    const { becameOnline } = presence.register(socket.id, pid);
-    if (becameOnline) notifyFriendsOfPresence(io, pid); // avisar a mis amigos
+    presence.recordarNombre(pid, username);
     await getOrCreateUser(pid, username || 'Jugador');
     const roll = await rollDaily(pid); // renueva misiones + racha si es día nuevo
     const profile = await getUserProfile(pid);
@@ -226,8 +290,10 @@ function registerRoomHandlers(io, socket, leaveVoiceFn) {
     // estadísticas de la partida se acreditaban a la cuenta suplantada.
     // Sin identidad (invitado que no hizo handshake) se genera una anónima.
     const { name, playerId: _ignorado, ...opts } = v.data;
-    const created = createRoomFor(io, socket, name, await authId(), opts);
+    const pid = await authId();
+    const created = createRoomFor(io, socket, name, pid, opts);
     getOrCreateUser(created.playerId, name);
+    apuntarActividad(pid, created.roomId, name);
     socket.emit('room_created', conAlias(created));
     broadcastGameState(io, created.roomId);
     broadcastLobby(io);
@@ -251,6 +317,7 @@ function registerRoomHandlers(io, socket, leaveVoiceFn) {
         getOrCreateUser(actualPlayerId, name);
         socket.join(candidate.roomId);
         salirDeLobbies(socket);
+        apuntarActividad(playerId, candidate.roomId, name);
         socket.emit('room_joined', conAlias({ roomId: candidate.roomId, playerId: actualPlayerId }));
         broadcastGameState(io, candidate.roomId);
         broadcastLobby(io);
@@ -260,6 +327,7 @@ function registerRoomHandlers(io, socket, leaveVoiceFn) {
     }
 
     const created = createRoomFor(io, socket, name, playerId, { gameType, isPublic: true, powersEnabled: false });
+    apuntarActividad(playerId, created.roomId, name);
     socket.emit('room_created', conAlias(created));
     broadcastGameState(io, created.roomId);
     broadcastLobby(io);
@@ -286,6 +354,7 @@ function registerRoomHandlers(io, socket, leaveVoiceFn) {
     if (existingPlayer) {
       existingPlayer.socketId = socket.id;
       socket.join(roomId);
+      apuntarActividad(playerId, roomId, existingPlayer.name);
       socket.emit('room_joined', conAlias({ roomId, playerId: actualPlayerId }));
       broadcastGameState(io, roomId);
       broadcastLobby(io);
@@ -318,6 +387,7 @@ function registerRoomHandlers(io, socket, leaveVoiceFn) {
     }
     socket.join(roomId);
 
+    apuntarActividad(playerId, roomId, name);
     socket.emit('room_joined', conAlias({ roomId, playerId: actualPlayerId }));
     broadcastGameState(io, roomId);
     broadcastLobby(io);
@@ -450,13 +520,22 @@ function registerRoomHandlers(io, socket, leaveVoiceFn) {
   });
 
   // 2.7 Abandonar sala
-  socket.on('leave_room', () => {
+  socket.on('leave_room', async () => {
     const ctx = findMe(socket.id);
     if (!ctx) return;
     const { roomId, game, player } = ctx;
 
-    if (typeof leaveVoiceFn === 'function') {
-      leaveVoiceFn(ctx);
+    // Levantarse de la mesa te saca de LA VOZ DE ESA MESA, pero no de una
+    // llamada privada: la voz dejó de estar acoplada a la sala y una
+    // conversación con un amigo no se corta por cambiar de pantalla. Antes
+    // `leaveVoiceFn` apagaba el camino de voz «en sala», que estaba muerto.
+    const pid = await authId();
+    if (pid) {
+      const linea = voicePools.poolDeCuenta(pid);
+      if (abandonarVozDeMesa(io, pid, roomId)) {
+        socket.emit('voice_pool_left', { poolId: linea.poolId, motivo: 'fuera_de_la_mesa' });
+      }
+      apuntarActividad(pid, null, player.name);
     }
     socket.leave(roomId);
 

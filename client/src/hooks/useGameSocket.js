@@ -7,6 +7,21 @@ import { useT } from '../i18n/LanguageContext';
 import { useGameStore, getOrCreatePersistentPlayerId } from '../store/useGameStore';
 
 /**
+ * Reenganche de la voz. Va SIEMPRE pegado a un `hello`, y por eso es una
+ * función y no dos líneas sueltas: el invariante «todo handshake de identidad
+ * va seguido de un saludo de voz» tiene que poder leerse de un vistazo, y el
+ * servidor resuelve quién eres con la promesa que abre ese handshake.
+ *
+ * Se emite aunque no haya ninguna llamada en curso: la respuesta
+ * (`voice_state`) trae también los timbres pendientes, así que sin esto una
+ * pestaña que se reconecta mientras alguien la llama no se entera. Es tolerante
+ * en los dos sentidos: un servidor viejo lo ignora, y aquí no se espera nada.
+ */
+function saludarALaVoz() {
+  socket.emit('voice_hello', {});
+}
+
+/**
  * Todos los listeners de socket entrantes, en un solo sitio.
  *
  * Antes vivían en un `useEffect` de ~350 líneas dentro de App.jsx, mezclados con
@@ -51,12 +66,30 @@ export default function useGameSocket({ invitedCodeRef }) {
   const prevGameStatusRef = useRef(null);
   const resetGameStatus = () => { prevGameStatusRef.current = null; };
 
+  /**
+   * El [Reintentar] de la franja de modo invitado: repite el handshake con la
+   * identidad que tengamos, sin reconectar el socket.
+   *
+   * Vive aquí y no en la banda que lo pinta por dos motivos: el saludo de voz
+   * tiene que seguir pegado al `hello`, y la banda no debería tener que saber
+   * de dónde salen el id persistente y el token.
+   */
+  const reintentarSesion = () => {
+    socket.emit('hello', {
+      playerId: getOrCreatePersistentPlayerId(),
+      token: localStorage.getItem('domino_session_token') || undefined
+    });
+    saludarALaVoz();
+  };
+
   useEffect(() => {
     // Los setters de zustand se crean una sola vez con el store, así que
     // capturarlos aquí es seguro y deja el array de dependencias casi vacío
     // (menos cosas que puedan re-registrar los 21 listeners por accidente).
     const {
-      setPlayerId, setRoomId, setGameState, setError, setIsConnected,
+      setPlayerId, setCuentaId, setCapacidades, setSalaFantasma,
+      setSesionNoVerificada,
+      setRoomId, setGameState, setError, setIsConnected,
       setQuickNotifications, setPublicRooms, setRoomsLoading, setLobbyStats,
       setSpectating, setLiveGames, setEpicMoment, setInvitedCode
     } = useGameStore.getState();
@@ -73,6 +106,7 @@ export default function useGameSocket({ invitedCodeRef }) {
       const persistId = getOrCreatePersistentPlayerId();
       const savedName = localStorage.getItem('domino_username');
       socket.emit('hello', { playerId: persistId, token: localStorage.getItem('domino_session_token') || undefined });
+      saludarALaVoz();
 
       // Sincronizar skins del perfil guardado en BD
       socket.emit('get_profile', { username: savedName || 'Jugador' });
@@ -113,8 +147,24 @@ export default function useGameSocket({ invitedCodeRef }) {
     // conexión): lo guardamos para reenviarlo en el próximo 'hello'.
     function onSession(data) {
       if (!data) return;
+
+      // La identidad de PERSONA la reconcilia el servidor: si acepta la que le
+      // presentamos, la devuelve, y el store se queda con la suya. Nunca se
+      // toca `playerId` aquí: ése es el alias del asiento y lo escribe la sala.
+      if (data.playerId) setCuentaId(data.playerId);
+
+      // Qué sabe hacer este servidor. Se MEZCLA sobre lo que ya hay para que un
+      // servidor que anuncie una sola capacidad no apague las otras dos por
+      // omisión.
+      if (data.capacidades) {
+        setCapacidades({ ...useGameStore.getState().capacidades, ...data.capacidades });
+      }
+
       if (data.token) {
         try { localStorage.setItem('domino_session_token', data.token); } catch (e) { /* noop */ }
+        // Hay token: el socket quedó vinculado. Si veníamos de un intento
+        // fallido, se retira la franja de modo invitado.
+        setSesionNoVerificada(false);
         return;
       }
       // Sin token y sin autenticar: el id guardado ya está reclamado y no hemos
@@ -128,18 +178,35 @@ export default function useGameSocket({ invitedCodeRef }) {
           localStorage.removeItem('domino_persistent_player_id');
         } catch (e) { /* noop */ }
         const fresh = getOrCreatePersistentPlayerId();
-        setPlayerId(fresh);
+        setCuentaId(fresh);
+        // El alias de asiento sólo se pisa si NO hay sala: dentro de una, el
+        // valor bueno es el que mandó el servidor y machacarlo desconectaría al
+        // jugador de su propia mano.
+        if (!useGameStore.getState().roomId) setPlayerId(fresh);
         socket.emit('hello', { playerId: fresh });
+        saludarALaVoz();
         socket.emit('get_profile', { username: localStorage.getItem('domino_username') || 'Jugador' });
+        return;
       }
+
+      // Cualquier otro `authed:false` —'no_disponible' con la base de datos
+      // caída pero presente, 'sin_id', 'error', o el catch del servidor— deja
+      // el socket SIN vincular: se juega y se habla, pero amigos, monedas y ELO
+      // están apagados y nadie te ve ni te puede llamar. Hasta ahora el cliente
+      // sólo sabía reaccionar a 'reclamada' y este modo no tenía ni un síntoma.
+      if (data.authed === false) setSesionNoVerificada(true);
     }
 
+    // `playerId` es el ALIAS DE ASIENTO que devuelve el servidor, y sólo eso.
+    // `cuentaId` NO se toca aquí: la persona es la misma dentro y fuera de la
+    // sala, y es a quien se llama.
     function onRoomCreated({ roomId: newRoomId, playerId: newPlayerId }) {
       setRoomId(newRoomId);
       setPlayerId(newPlayerId);
       sessionStorage.setItem('domino_room_id', newRoomId);
       sessionStorage.setItem('domino_player_id', newPlayerId);
       setError('');
+      setSalaFantasma('');
     }
 
     function onRoomJoined({ roomId: newRoomId, playerId: newPlayerId }) {
@@ -149,6 +216,8 @@ export default function useGameSocket({ invitedCodeRef }) {
       sessionStorage.setItem('domino_player_id', newPlayerId);
       setError('');
       setInvitedCode('');
+      // Estar dentro de una sala deja sin sentido la banda de la anterior.
+      setSalaFantasma('');
     }
 
     function onGameState(state) {
@@ -268,6 +337,27 @@ export default function useGameSocket({ invitedCodeRef }) {
     }
 
     function onErrorMsg(payload) {
+      // SALA FANTASMA. `onConnect` reintenta la sala guardada en sessionStorage;
+      // si el servidor ya no la tiene, hasta ahora nadie borraba lo guardado y
+      // el jugador recurrente veía el mismo aviso rojo en CADA recarga, para
+      // siempre. Se borra la sesión de sala y se levanta una bandera que el hub
+      // pinta como banda descartable, en vez del toast.
+      //
+      // La condición es «había una sala guardada», no «la clave es ésa»: un
+      // código tecleado a mano que no existe sigue mereciendo su aviso rojo, y
+      // así el caso genérico de `srv.err.roomNotFound` no cambia de conducta.
+      const salaGuardada = sessionStorage.getItem('domino_room_id');
+      if (payload && payload.key === 'srv.err.roomNotFound' && salaGuardada) {
+        sessionStorage.removeItem('domino_room_id');
+        sessionStorage.removeItem('domino_player_id');
+        setSalaFantasma(salaGuardada);
+        // El store arranca su `roomId` de sessionStorage, así que sin esto
+        // quedaría diciendo que seguimos en una sala que no existe — y el hub
+        // pintaría a la vez «Seguías en ABCD» y «esa sala ya no existe».
+        setRoomId('');
+        return;
+      }
+
       setError(payload);
       setTimeout(() => setError(''), 5000);
     }
@@ -392,6 +482,7 @@ export default function useGameSocket({ invitedCodeRef }) {
     searchingRanked, setSearchingRanked,
     incomingInvite, setIncomingInvite,
     friendNotice,
-    resetGameStatus
+    resetGameStatus,
+    reintentarSesion
   };
 }

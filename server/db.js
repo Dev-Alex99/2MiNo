@@ -449,6 +449,10 @@ async function sendFriendRequest(fromId, code) {
     );
     if (ex.rows.length) {
       const row = ex.rows[0];
+      // Un bloqueo que se deshace mandando otra solicitud no bloquea nada. Se
+      // responde igual que un código inexistente: quien bloquea no tiene por
+      // qué revelar que lo hizo.
+      if (row.status === 'blocked') return { success: false, error: 'friend.err.notFound' };
       if (row.status === 'accepted') return { success: false, error: 'friend.err.already' };
       if (row.a_id === target.id && row.b_id === fromId) {
         // El objetivo ya me había pedido amistad → aceptar directamente.
@@ -477,6 +481,10 @@ async function respondFriendRequest(userId, otherId, accept) {
   } catch (e) { console.warn('[BD respondFriendRequest]', e.message); return { success: false }; }
 }
 
+// Solo amistades ACEPTADAS: las filas con status 'blocked' quedan fuera de la
+// lista por la misma condición, así que bloquear también desaparece al otro de
+// la agenda (en ambos sentidos, a propósito: media relación visible sería peor
+// que ninguna).
 async function getFriends(userId) {
   if (!pool || !userId) return [];
   try {
@@ -488,6 +496,52 @@ async function getFriends(userId) {
       ORDER BY u.username`, [userId]);
     return r.rows;
   } catch (e) { console.warn('[BD getFriends]', e.message); return []; }
+}
+
+// ¿Son amigos AHORA? Consulta puntual para la política de voz: traerse la lista
+// entera para responder a un sí/no cuesta lo mismo que la lista entera.
+// Sin pool devuelve false; quien llama decide qué significa eso (ver
+// voicePolicy: sin persistencia no se exige amistad).
+async function sonAmigos(a, b) {
+  if (!pool || !a || !b || a === b) return false;
+  try {
+    const r = await pool.query(`
+      SELECT 1 FROM friendships
+      WHERE ((a_id = $1 AND b_id = $2) OR (a_id = $2 AND b_id = $1))
+        AND status = 'accepted'
+      LIMIT 1`, [a, b]);
+    return r.rows.length > 0;
+  } catch (e) { console.warn('[BD sonAmigos]', e.message); return false; }
+}
+
+/**
+ * Deshacer una amistad, opcionalmente BLOQUEANDO.
+ *
+ * Hasta ahora `friend_remove` lo emitía el cliente y no existía ningún
+ * `socket.on('friend_remove')` en todo el servidor: una amistad aceptada era
+ * PERMANENTE. Un producto que promete «llama a quien quieras desde cualquier
+ * sitio» trae el freno en el mismo commit que el acelerador.
+ *
+ * Con `bloquear`, la fila se reescribe como (quien bloquea → bloqueado) con
+ * status 'blocked': así `getFriends` deja de verla, `sonAmigos` devuelve false
+ * —y con ello `puedeLlamar` responde `no_amigos`— y una solicitud nueva se
+ * rechaza sin revelar el bloqueo.
+ */
+async function removeFriend(userId, otherId, { bloquear = false } = {}) {
+  if (!pool || !userId || !otherId || userId === otherId) return { success: false };
+  try {
+    await pool.query(
+      'DELETE FROM friendships WHERE (a_id = $1 AND b_id = $2) OR (a_id = $2 AND b_id = $1)',
+      [userId, otherId]
+    );
+    if (bloquear) {
+      await pool.query(
+        "INSERT INTO friendships (a_id, b_id, status) VALUES ($1, $2, 'blocked') ON CONFLICT (a_id, b_id) DO UPDATE SET status = 'blocked'",
+        [userId, otherId]
+      );
+    }
+    return { success: true, otherId, blocked: !!bloquear };
+  } catch (e) { console.warn('[BD removeFriend]', e.message); return { success: false }; }
 }
 
 async function getFriendRequests(userId) {
@@ -747,5 +801,7 @@ module.exports = {
   respondFriendRequest,
   getFriends,
   getFriendRequests,
+  sonAmigos,
+  removeFriend,
   equipItem
 };

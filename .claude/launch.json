@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "domino-server",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "domino-server", "dev"],
+      "port": 3001
+    },
+    {
+      "name": "domino-client",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "domino-client", "dev"],
+      "port": 5173
+    }
+  ]
+}

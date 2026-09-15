@@ -1,0 +1,140 @@
+/* Accesibilidad transversal: texto solo para lectores, enlace de salto a la
+   mano, diálogos modales y la variante compacta de la fila de poderes.
+   Última capa de la cascada a propósito: nada la pisa. */
+
+/* --- Texto que sólo existe para el lector de pantalla ---------------------
+   Patrón de recorte, no `display:none` ni `visibility:hidden`: esos dos sacan
+   el texto del árbol de accesibilidad, que es justo lo contrario de lo que se
+   busca. Sin `white-space: nowrap` las descripciones largas se plegarían a una
+   columna de 1px y algunos lectores las leerían letra a letra. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* --- Enlace de salto a la mano -------------------------------------------
+   Invisible hasta que lo enfocas. Es la primera parada de tabulación de la
+   partida y la mitigación del desajuste entre el orden del DOM y el visual. */
+.salto-a-mano {
+  /* `fixed` y no `absolute`: así aparece en la esquina de la ventana sin
+     depender de qué ancestro esté posicionado allá donde lo monte PAQ-6. */
+  position: fixed;
+  left: -9999px;
+  top: 0;
+  z-index: 1400;
+  padding: 10px 16px;
+  border-radius: 0 0 10px 0;
+  background: var(--sup-2);
+  color: var(--tx-1);
+  font-weight: 800;
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+
+.salto-a-mano:focus,
+.salto-a-mano:focus-visible {
+  left: 0;
+}
+
+/* --- Diálogos modales ----------------------------------------------------
+   El panel entra en el orden con tabindex="-1" para poder recibir el foco
+   cuando un diálogo no tiene ni título ni botones. No es una parada real del
+   ciclo de Tab, así que tampoco debe pintar el anillo de foco. El título sí lo
+   pinta: ahí el anillo dice «el diálogo se ha abierto y estás dentro». */
+.modal-a11y:focus {
+  outline: none;
+}
+
+/* La lista con scroll del registro es una parada de tabulación (si no, no hay
+   nada que desplazar con las flechas) y necesita que se vea dónde está. */
+.move-log-body:focus-visible {
+  outline: 2px solid var(--foco-ext);
+  outline-offset: -2px;
+  border-radius: 8px;
+}
+
+/* --- Cartas de poder: el slot ya es un <button> --------------------------
+   El agente de usuario le mete fondo, borde, tipografía y padding propios que
+   deformarían la carta. Se neutralizan aquí y no en poderes.css porque ese
+   archivo pertenece a otro paquete. */
+button.power-card-slot {
+  appearance: none;
+  -webkit-appearance: none;
+  background: none;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: inherit;
+}
+
+/* --- Variante compacta de la fila de poderes ------------------------------
+   La clase va SIEMPRE en el JSX; el umbral lo decide esta media query, que es
+   la misma que usa poderes.css. La fila pasa de 92-124 px a 48 (chip de 44x44
+   + 2 px arriba y abajo), que son los 48 px que el presupuesto vertical de la
+   mesa da por descontados en móvil. Sin arte de carta: queda el icono, y el
+   nombre y la descripción los pone el panel de detalle, que en táctil sólo se
+   abre al tocar porque ahí no existe el hover. */
+@media (max-width: 1024px) {
+  .poderes-compacto .power-cards-container {
+    padding: 2px 6px;
+    gap: 8px;
+  }
+
+  .poderes-compacto .power-card-slot {
+    width: 44px;
+    height: 44px;
+  }
+
+  .poderes-compacto .power-card-item {
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border-radius: 12px;
+    justify-content: center;
+  }
+
+  .poderes-compacto .power-card-title {
+    display: none;
+  }
+
+  .poderes-compacto .power-card-icon {
+    margin-top: 0;
+  }
+
+  /* Un chip de 44 px que salta 10 o 12 px se sale de su propia fila. El estado
+     seleccionado se lee por el borde y la sombra, que no mueven nada. */
+  .poderes-compacto .power-card-slot:hover .power-card-item,
+  .poderes-compacto .power-card-item.selected,
+  .poderes-compacto .power-card-slot:hover .power-card-item.selected {
+    transform: none;
+  }
+}
+
+/* --- Movimiento reducido -------------------------------------------------
+   Sólo lo que monta o toca este paquete. A propósito NO hay una regla global
+   sobre `*`: el canto-reloj del chip activo transporta el tiempo restante en
+   una transición, y apagarla dejaría el reloj vacío de golpe en vez de quieto.
+   El confeti de fin de ronda no se apaga aquí sino en JS, porque pinta en un
+   <canvas> por requestAnimationFrame y el CSS no lo alcanza. */
+@media (prefers-reduced-motion: reduce) {
+  .modal-overlay.animate-fade-in,
+  .modal-card.animate-scale-up {
+    animation: none;
+  }
+
+  .power-card-item,
+  .power-card-slot:hover .power-card-item {
+    transition: none;
+    transform: none;
+  }
+}

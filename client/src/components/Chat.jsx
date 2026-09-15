@@ -11,11 +11,14 @@ export default function Chat({ roomId, playerId }) {
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('emojis'); // 'emojis' | 'phrases'
 
-  const sendPhrase = (phrase) => {
+  // Se manda la CLAVE, no la frase traducida: quien la recibe la resuelve en SU
+  // idioma, igual que ya se hace con los mensajes del sistema. Enviando el texto
+  // ya resuelto, un jugador en español le colaba '¡Capicúa!' a un inglés.
+  const sendPhrase = (phraseKey) => {
     socket.emit('send_quick_message', {
       roomId,
       playerId,
-      text: phrase,
+      text: phraseKey,
       type: 'phrase'
     });
     setIsOpen(false);
@@ -84,7 +87,7 @@ export default function Chat({ roomId, playerId }) {
                 {QUICK_PHRASES.map((key) => (
                   <button
                     key={key}
-                    onClick={() => sendPhrase(t(key))}
+                    onClick={() => sendPhrase(key)}
                     className="phrase-btn"
                   >
                     {t(key)}

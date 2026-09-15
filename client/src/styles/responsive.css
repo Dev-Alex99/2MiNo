@@ -6,59 +6,13 @@
   .app-container {
     flex-direction: column;
   }
-  /* En móvil cada píxel del sidebar se lo quita al tablero, que ya va justo.
-     Todo lo prescindible se recorta aquí. */
-  .sidebar {
-    width: 100%;
-    height: auto;
-    border-right: none;
-    border-bottom: 1px solid var(--glass-border);
-    padding: 8px 10px;
-    flex-shrink: 0; /* la cabecera manda su altura; el tablero se adapta */
-  }
-  .sidebar-top {
-    gap: 5px;
-  }
-  /* "Clasificación" / "En la mesa": la lista de debajo ya se explica sola. */
-  .sidebar-section-title {
-    display: none;
-  }
-  /* Los separadores solo decoran, y aquí cuestan altura real. */
-  .sidebar .separator {
-    display: none;
-  }
-  .sidebar-header {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-  }
-  .players-list {
-    flex-direction: row;
-    overflow-x: auto;
-    overflow-y: hidden;
-    overscroll-behavior-x: contain;
-    touch-action: pan-x;
-    width: 100%;
-    gap: 8px;
-    padding-bottom: 4px;
-  }
-  .player-card {
-    width: 140px;
-    flex-shrink: 0;
-    padding: 8px 10px;
-    border-radius: 12px;
-  }
-  .player-score-bar {
-    display: none; /* Ahorrar espacio vertical */
-  }
-  .player-score-label {
-    display: none;
-  }
-  .player-score-row {
-    margin-top: 4px;
-    justify-content: center;
-    font-size: 0.7rem;
-  }
+  /* Aquí había 78 líneas que adaptaban a móvil la barra lateral de marcador
+     (.sidebar, .players-list, .player-card, .player-score-*, .player-tile-* y
+     .sidebar-bottom) más .board-chain. Ninguna de esas clases se renderiza ya:
+     el marcador está en .game-bar y el tablero es una serpiente, no una fila.
+     De todo aquel bloque sobreviven estas dos, que hoy tienen otros dueños:
+     .player-avatar la pinta la sala de espera y .player-name el tablero de
+     Tres en Raya. */
   .player-avatar {
     width: 24px;
     height: 24px;
@@ -68,24 +22,6 @@
   .player-name {
     font-size: 0.72rem;
   }
-  .player-hand-indicator {
-    padding: 2px 6px;
-    gap: 4px;
-    border-radius: 6px;
-  }
-  .player-tile-icon {
-    width: 4px;
-    height: 8px;
-  }
-  .player-tile-count {
-    font-size: 0.65rem;
-  }
-  .board-chain {
-    padding: 40px 60px;
-  }
-  .sidebar-bottom {
-    display: none; /* Ocultar pozo secundario y código en móvil, se ve arriba */
-  }
   /* Antes: height: calc(100vh - 150px). Asumía una sidebar de 150px cuando en
      realidad mide ~174px, y 100vh ignora la barra del navegador. Con flex, el
      área de juego toma exactamente el espacio que sobra, sea cual sea. */
@@ -94,16 +30,16 @@
     flex: 1 1 auto;
     min-height: 0;
   }
-  .hand-tiles-row {
-    padding: 22px 10px 4px 10px;
-    gap: 6px;
-    min-height: 104px;
-  }
-  /* Elevación proporcional a la ficha pequeña: así basta menos padding-top y
-     el tablero conserva altura. */
-  .domino-tile.selected {
-    transform: translateY(-14px) scale(1.05);
-  }
+  /* Aquí estaban .hand-tiles-row (gap, padding y min-height) y
+     .domino-tile.selected. La fila de la mano la redefine ahora mano.css, que
+     se importa después y pisaba estas tres propiedades una por una; y ninguna
+     ficha recibe ya la clase `selected`: los tres estados de la mano son
+     .es-jugable / .no-jugable / .esta-elegida.
+     Las reglas de tamaño que siguen SÍ siguen mandando, pero sobre otras
+     fichas: la mano las pisa con .mano-ficha y el tablero con
+     .board-tile-wrap, así que a quien visten hoy es a la ficha de la
+     repetición (.replay-tile), a la del espía (.spy-tile) y a la cara del
+     riel. */
   .domino-tile {
     width: 38px;
     height: 72px;
@@ -175,11 +111,22 @@
     margin-top: 14px;
   }
 
-  /* Ajustes de modales y barras para dispositivos móviles */
+  /* Ajustes de modales y barras para dispositivos móviles.
+
+     `width: calc(100vw - 20px)` era 12 px MÁS ancho que el hueco real: el
+     `.modal-overlay` es un flex con `padding: 16px`, así que su caja de
+     contenido mide `100vw - 32`. El centrado repartía el sobrante a los dos
+     lados y los nueve modales sobresalían ~6 px por lado, con el botón de
+     cerrar medio fuera de pantalla. `width: 100%` mide contra ese hueco y no
+     contra el viewport, que es lo que había que medir desde el principio.
+
+     `max-width` es el suelo común; los modales que necesitan otro lo declaran
+     en overlays.css, que se importa después. */
   .modal-card {
     padding: 20px 16px;
     max-height: calc(100dvh - 24px);
-    width: calc(100vw - 20px);
+    width: 100%;
+    max-width: 520px;
     box-sizing: border-box;
   }
   .bracket-modal-card {
@@ -195,12 +142,6 @@
     padding: 4px 8px;
     gap: 6px;
     font-size: 0.75rem;
-  }
-  .game-bar-turn-name {
-    max-width: 80px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   /* Ocultar elementos redundantes en la cabecera móvil para evitar solapamientos */
@@ -221,19 +162,9 @@
   .game-bar-score {
     font-size: 0.72rem;
   }
-  .game-bar-turn {
-    padding: 2px 6px;
-    gap: 4px;
-    font-size: 0.62rem;
-    max-width: 105px;
-    overflow: hidden;
-  }
-  .game-bar-turn-name {
-    max-width: 45px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
+  /* Los tres recortes móviles de .game-bar-turn / .game-bar-turn-name se van
+     con la píldora de turno, que ya no se renderiza (el turno es el canto del
+     chip activo en la cinta). */
   .game-bar-actions {
     gap: 3px;
     margin-left: 0;

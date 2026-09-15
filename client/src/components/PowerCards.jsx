@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import { useT } from '../i18n/LanguageContext';
 
 // Renderiza un icono SVG personalizado vectorizado para cada carta de poder
@@ -191,6 +191,7 @@ export default function PowerCards({
 }) {
   const { t } = useT();
   const [hoveredCard, setHoveredCard] = useState(null);
+  const idBase = useId();
 
   const handleCardClick = (card) => {
     if (!isMyTurn) return;
@@ -222,7 +223,11 @@ export default function PowerCards({
   if (powers.length === 0) return null;
 
   return (
-    <div className="power-cards-wrap">
+    // .poderes-compacto va SIEMPRE: quién se colapsa a 48 px lo decide la media
+    // query de a11y.css, no este componente. Con el interruptor en JS, un
+    // desajuste de un píxel entre el umbral de aquí y el del CSS dejaría la fila
+    // a media altura y el tablero sin su presupuesto vertical.
+    <div className="power-cards-wrap poderes-compacto">
       {/* En móvil esta cabecera se oculta: las cartas se explican solas y ahí
           cada píxel se lo quita al tablero. */}
       <div className="power-cards-title">
@@ -231,19 +236,34 @@ export default function PowerCards({
 
       <div className="power-cards-container">
         {powers.map((card, idx) => {
-          const isSelected = selectedPower && selectedPower.id === card.id;
+          // Booleano de verdad: con `null`, React se salta el aria-pressed y la
+          // carta deja de anunciarse como algo que se puede elegir y soltar.
+          const isSelected = !!selectedPower && selectedPower.id === card.id;
           const isDisabled = !isMyTurn;
-          
+          const idDesc = `${idBase}-desc-${idx}`;
+
           return (
             // El "slot" es el área de detección ESTABLE: no se mueve, así el
             // hover no parpadea. La carta interna se eleva sin salirse del cursor.
-            <div
+            // Es un <button> de verdad: hasta ahora usar un poder era un <div
+            // onClick> que no existía para el teclado ni para el lector.
+            <button
               key={`${card.id}-${idx}`}
+              type="button"
               className="power-card-slot"
               onClick={() => handleCardClick(card)}
               onMouseEnter={() => setHoveredCard(card)}
               onMouseLeave={() => setHoveredCard(null)}
+              onFocus={() => setHoveredCard(card)}
+              onBlur={() => setHoveredCard(null)}
               title={t(`pw.${card.id}.d`)}
+              aria-label={t(`pw.${card.id}.n`)}
+              aria-describedby={idDesc}
+              aria-pressed={isSelected}
+              // aria-disabled y no `disabled`: fuera de turno la carta se sigue
+              // pudiendo leer y comparar, que es media partida. El rechazo lo
+              // hace handleCardClick.
+              aria-disabled={isDisabled}
             >
               <div
                 className={`power-card-item ${card.type || 'buff'} rarity-${card.rarity || 'common'} ${isSelected ? 'selected' : ''} ${isDisabled ? 'disabled' : ''}`}
@@ -254,7 +274,11 @@ export default function PowerCards({
                 <span className="power-card-title">{t(`pw.${card.id}.n`)}</span>
                 <span className="power-card-type-label">{t(`ptype.${card.type || 'buff'}`)}</span>
               </div>
-            </div>
+              {/* La descripción viaja pegada a SU carta y no al panel de detalle
+                  compartido: el panel enseña la carta apuntada, que llega un
+                  render tarde, así que el lector podría describir otra carta. */}
+              <span id={idDesc} className="sr-only">{t(`pw.${card.id}.d`)}</span>
+            </button>
           );
         })}
       </div>

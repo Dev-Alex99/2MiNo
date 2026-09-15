@@ -88,12 +88,94 @@ export function playGameSound(type) {
         playTurnChime(ctx, now);
         break;
 
+      case 'ring':
+        // Timbre de llamada entrante. Una ráfaga; la repetición cada 2,4 s la
+        // gobierna iniciarTimbre(), que es quien sabe cuándo dejar de sonar.
+        playRingBurst(ctx, now);
+        break;
+
       default:
         break;
     }
   } catch (e) {
     console.warn('Web Audio no soportado o bloqueado por política de usuario:', e);
   }
+}
+
+/* ─────────────────────────────────────────────── el timbre de la línea */
+
+// Bitono de teléfono: dos notas alternas, 180 ms sonando y 120 en silencio,
+// cuatro repeticiones por ráfaga. Es el patrón que el oído reconoce como una
+// llamada y no como un aviso del juego, que es exactamente lo que hace falta
+// para que se distinga de los diez sonidos que ya suenan en la partida.
+const TIMBRE_AGUDA = 880;
+const TIMBRE_GRAVE = 660;
+const TIMBRE_ON = 0.18;
+const TIMBRE_OFF = 0.12;
+const TIMBRE_REPETICIONES = 4;
+const TIMBRE_GANANCIA = 0.18;
+
+/** Cada cuánto se repite la ráfaga mientras el teléfono sigue sonando. */
+const TIMBRE_CADA_MS = 2400;
+/** Tope duro: 30 s es lo que el servidor mantiene viva la llamada. Pasado eso
+ *  el timbre suena para nadie, y un teléfono que no para es una avería. */
+const TIMBRE_TOPE_MS = 30000;
+
+let timbreIntervalo = null;
+let timbreParada = null;
+
+function playRingBurst(ctx, time) {
+  for (let i = 0; i < TIMBRE_REPETICIONES; i++) {
+    const inicio = time + i * (TIMBRE_ON + TIMBRE_OFF);
+    const freq = i % 2 === 0 ? TIMBRE_GRAVE : TIMBRE_AGUDA;
+    const osc = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, inicio);
+
+    // Rampas cortas en los dos extremos: un tono que arranca y para en seco
+    // chasquea, y el chasquido se oye más que la nota.
+    gainNode.gain.setValueAtTime(0.0001, inicio);
+    gainNode.gain.linearRampToValueAtTime(TIMBRE_GANANCIA, inicio + 0.015);
+    gainNode.gain.setValueAtTime(TIMBRE_GANANCIA, inicio + TIMBRE_ON - 0.02);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, inicio + TIMBRE_ON);
+
+    osc.connect(gainNode);
+    gainNode.connect(ctx.destination);
+
+    osc.onended = () => {
+      try { osc.disconnect(); gainNode.disconnect(); } catch { /* ya desconectado */ }
+    };
+
+    osc.start(inicio);
+    osc.stop(inicio + TIMBRE_ON + 0.02);
+  }
+}
+
+/**
+ * Arranca el timbre y lo mantiene hasta que alguien lo pare o venza el tope.
+ *
+ * IDEMPOTENTE: llamarlo dos veces con el mismo timbre sonando no lo duplica. Con
+ * dos llamadas en espera sonaría el doble de fuerte y desfasado, que es la
+ * versión sonora de pintar la tarjeta de llamada tres veces.
+ *
+ * Respeta el `isMuted` global —el mismo interruptor que apaga el resto del
+ * juego— porque `playGameSound` lo comprueba en su primera línea. Y no arranca
+ * ningún AudioContext propio: si el navegador todavía no ha desbloqueado el
+ * audio, el timbre sale mudo y por eso hay otros dos canales (vibración y
+ * parpadeo del título) que no dependen de un gesto previo.
+ */
+export function iniciarTimbre() {
+  if (timbreIntervalo) return;
+  playGameSound('ring');
+  timbreIntervalo = setInterval(() => playGameSound('ring'), TIMBRE_CADA_MS);
+  timbreParada = setTimeout(pararTimbre, TIMBRE_TOPE_MS);
+}
+
+export function pararTimbre() {
+  if (timbreIntervalo) { clearInterval(timbreIntervalo); timbreIntervalo = null; }
+  if (timbreParada) { clearTimeout(timbreParada); timbreParada = null; }
 }
 
 // Alerta sonora doble (Do5 - Sol5) de aviso de turno

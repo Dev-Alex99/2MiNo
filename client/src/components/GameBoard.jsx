@@ -1,389 +1,403 @@
-import React, { useRef, useState, useEffect, useMemo, useCallback } from 'react';
-import { ZoomIn, ZoomOut, Maximize2, Move, ScrollText, Trophy } from 'lucide-react';
+import React, { useRef, useState, useEffect, useLayoutEffect, useMemo, useCallback } from 'react';
+import { Maximize2, ScrollText, Trophy } from 'lucide-react';
 import DominoTile from './DominoTile';
 import MoveLog from './MoveLog';
 import { useT } from '../i18n/LanguageContext';
-// Dimensiones reales de una ficha en el tablero (coinciden con el CSS fijado en .board-tile-wrap).
-const TILE_LONG = 96;   // largo de la ficha (dimensión mayor)
-const TILE_SHORT = 52;  // ancho de la ficha (dimensión menor)
-const GAP = 8;          // separación entre fichas contiguas de una fila
-const PL = 32;          // radio de los círculos de extremo (placeholders)
-const HALF_L = TILE_LONG / 2;
-const HALF_S = TILE_SHORT / 2;
-/**
- * Calcula un layout de serpiente (boustrophedon) determinista y ordenado.
- *
- * El tablero llega como una cadena ya orientada: board[i] = [a, b] donde
- * b === board[i+1][0]. Es decir, el valor derecho de cada ficha coincide con
- * el izquierdo de la siguiente. Aprovechamos eso para que los puntos siempre
- * "conecten" visualmente, volteando los valores en las filas que van de
- * derecha a izquierda.
- *
- * - Fichas normales: acostadas (horizontal).
- * - Dobles: parados (vertical), como en un dominó real.
- * - Al llenar una fila, la siguiente ficha se coloca PARADA (vertical) haciendo
- *   la esquina en "L": su borde superior conecta con la fila de arriba y el
- *   inferior con la fila siguiente, que continúa en sentido inverso.
- */
-function computeSnakeLayout(board, maxWidth) {
-  if (!board || board.length === 0) {
-    return { layout: [], leftPos: null, rightPos: null, width: 0, height: 0 };
-  }
-  const budget = Number.isFinite(maxWidth) && maxWidth > 0 ? maxWidth : 1000;
-  // Cuántas fichas horizontales caben por fila dejando margen para los extremos.
-  const perRow = Math.max(4, Math.floor((budget - TILE_LONG) / (TILE_LONG + GAP)));
-  const items = [];
-  let dir = 1;        // 1 => la fila avanza a la derecha, -1 => a la izquierda
-  let colCount = 0;   // fichas acostadas/dobles ya colocadas en la fila actual
-  let rowCy = 0;      // centro vertical de la fila actual
-  let prev = null;
-  for (let i = 0; i < board.length; i++) {
-    const [a, b] = board[i];
-    const isDouble = a === b;
-    let cx;
-    let cy;
-    let w;
-    let h;
-    let horizontal;
-    let display;
-    let isCorner = false;
-    if (prev === null) {
-      // Primera ficha: acostada, centrada; la fila arranca hacia la derecha.
-      w = TILE_LONG; h = TILE_SHORT; horizontal = true;
-      display = [a, b];
-      cx = 0; cy = 0; rowCy = 0; colCount = 1;
-    } else if (colCount >= perRow) {
-      // GIRO: ficha PARADA (vertical) que baja a la fila siguiente formando una "L".
-      // top = a conecta con la fila de arriba, bottom = b con la de abajo.
-      // cy despeja el borde inferior REAL de la ficha previa (26 acostada, 48 doble).
-      w = TILE_SHORT; h = TILE_LONG; horizontal = false;
-      display = [a, b];
-      isCorner = true;
-      cx = prev.cx + dir * (prev.w / 2 - HALF_S);
-      cy = rowCy + prev.h / 2 + HALF_L;
-      dir = -dir;
-      rowCy = cy + (HALF_L - HALF_S);
-      colCount = 0;
-    } else if (isDouble) {
-      // Doble parado en línea (no gira).
-      w = TILE_SHORT; h = TILE_LONG; horizontal = false;
-      display = [a, b];
-      cx = prev.cx + dir * (prev.w / 2 + GAP + HALF_S);
-      cy = rowCy;
-      colCount += 1;
-    } else {
-      // Ficha acostada normal (también la primera de una fila tras una esquina).
-      // En filas hacia la izquierda se voltean los valores para que el punto de
-      // conexión quede del lado correcto.
-      w = TILE_LONG; h = TILE_SHORT; horizontal = true;
-      display = dir === 1 ? [a, b] : [b, a];
-      cx = prev.cx + dir * (prev.w / 2 + GAP + HALF_L);
-      cy = rowCy;
-      colCount += 1;
-    }
-    const item = { tile: board[i], display, cx, cy, w, h, horizontal, dir, isCorner };
-    items.push(item);
-    prev = item;
-  }
-  // Extremo izquierdo: siempre el lado "a" de la primera ficha (a su izquierda).
-  const first = items[0];
-  const leftPos = {
-    x: first.cx - first.w / 2 - GAP - PL,
-    y: first.cy
-  };
-  // Extremo derecho: el borde de crecimiento tras la última ficha, en su sentido.
-  // Si la última ficha es una esquina, el crecimiento sale por debajo de ella.
-  const last = items[items.length - 1];
-  const rightPos = last.isCorner
-    ? { x: last.cx + last.dir * (last.w / 2 + GAP + PL), y: last.cy + (HALF_L - HALF_S) }
-    : { x: last.cx + last.dir * (last.w / 2 + GAP + PL), y: last.cy };
-  // Límites del contenido para poder centrar y auto-encajar.
-  let minX = Infinity;
-  let maxX = -Infinity;
-  let minY = Infinity;
-  let maxY = -Infinity;
-  const account = (x, y, halfW, halfH) => {
-    if (x - halfW < minX) minX = x - halfW;
-    if (x + halfW > maxX) maxX = x + halfW;
-    if (y - halfH < minY) minY = y - halfH;
-    if (y + halfH > maxY) maxY = y + halfH;
-  };
-  items.forEach((it) => account(it.cx, it.cy, it.w / 2, it.h / 2));
-  account(leftPos.x, leftPos.y, PL, PL);
-  account(rightPos.x, rightPos.y, PL, PL);
-  // Centrar todo respecto a (0,0).
-  const centerX = (minX + maxX) / 2;
-  const centerY = (minY + maxY) / 2;
-  items.forEach((it) => {
-    it.cx -= centerX;
-    it.cy -= centerY;
-  });
-  leftPos.x -= centerX;
-  leftPos.y -= centerY;
-  rightPos.x -= centerX;
-  rightPos.y -= centerY;
-  return {
-    layout: items,
-    leftPos,
-    rightPos,
-    width: maxX - minX,
-    height: maxY - minY
-  };
-}
+import {
+  trazarSerpiente,
+  elegirPerRow,
+  escalaDeVista,
+  cajaDeLaJugada,
+  fichasDelMazo,
+  maxPipDelMazo,
+} from '../games/domino/trazado';
+import { leerGeometria } from '../games/domino/mesaConfig';
+import { colorDeJugador } from '../utils/colorDeJugador';
+
+// Cámara "seguir la jugada".
+const UMBRAL_MANUAL = 8;    // px de scroll a mano que apagan el seguimiento
+const ESPERA_MANUAL = 6000; // ms que se queda apagado antes de volver solo
+const AIRE_CAMARA = 24;     // aire alrededor de la jugada al encuadrarla
+const VUELO_CAMARA = 1000;  // techo de seguridad del scroll suave, en ms
+
+// Vida de la animación de entrada de una ficha (caída 450 ms + onda 650 ms).
+// Se desmonta con temporizador y no con onAnimationEnd porque el evento no
+// llega cuando el usuario tiene el movimiento reducido, y entonces .shockwave
+// se quedaba viva el resto de la ronda: un nodo con z-index 30 e inset -25px
+// tapando fichas vecinas.
+const VIDA_ENTRADA = 700;
+
 // Clave estable de una ficha física, independiente de cómo esté orientada.
-const tileKey = (tile) => `${Math.min(tile[0], tile[1])}-${Math.max(tile[0], tile[1])}`;
+const claveFicha = (tile) => `${Math.min(tile[0], tile[1])}-${Math.max(tile[0], tile[1])}`;
+
+// La geometría llega de getComputedStyle, así que cada lectura crea un objeto
+// nuevo. Sin esta comparación, guardarla en estado dispararía un re-render por
+// cada medida y con él otra lectura.
+function mismaGeometria(a, b) {
+  return a.largo === b.largo && a.corto === b.corto && a.hueco === b.hueco
+    && a.margen === b.margen && a.escMin === b.escMin && a.escMax === b.escMax
+    && a.padX === b.padX && a.padY === b.padY;
+}
+
+/**
+ * La mesa: traza la serpiente, la escala y la deja leer con scroll vertical.
+ *
+ * Ya no hace paneo ni zoom. El contenedor es un scroll nativo, así que vuelven
+ * gratis la inercia, el teclado y el pinch-zoom del navegador —que `touch-action:
+ * none` mataba justo encima del tablero, o sea justo donde alguien intentaría
+ * ampliar unas fichas de 34x18 px—. Con el paneo se va también `manualView`, que
+ * se encendía con 1 px de temblor y dejaba el auto-encaje muerto el resto de la
+ * ronda sin que nadie supiera por qué.
+ *
+ * No conoce asientos ni mano: el objetivo de jugar vive en el riel, en espacio
+ * de pantalla, y no dentro de este lienzo escalado.
+ */
 export default function GameBoard({
-  board,
-  selectedTileIndex,
-  onPlay,
-  isMyTurn,
-  players,
-  canPlayLeft,
-  canPlayRight,
-  pendingTargetType,
-  onSelectEndTarget,
-  activeEffects,
+  board = [],
+  players = [],
   lastPlay,
   lastPlacedTile,
   lastPlacedBy,
-  seatsPadding = 0,
   moveLog = [],
   onOpenBracket,
-  selectedPower
+  totalMazo,
+  maxPip,
+  selectedTileIndex = null,
+  onPlay,
+  isMyTurn = false,
+  canPlayLeft = false,
+  canPlayRight = false,
+  pendingTargetType = null,
+  onSelectEndTarget,
+  activeEffects = null,
+  selectedPower = null,
 }) {
   const { t } = useT();
-  const containerRef = useRef(null);
-  const boardRef = useRef(null);
-  const dragRef = useRef({ active: false, sx: 0, sy: 0 });
-  const [containerSize, setContainerSize] = useState({ w: 0, h: 0 });
-  const [scale, setScale] = useState(1);
-  const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-  const [manualView, setManualView] = useState(false);
+  const refContenedor = useRef(null);
+  const [tam, setTam] = useState({ w: 0, h: 0 });
+  const [geom, setGeom] = useState(() => leerGeometria(null));
   const [showMoveLog, setShowMoveLog] = useState(false);
-  // Firma estable del tablero: evita recalcular el layout en ticks de estado
-  // que no cambian las fichas (p. ej. cuentas regresivas de poderes).
-  const boardSignature = useMemo(
-    () => board.map((t) => `${t[0]}${t[1]}`).join('|'),
-    [board]
-  );
-  const { layout, leftPos, rightPos, width, height } = useMemo(
-    () => computeSnakeLayout(board, containerSize.w || 1000),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [boardSignature, containerSize.w]
-  );
-  // Escala ideal para que toda la serpiente entre en el contenedor.
-  const fitScale = useMemo(() => {
-    if (!width || !height || !containerSize.w || !containerSize.h) return 1;
-    const padding = 96;
-    const usableW = Math.max(120, containerSize.w - padding - seatsPadding);
-    const sx = usableW / width;
-    const sy = (containerSize.h - padding) / height;
-    return Math.max(0.35, Math.min(1.05, Math.min(sx, sy)));
-  }, [width, height, containerSize.w, containerSize.h, seatsPadding]);
-  // Observar el tamaño del contenedor para el auto-encaje responsivo.
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const update = () => setContainerSize({ w: el.clientWidth, h: el.clientHeight });
-    update();
-    const ro = new ResizeObserver(update);
+  const [camaraManual, setCamaraManual] = useState(false);
+  const [reencuadre, setReencuadre] = useState(0);
+  const [fichaNueva, setFichaNueva] = useState(null);
+  const camara = useRef({ ancla: 0, vuelo: 0, espera: 0 });
+
+  // El tamaño del mazo no se deduce sumando manos y pozo: `tile_demolition`
+  // destruye fichas y esa suma miente. Sale de maxPip, que el servidor difunde.
+  const pips = Number.isFinite(maxPip) ? maxPip : maxPipDelMazo(totalMazo || 28);
+  const mazo = Number.isFinite(totalMazo) ? totalMazo : fichasDelMazo(pips);
+
+  // Medir con useLayoutEffect: en un useEffect el navegador llega a pintar un
+  // fotograma con el tablero sin medir, y se veía la mesa grande encogiéndose
+  // cada vez que se volvía del modal de fin de ronda.
+  useLayoutEffect(() => {
+    const el = refContenedor.current;
+    if (!el) return undefined;
+    const medir = () => {
+      setTam((prev) => (prev.w === el.clientWidth && prev.h === el.clientHeight
+        ? prev
+        : { w: el.clientWidth, h: el.clientHeight }));
+      const leida = leerGeometria(el);
+      setGeom((prev) => (mismaGeometria(prev, leida) ? prev : leida));
+    };
+    medir();
+    const ro = new ResizeObserver(medir);
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  // Aplicar auto-encaje salvo que el usuario haya tomado control manual.
-  useEffect(() => {
-    if (!manualView) {
-      setScale(fitScale);
-      setPosition({ x: 0, y: 0 });
-    }
-  }, [fitScale, manualView]);
-  const resetView = useCallback(() => setManualView(false), []);
-  const zoomIn = useCallback(() => {
-    setManualView(true);
-    setScale((s) => Math.min(2.2, s + 0.15));
-  }, []);
-  const zoomOut = useCallback(() => {
-    setManualView(true);
-    setScale((s) => Math.max(0.35, s - 0.15));
-  }, []);
-  // Rueda del ratón: listener nativo no pasivo para poder usar preventDefault
-  // sin warnings y sin bloquear el scroll de la página.
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const onWheel = (e) => {
-      e.preventDefault();
-      setManualView(true);
-      setScale((s) => {
-        const next = s + (e.deltaY < 0 ? 0.12 : -0.12);
-        return Math.max(0.35, Math.min(2.2, next));
-      });
-    };
-    el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
-  }, []);
-  // Paneo con Pointer Events (soporta ratón y táctil).
-  const handlePointerDown = useCallback(
-    (e) => {
-      if (e.button !== undefined && e.button !== 0) return;
-      // No iniciar paneo si se pulsa un control (botones de zoom o de extremo):
-      // así su click funciona sin ser robado por la captura del puntero.
-      if (e.target.closest && e.target.closest('button')) return;
-      dragRef.current = { active: true, sx: e.clientX - position.x, sy: e.clientY - position.y };
-      setIsDragging(true);
-      if (e.currentTarget.setPointerCapture) {
-        try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) { /* noop */ }
-      }
-    },
-    [position.x, position.y]
+
+  const medido = tam.w > 0;
+  const uW = Math.max(0, tam.w - 2 * geom.padX);
+  const uH = Math.max(0, tam.h - 2 * geom.padY);
+
+  // Firma estable del tablero: evita recalcular el trazado en ticks de estado
+  // que no cambian las fichas (p. ej. cuentas regresivas de poderes).
+  const boardSignature = useMemo(
+    () => board.map((f) => `${f[0]}${f[1]}`).join('|'),
+    [board]
   );
-  const handlePointerMove = useCallback((e) => {
-    if (!dragRef.current.active) return;
-    setManualView(true);
-    setPosition({ x: e.clientX - dragRef.current.sx, y: e.clientY - dragRef.current.sy });
-  }, []);
-  const handlePointerUp = useCallback((e) => {
-    dragRef.current.active = false;
-    setIsDragging(false);
-    if (e.currentTarget.releasePointerCapture && e.pointerId != null) {
-      try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (_) { /* noop */ }
+
+  // perRow se fija por ronda: no depende del tablero, sólo del mazo y del hueco
+  // disponible. Por eso la mesa nunca se rebaraja a media partida.
+  const perRow = useMemo(
+    () => elegirPerRow(mazo, pips, uW, uH, geom.escMin, geom.escMax, geom),
+    [mazo, pips, uW, uH, geom]
+  );
+
+  const trazo = useMemo(
+    () => trazarSerpiente(board, {
+      perRow,
+      margen: geom.margen,
+      largo: geom.largo,
+      corto: geom.corto,
+      hueco: geom.hueco,
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [boardSignature, perRow, geom]
+  );
+
+  const escala = useMemo(
+    () => escalaDeVista(trazo, uW, uH, geom.escMin, geom.escMax),
+    [trazo, uW, uH, geom]
+  );
+
+  // Última ficha colocada. Si el último acto fue un pase (lastPlay.tile null,
+  // p. ej. una tranca), caemos a la última ficha REALMENTE colocada para que se
+  // siga viendo la jugada final.
+  const fichaDestacada = (lastPlay && lastPlay.tile) || lastPlacedTile || null;
+  const jugadaPor = (lastPlay && lastPlay.tile) ? lastPlay.playerId : lastPlacedBy;
+  const claveUltima = fichaDestacada ? claveFicha(fichaDestacada) : null;
+  const nombreUltimo = jugadaPor ? players.find((p) => p.id === jugadaPor)?.name : null;
+
+  // La animación de entrada vive un rato y se desmonta: ver VIDA_ENTRADA.
+  useEffect(() => {
+    if (!claveUltima) return undefined;
+    setFichaNueva(claveUltima);
+    const id = window.setTimeout(() => setFichaNueva(null), VIDA_ENTRADA);
+    return () => window.clearTimeout(id);
+  }, [claveUltima]);
+
+  const moverCamara = useCallback((top) => {
+    const el = refContenedor.current;
+    if (!el) return;
+    const destino = Math.max(0, Math.min(top, el.scrollHeight - el.clientHeight));
+    const c = camara.current;
+    if (Math.abs(destino - el.scrollTop) < UMBRAL_MANUAL) {
+      // No merece la pena moverse, pero sí reencajar el ancla: si el tablero
+      // acaba de encoger (tile_demolition), el navegador ya ha recortado el
+      // scroll y ese salto no lo ha hecho nadie con el dedo.
+      c.ancla = el.scrollTop;
+      return;
     }
+    window.clearTimeout(c.vuelo);
+    c.ancla = destino;
+    // Mientras dure el vuelo, los eventos de scroll son nuestros y no del
+    // usuario. El techo de tiempo existe porque el scroll suave no avisa de que
+    // ha terminado y sin él la cámara se quedaría sorda.
+    c.vuelo = window.setTimeout(() => { c.vuelo = 0; }, VUELO_CAMARA);
+    // jsdom no implementa scrollTo; sin el respaldo, cualquier test que monte
+    // la partida reventaría aquí por algo que no es el fallo que busca.
+    if (typeof el.scrollTo === 'function') el.scrollTo({ top: destino });
+    else el.scrollTop = destino;
   }, []);
-  // Resaltar la última ficha colocada: ayuda a seguir el hilo, sobre todo en
-  // doble 9 donde el tablero puede llegar a 55 fichas.
-  // Normalmente resaltamos la ficha de la última jugada. Si el último acto fue
-  // un pase (lastPlay.tile === null, p. ej. una tranca), caemos a la última
-  // ficha REALMENTE colocada para que se siga viendo la jugada final.
-  const highlightTile = (lastPlay && lastPlay.tile) || lastPlacedTile || null;
-  const highlightBy = (lastPlay && lastPlay.tile) ? lastPlay.playerId : lastPlacedBy;
-  const lastKey = highlightTile ? tileKey(highlightTile) : null;
-  const lastPlayerName = highlightBy
-    ? players.find((p) => p.id === highlightBy)?.name
-    : null;
+
+  const alDesplazar = useCallback(() => {
+    const el = refContenedor.current;
+    if (!el) return;
+    const c = camara.current;
+    if (c.vuelo) {
+      if (Math.abs(el.scrollTop - c.ancla) <= 1) {
+        window.clearTimeout(c.vuelo);
+        c.vuelo = 0;
+      }
+      return;
+    }
+    // Umbral: un toque en táctil genera 1-3 px de temblor y no es una intención.
+    if (Math.abs(el.scrollTop - c.ancla) <= UMBRAL_MANUAL) return;
+    c.ancla = el.scrollTop;
+    setCamaraManual(true);
+    window.clearTimeout(c.espera);
+    c.espera = window.setTimeout(() => setCamaraManual(false), ESPERA_MANUAL);
+  }, []);
+
+  // Seguir la jugada: encuadrar los dos extremos abiertos y la última ficha.
+  useEffect(() => {
+    const el = refContenedor.current;
+    if (!el || camaraManual || !medido || trazo.items.length === 0) return;
+    const ultima = claveUltima
+      ? trazo.items.find((it) => claveFicha(it.tile) === claveUltima)
+      : null;
+    const caja = cajaDeLaJugada(trazo, escala, geom.margen, ultima);
+    if (!caja) return;
+    const arriba = caja.arriba - AIRE_CAMARA;
+    const abajo = caja.abajo + AIRE_CAMARA;
+    // Si la jugada ya se ve entera no se toca nada: mover la mesa sin necesidad
+    // marea y además pelea con quien esté leyendo otra parte de la cadena.
+    if (arriba >= el.scrollTop && abajo <= el.scrollTop + el.clientHeight) {
+      camara.current.ancla = el.scrollTop;
+      return;
+    }
+    moverCamara((arriba + abajo) / 2 - el.clientHeight / 2);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boardSignature, escala, camaraManual, medido, reencuadre]);
+
+  // Al empezar ronda la cámara vuelve sola. Es la otra mitad del fallo de
+  // manualView: no sólo se encendía sin querer, es que tampoco se apagaba nunca
+  // (GameBoard no se remonta entre rondas).
+  const tableroVacio = board.length === 0;
+  useEffect(() => {
+    if (tableroVacio) setCamaraManual(false);
+  }, [tableroVacio]);
+
+  useEffect(() => {
+    const c = camara.current;
+    return () => {
+      window.clearTimeout(c.vuelo);
+      window.clearTimeout(c.espera);
+    };
+  }, []);
+
+  const ajustarVista = useCallback(() => {
+    setCamaraManual(false);
+    setReencuadre((n) => n + 1);
+  }, []);
+
+  // Alternativa textual del lienzo. Las fichas van aria-hidden: en doble-9
+  // serían 51 paradas de lector para leer una figura, y el relato completo de
+  // la partida ya lo da la crónica.
+  const resumen = t('a11y.tableroResumen', {
+    n: board.length,
+    izq: tableroVacio ? '—' : board[0][0],
+    der: tableroVacio ? '—' : board[board.length - 1][1],
+  });
+
   return (
-    <div
-      ref={containerRef}
-      className="game-board-container"
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerLeave={handlePointerUp}
-      style={{ cursor: isDragging ? 'grabbing' : 'grab', touchAction: 'none' }}
-    >
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(16,185,129,0.12),rgba(0,0,0,0))] pointer-events-none" />
-      {/* Controles de Vista flotantes */}
-      <div className="zoom-controls">
-        <button onClick={zoomIn} className="zoom-btn" title="+">
-          <ZoomIn size={18} />
+    <div ref={refContenedor} className="game-board-container" onScroll={alDesplazar}>
+      <div className="mesa-controles">
+        <button type="button" onClick={ajustarVista} title={t('board.center')}>
+          <Maximize2 size={16} aria-hidden="true" />
+          <span>{t('board.center')}</span>
         </button>
-        <button onClick={zoomOut} className="zoom-btn" title="−">
-          <ZoomOut size={18} />
+        <button type="button" onClick={() => setShowMoveLog(true)} title={t('log.title')}>
+          <ScrollText size={16} aria-hidden="true" />
+          <span>{t('log.title')}</span>
         </button>
-        <button onClick={resetView} className="zoom-btn" title={t('board.center')}>
-          <Maximize2 size={16} />
-          <span className="zoom-btn-text">{t('board.center')}</span>
-        </button>
-        <button onClick={() => setShowMoveLog(true)} className="zoom-btn" title={t('log.title')}>
-          <ScrollText size={16} />
-          <span className="zoom-btn-text">{t('log.title')}</span>
-        </button>
+        {/* El cuadro de torneo se queda aquí: hoy es el ÚNICO camino a
+            showBracket, y moverlo a la barra sin llevárselo entero lo perdería. */}
         {onOpenBracket && (
-          <button onClick={onOpenBracket} className="zoom-btn" title={t('tourney.title')}>
-            <Trophy size={16} className="text-amber-400" />
-            <span className="zoom-btn-text">{t('tourney.short')}</span>
+          <button type="button" onClick={onOpenBracket} title={t('tourney.title')}>
+            <Trophy size={16} aria-hidden="true" />
+            <span>{t('tourney.short')}</span>
           </button>
         )}
       </div>
-      {/* El indicador de turno y el reloj viven en la barra superior: aquí
-          flotaban sobre el tablero y solapaban con los asientos. */}
-      {/* Contenedor del Tablero (Afectado por Paneo y Zoom) */}
-      <div
-        ref={boardRef}
-        className="board-canvas"
-        style={{
-          transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
-          transition: isDragging ? 'none' : 'transform 0.4s cubic-bezier(0.25, 1, 0.5, 1)'
-        }}
-      >
-        {board.length === 0 ? (
-          isMyTurn && selectedTileIndex !== null ? (
+
+      {camaraManual && (
+        <button
+          type="button"
+          className="mesa-seguir"
+          onClick={ajustarVista}
+          title={t('a11y.vistaManual')}
+        >
+          {t('a11y.seguirJugada')}
+        </button>
+      )}
+
+      {tableroVacio ? (
+        <div className="mesa-vacia">
+          <strong>{t('board.empty')}</strong>
+          <span>{t('board.emptyHint')}</span>
+          {isMyTurn && selectedTileIndex !== null && (
             <button
-              onClick={() => onPlay(selectedTileIndex, 'left')}
+              type="button"
+              onClick={() => onPlay && onPlay(selectedTileIndex, 'left')}
               className="board-placeholder-circle animate-pulse-glow"
+              style={{ marginTop: '16px' }}
+              title="Colocar primera ficha"
             >
               ＋
             </button>
-          ) : (
-            <div className="empty-board-msg">
-              <Move size={36} className="animate-bounce" />
-              <span className="empty-board-msg-title">{t('board.empty')}</span>
-              <span className="empty-board-msg-text">{t('board.emptyHint')}</span>
+          )}
+          {isMyTurn && pendingTargetType === 'end_target' && (
+            <div style={{ display: 'flex', gap: '16px', marginTop: '16px', zIndex: 30 }}>
+              <button
+                type="button"
+                onClick={() => onSelectEndTarget && onSelectEndTarget('left')}
+                className="board-placeholder-circle"
+                style={{ borderStyle: 'dashed', borderColor: '#818cf8', color: '#a5b4fc' }}
+              >
+                {selectedPower?.id === 'tile_demolition' ? '💣' : '❄️'} Izq
+              </button>
+              <button
+                type="button"
+                onClick={() => onSelectEndTarget && onSelectEndTarget('right')}
+                className="board-placeholder-circle"
+                style={{ borderStyle: 'dashed', borderColor: '#818cf8', color: '#a5b4fc' }}
+              >
+                {selectedPower?.id === 'tile_demolition' ? '💣' : '❄️'} Der
+              </button>
             </div>
-          )
-        ) : (
-          <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-            {/* 1. Fichas de Dominó en Serpiente */}
-            {layout.map((item) => {
-              // Clave estable por ficha física (independiente de la orientación):
-              // evita re-montar y re-animar todas las fichas al jugar a la izquierda.
-              const key = tileKey(item.tile);
-              const isLast = lastKey !== null && key === lastKey;
-              const isDouble = item.tile[0] === item.tile[1];
+          )}
+        </div>
+      ) : (
+        <div
+          className="mesa-lienzo"
+          role="img"
+          aria-label={resumen}
+          tabIndex={0}
+          style={{ width: trazo.w * escala, height: trazo.h * escala }}
+        >
+          <div
+            className="mesa-plano"
+            style={{
+              width: trazo.w,
+              height: trazo.h,
+              transform: `scale(${escala})`,
+              // Oculto hasta la primera medida real: sin esto el primer trazado
+              // sale con un perRow inventado y se ve reacomodarse.
+              visibility: medido ? undefined : 'hidden',
+            }}
+          >
+            {trazo.items.map((item) => {
+              const clave = claveFicha(item.tile);
+              const esUltima = claveUltima !== null && clave === claveUltima;
+              const entrando = esUltima && fichaNueva === clave;
+              const esDoble = item.tile[0] === item.tile[1];
               return (
                 <div
-                  key={key}
-                  className={`board-tile-wrap ${isLast ? 'last-played' : ''} ${isLast && isDouble ? 'double-impact' : ''}`}
-                  title={isLast && lastPlayerName ? t('board.lastTile', { name: lastPlayerName }) : undefined}
+                  key={clave}
+                  aria-hidden="true"
+                  className={`board-tile-wrap ${esUltima ? 'last-played' : ''} ${entrando && esDoble ? 'double-impact' : ''}`}
+                  title={esUltima && nombreUltimo ? t('board.lastTile', { name: nombreUltimo }) : undefined}
                   style={{
-                    position: 'absolute',
-                    left: `calc(50% + ${item.cx}px)`,
-                    top: `calc(50% + ${item.cy}px)`,
+                    left: item.cx - trazo.minX + geom.margen,
+                    top: item.cy - trazo.minY + geom.margen,
                     width: item.w,
                     height: item.h,
-                    transform: 'translate(-50%, -50%)',
-                    transition: 'left 0.4s ease-out, top 0.4s ease-out'
+                    // Anillo de identidad de quien la jugó, en vez del halo
+                    // verde genérico que era igual para los cuatro.
+                    '--color-jugador': esUltima && jugadaPor ? colorDeJugador(jugadaPor) : undefined,
                   }}
                 >
-                  {isLast && isDouble && <div className="shockwave-burst" />}
-                  {/* Envoltorio interno: la animación de caída actúa aquí solo para la última ficha jugada,
-                      evitando re-animar todas las fichas del tablero simultáneamente. */}
-                  <div className={`board-tile-anim ${isLast ? 'animate-tile-drop' : ''}`}>
-                    <DominoTile
-                      tile={item.display}
-                      horizontal={item.horizontal}
-                      disabled={false}
-                    />
+                  {entrando && esDoble && <div className="shockwave-burst" />}
+                  {/* La animación de caída actúa sólo sobre la ficha entrante:
+                      envolverla aquí evita re-animar el tablero entero. */}
+                  <div className={`board-tile-anim ${entrando ? 'animate-tile-drop' : ''}`}>
+                    <DominoTile tile={item.display} horizontal={item.horizontal} />
                   </div>
                 </div>
               );
             })}
-            {/* 2. Controles del Extremo Izquierdo */}
-            {leftPos && (
+
+            {/* Controles del Extremo Izquierdo */}
+            {trazo.leftPos && (
               <div
                 style={{
                   position: 'absolute',
-                  left: `calc(50% + ${leftPos.x}px)`,
-                  top: `calc(50% + ${leftPos.y}px)`,
+                  left: trazo.leftPos.x - 32 - trazo.minX + geom.margen,
+                  top: trazo.leftPos.y - trazo.minY + geom.margen,
                   transform: 'translate(-50%, -50%)',
                   zIndex: 20,
-                  transition: 'left 0.4s ease-out, top 0.4s ease-out'
+                  transition: 'left 0.4s ease-out, top 0.4s ease-out',
                 }}
               >
                 {isMyTurn && canPlayLeft && pendingTargetType !== 'end_target' && (
                   <button
-                    onClick={() => onPlay(selectedTileIndex, 'left')}
+                    type="button"
+                    onClick={() => onPlay && onPlay(selectedTileIndex, 'left')}
                     className="board-placeholder-circle animate-pulse-glow"
+                    title="Jugar extremo izquierdo"
                   >
                     ←
                   </button>
                 )}
-                {activeEffects?.frozenEnd === 'left' && (
+                {(activeEffects?.frozenEnd === 'left' || activeEffects?.frozenEnd === 'both') && (
                   <div className="board-placeholder-circle frozen" title="Extremo Congelado" />
                 )}
                 {isMyTurn && pendingTargetType === 'end_target' && (
                   <button
-                    onClick={() => onSelectEndTarget('left')}
+                    type="button"
+                    onClick={() => onSelectEndTarget && onSelectEndTarget('left')}
                     className="board-placeholder-circle"
                     style={{ borderStyle: 'dashed', borderColor: '#818cf8', color: '#a5b4fc' }}
                     title={selectedPower?.id === 'tile_demolition' ? 'Eliminar Ficha Izquierda' : 'Congelar Extremo Izquierdo'}
@@ -393,32 +407,36 @@ export default function GameBoard({
                 )}
               </div>
             )}
-            {/* 3. Controles del Extremo Derecho */}
-            {rightPos && (
+
+            {/* Controles del Extremo Derecho */}
+            {trazo.rightPos && (
               <div
                 style={{
                   position: 'absolute',
-                  left: `calc(50% + ${rightPos.x}px)`,
-                  top: `calc(50% + ${rightPos.y}px)`,
+                  left: trazo.rightPos.x + (trazo.items[trazo.items.length - 1]?.dir || 1) * 32 - trazo.minX + geom.margen,
+                  top: trazo.rightPos.y - trazo.minY + geom.margen,
                   transform: 'translate(-50%, -50%)',
                   zIndex: 20,
-                  transition: 'left 0.4s ease-out, top 0.4s ease-out'
+                  transition: 'left 0.4s ease-out, top 0.4s ease-out',
                 }}
               >
                 {isMyTurn && canPlayRight && pendingTargetType !== 'end_target' && (
                   <button
-                    onClick={() => onPlay(selectedTileIndex, 'right')}
+                    type="button"
+                    onClick={() => onPlay && onPlay(selectedTileIndex, 'right')}
                     className="board-placeholder-circle animate-pulse-glow"
+                    title="Jugar extremo derecho"
                   >
                     →
                   </button>
                 )}
-                {activeEffects?.frozenEnd === 'right' && (
+                {(activeEffects?.frozenEnd === 'right' || activeEffects?.frozenEnd === 'both') && (
                   <div className="board-placeholder-circle frozen" title="Extremo Congelado" />
                 )}
                 {isMyTurn && pendingTargetType === 'end_target' && (
                   <button
-                    onClick={() => onSelectEndTarget('right')}
+                    type="button"
+                    onClick={() => onSelectEndTarget && onSelectEndTarget('right')}
                     className="board-placeholder-circle"
                     style={{ borderStyle: 'dashed', borderColor: '#818cf8', color: '#a5b4fc' }}
                     title={selectedPower?.id === 'tile_demolition' ? 'Eliminar Ficha Derecha' : 'Congelar Extremo Derecho'}
@@ -428,20 +446,10 @@ export default function GameBoard({
                 )}
               </div>
             )}
-            {/* Target fallback cuando el tablero está vacío */}
-            {isMyTurn && pendingTargetType === 'end_target' && board.length === 0 && (
-              <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', display: 'flex', gap: '16px', zIndex: 30 }}>
-                <button onClick={() => onSelectEndTarget('left')} className="board-placeholder-circle" style={{ borderStyle: 'dashed', borderColor: '#818cf8', color: '#a5b4fc' }}>
-                  {selectedPower?.id === 'tile_demolition' ? '💣' : '❄️'} Izq
-                </button>
-                <button onClick={() => onSelectEndTarget('right')} className="board-placeholder-circle" style={{ borderStyle: 'dashed', borderColor: '#818cf8', color: '#a5b4fc' }}>
-                  {selectedPower?.id === 'tile_demolition' ? '💣' : '❄️'} Der
-                </button>
-              </div>
-            )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
       {showMoveLog && <MoveLog moveLog={moveLog} onClose={() => setShowMoveLog(false)} />}
     </div>
   );

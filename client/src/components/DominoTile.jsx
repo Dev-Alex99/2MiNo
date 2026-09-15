@@ -34,24 +34,39 @@ const getPipsForValue = (val, isHorizontal) => {
   }
 };
 
-// Color por valor: en el doble 9 la rejilla se llena mucho y distinguir 7/8/9
-// de un vistazo es difícil solo por el patrón.
-const PIP_COLORS = {
-  6: '#10b981', // esmeralda
-  7: '#f59e0b', // ámbar
-  8: '#6366f1', // índigo
-  9: '#f43f5e'  // rosa
+// La ayuda de matiz para distinguir 7/8/9 se conserva, pero pasa por el gancho
+// --pip-color de fichas.css: antes era un `background` fijo inyectado aquí, que
+// PISABA --tile-pip y dejaba el 6 a 2,33:1 sobre la ficha blanca además de
+// romper el contrato de la tienda (comprar una skin no cambiaba los pips 6-9).
+// Los tokens --pip-6..9 se derivan de la tinta de la skin en base.css.
+const TOKEN_PIP = {
+  6: 'var(--pip-6)',
+  7: 'var(--pip-7)',
+  8: 'var(--pip-8)',
+  9: 'var(--pip-9)'
 };
 
 function DominoTile({
   tile,
   onClick,
+  onDoubleClick,
   selected,
   playable,
   disabled,
   horizontal = false,
   className = '',
-  style
+  style,
+  // Solo la mano activa `interactivo`: sus fichas son la acción principal de la
+  // partida y tienen que ser botones de verdad. Las del tablero siguen siendo
+  // <div aria-hidden>: en doble 9 serían 51 paradas de tabulación.
+  interactivo = false,
+  ariaLabel,
+  ariaDisabled,
+  ariaPosinset,
+  ariaSetsize,
+  tabIndex,
+  onKeyDown,
+  innerRef
 }) {
   const [val1, val2] = tile;
 
@@ -59,29 +74,22 @@ function DominoTile({
   const renderHalf = (val) => {
     const activePips = getPipsForValue(val, horizontal);
     return (
-      <div className="pip-grid">
+      <div
+        className="pip-grid"
+        style={TOKEN_PIP[val] ? { '--pip-color': TOKEN_PIP[val] } : undefined}
+      >
         {Array.from({ length: 9 }).map((_, idx) => {
           const isActive = activePips.includes(idx);
-          return (
-            <div
-              key={idx}
-              className={`pip ${isActive ? 'active' : ''}`}
-              style={{
-                background: PIP_COLORS[val] // undefined => color por defecto del CSS
-              }}
-            />
-          );
+          return <div key={idx} className={`pip ${isActive ? 'active' : ''}`} />;
         })}
       </div>
     );
   };
 
-  return (
-    <div
-      onClick={onClick}
-      style={style}
-      className={`domino-tile ${horizontal ? 'horizontal' : ''} ${selected ? 'selected' : ''} ${playable ? 'playable' : ''} ${disabled ? 'disabled' : ''} ${className}`}
-    >
+  const clases = `domino-tile ${horizontal ? 'horizontal' : ''} ${selected ? 'selected' : ''} ${playable ? 'playable' : ''} ${disabled ? 'disabled' : ''} ${className}`;
+
+  const contenido = (
+    <>
       {/* Mitad superior / izquierda */}
       {renderHalf(val1)}
 
@@ -90,6 +98,42 @@ function DominoTile({
 
       {/* Mitad inferior / derecha */}
       {renderHalf(val2)}
+    </>
+  );
+
+  if (interactivo) {
+    return (
+      // NUNCA el atributo `disabled`: sacaría la ficha del orden de tabulación y
+      // un usuario de lector no podría repasar su propia mano. El rechazo lo
+      // hace el manejador.
+      <button
+        type="button"
+        ref={innerRef}
+        onClick={onClick}
+        onDoubleClick={onDoubleClick}
+        onKeyDown={onKeyDown}
+        style={style}
+        className={clases}
+        aria-label={ariaLabel}
+        aria-disabled={ariaDisabled ? true : undefined}
+        aria-posinset={ariaPosinset}
+        aria-setsize={ariaSetsize}
+        tabIndex={tabIndex}
+      >
+        {contenido}
+      </button>
+    );
+  }
+
+  return (
+    <div
+      ref={innerRef}
+      onClick={onClick}
+      onDoubleClick={onDoubleClick}
+      style={style}
+      className={clases}
+    >
+      {contenido}
     </div>
   );
 }

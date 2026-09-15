@@ -93,12 +93,20 @@ class TokenBucket {
 }
 
 // Eventos que tocan BD / crean salas / envían solicitudes: cubo estricto.
+//
+// La familia de la voz entra entera salvo la señalización: `accept_call` no
+// estaba y por eso se podía sondear a 30/s con callIds inventados.
+// `voice_pool_signal`, `voice_pool_speaking` y `voice_peer_state` se quedan en
+// el cubo GENERAL a propósito (ráfaga 60, 30/s): ese cubo existe justo para
+// cubrir la señalización WebRTC, que es legítimamente ruidosa al montar una
+// llamada, y meterla aquí cortaría el establecimiento de la conexión.
 const HEAVY_EVENTS = new Set([
   'create_room', 'quick_play', 'join_room', 'friend_add', 'friend_respond',
-  'friend_challenge', 'equip_skin', 'claim_mission', 'get_profile',
-  'get_leaderboard', 'get_match_history', 'get_match_replay', 'get_friends',
-  'join_queue', 'create_tournament', 'join_tournament', 'call_friend',
-  'invite_to_pool'
+  'friend_remove', 'friend_challenge', 'equip_skin', 'claim_mission',
+  'get_profile', 'get_leaderboard', 'get_match_history', 'get_match_replay',
+  'get_friends', 'join_queue', 'create_tournament', 'join_tournament',
+  'call_friend', 'invite_to_pool', 'accept_call', 'decline_call', 'call_cancel',
+  'join_table_voice', 'voice_hello', 'set_availability'
 ]);
 
 // Eventos de chat/emotes: cubo anti-spam.

@@ -3,8 +3,10 @@ import { X, Trophy, Flame, RotateCcw, Award, ShieldCheck, Coins, Zap, History, P
 import { socket } from '../socket';
 import { useT } from '../i18n/LanguageContext';
 import { loadStats, ACHIEVEMENTS, winRate, getRank, getDivision, TITLES, getEquippedTitle, setEquippedTitle } from '../stats';
-import { getOrCreatePersistentPlayerId } from '../store/useGameStore';
+import { useGameStore } from '../store/useGameStore';
 import ReplayModal from './ReplayModal';
+import useModalA11y from '../hooks/useModalA11y';
+import { useSocialStore, iniciarSocial, useCapacidades, hayPersistencia } from '../social/useSocialStore';
 
 // Resultado de una partida para el jugador actual (individual o parejas).
 function matchResult(row, pid) {
@@ -20,54 +22,61 @@ function matchResult(row, pid) {
 export default function ProfileModal({ name, onClose }) {
   const { t } = useT();
   const [stats, setStats] = useState(() => loadStats());
-  const [dbProfile, setDbProfile] = useState(null);
   const [equippedTitle, setEquippedTitleState] = useState(() => getEquippedTitle());
   const [history, setHistory] = useState([]);
   const [replayId, setReplayId] = useState(null);
   const [claiming, setClaiming] = useState(null);
-  const pid = getOrCreatePersistentPlayerId();
+  const [borrando, setBorrando] = useState(false);
+  const pid = useGameStore((s) => s.cuentaId);
+
+  // El perfil del servidor viene del store social: es quien escucha
+  // `profile_data` de forma permanente y quien tiene el vigilante de 6 s. Antes
+  // lo escuchaban tres componentes por separado y cada uno se quedaba sin datos
+  // al desmontarse.
+  const dbProfile = useSocialStore((s) => s.perfil);
+  const estado = useSocialStore((s) => s.estado);
+  const recargar = useSocialStore((s) => s.recargar);
+  const conProgreso = hayPersistencia(useCapacidades());
   const daily = dbProfile?.daily;
+
+  const { propsPanel, propsTitulo } = useModalA11y(onClose);
 
   const initials = (name || '?').trim().slice(0, 2).toUpperCase();
   const unlockedCount = ACHIEVEMENTS.filter(a => stats.achievements[a.id]).length;
   const rank = getRank(stats);
 
   useEffect(() => {
-    socket.emit('get_profile', { playerId: pid, username: name || 'Jugador' });
+    iniciarSocial();
     socket.emit('get_match_history', { playerId: pid });
 
-    function onProfileData(data) {
-      if (data) setDbProfile(data);
-    }
     function onHistory(data) {
       setHistory(Array.isArray(data) ? data : []);
     }
     function onMissionClaimed(res) {
       setClaiming(null);
-      if (res && res.success) {
-        // Refrescar el perfil para reflejar monedas y estado de la misión.
-        socket.emit('get_profile', { playerId: pid, username: name || 'Jugador' });
-      }
+      // Refrescar el perfil para reflejar monedas y estado de la misión.
+      if (res && res.success) recargar();
     }
-    socket.on('profile_data', onProfileData);
     socket.on('match_history_data', onHistory);
     socket.on('mission_claimed', onMissionClaimed);
     return () => {
-      socket.off('profile_data', onProfileData);
       socket.off('match_history_data', onHistory);
       socket.off('mission_claimed', onMissionClaimed);
     };
-  }, [name, pid]);
+  }, [pid, recargar]);
 
   const claimMission = (missionId) => {
     setClaiming(missionId);
     socket.emit('claim_mission', { playerId: pid, missionId });
   };
 
+  // Confirmación EN LÍNEA, como el resto de lo destructivo del paquete: un
+  // `window.confirm` es un diálogo del navegador que se lleva el foco fuera de
+  // la app, no se puede traducir y no dice de qué perfil está hablando.
   const resetStats = () => {
-    if (!window.confirm(t('profile.resetConfirm'))) return;
     try { localStorage.removeItem('domino_stats'); } catch { /* noop */ }
     setStats(loadStats());
+    setBorrando(false);
   };
 
   const handleSelectTitle = (titleId) => {
@@ -75,14 +84,24 @@ export default function ProfileModal({ name, onClose }) {
     setEquippedTitleState(titleId);
   };
 
-  const currentElo = dbProfile?.elo || 1200;
-  const currentCoins = dbProfile?.coins !== undefined ? dbProfile.coins : 500;
+  /**
+   * NO SE INVENTA UN DATO QUE NO EXISTE. Antes valían 1200 ELO y 500 monedas
+   * cuando `profile_data` llegaba a null —que es un evento REAL, el que manda
+   * un servidor sin persistencia—, y esas 500 monedas se pintaban con su icono
+   * de moneda al lado mientras la tienda afirmaba 0 sobre el mismo monedero.
+   * Ahora el valor ausente es «—» y el motivo va escrito en su franja.
+   */
+  const currentElo = dbProfile?.elo;
+  const currentCoins = dbProfile?.coins;
+  const elo = currentElo != null ? currentElo : '—';
+  const monedas = currentCoins != null ? currentCoins : '—';
 
   return (
+    <>
     <div className="modal-overlay animate-fade-in" onClick={onClose}>
-      <div className="modal-card glass-panel animate-scale-up profile-card" onClick={(e) => e.stopPropagation()}>
-        <button className="profile-close" onClick={onClose} aria-label={t('common.cancel')}>
-          <X size={18} />
+      <div className="modal-card glass-panel animate-scale-up profile-card modal-a11y" {...propsPanel} onClick={(e) => e.stopPropagation()}>
+        <button type="button" className="profile-close" onClick={onClose} aria-label={t('common.close')}>
+          <X size={18} aria-hidden="true" />
         </button>
 
         {/* Cabecera: avatar + nombre + rango + ELO + monedas */}
@@ -90,7 +109,7 @@ export default function ProfileModal({ name, onClose }) {
           <div className="profile-avatar">{initials}</div>
           <div style={{ flex: 1 }}>
             <div className="profile-name-row" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              <span className="profile-name">{name || t('common.you')}</span>
+              <span className="profile-name" {...propsTitulo}>{name || t('common.you')}</span>
               <span className="profile-rank-badge" style={{ borderColor: rank.color, color: rank.color }}>
                 {t(`rank.${rank.id}`)}
               </span>
@@ -98,9 +117,12 @@ export default function ProfileModal({ name, onClose }) {
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '4px', fontSize: '0.8rem', color: '#9ca3af' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#818cf8', fontWeight: 700 }}>
-                <Zap size={14} /> {currentElo} ELO
+                <Zap size={14} aria-hidden="true" /> {elo} ELO
               </span>
-              {(() => {
+              {/* La división sale del ELO. Sin ELO no hay división que enseñar:
+                  pintarla sobre el 1200 inventado era la misma mentira, sólo
+                  que con insignia de color. */}
+              {currentElo != null && (() => {
                 const div = getDivision(currentElo);
                 return (
                   <span className="profile-division-badge" style={{ color: div.color }} title={t(`div.${div.id}`)}>
@@ -109,7 +131,7 @@ export default function ProfileModal({ name, onClose }) {
                 );
               })()}
               <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#fbbf24', fontWeight: 700 }}>
-                <Coins size={14} /> {currentCoins} {t('common.coins')}
+                <Coins size={14} aria-hidden="true" /> {monedas} {t('common.coins')}
               </span>
             </div>
 
@@ -120,6 +142,26 @@ export default function ProfileModal({ name, onClose }) {
             )}
           </div>
         </div>
+
+        {/* LA MISMA FRANJA QUE LA TIENDA, EL RANKING Y LA AGENDA, leída del
+            MISMO dato (`capacidades.persistencia`). Un servidor sin base de
+            datos no guarda ni monedas ni ELO; decirlo una vez vale más que tres
+            pantallas contradiciéndose sobre el mismo monedero. */}
+        {!conProgreso && (
+          <p className="ov-degradado">{t('degradado.sinPersistencia')}</p>
+        )}
+
+        {/* Con persistencia pero sin respuesta: el vigilante de 6 s. El servidor
+            puede aceptar el `get_profile` y no contestar nunca, y no hay ningún
+            evento de error que lo cuente. */}
+        {conProgreso && estado === 'sinDatos' && (
+          <p className="ov-degradado">
+            <span>{t('degradado.noCargado')}</span>
+            <button type="button" className="btn-premium btn-secondary" onClick={recargar}>
+              {t('degradado.reintentar')}
+            </button>
+          </p>
+        )}
 
         {/* Cuerpo con Scroll Dedicado */}
         <div className="profile-scroll-body">
@@ -148,12 +190,17 @@ export default function ProfileModal({ name, onClose }) {
                       {m.claimed ? (
                         <span className="mission-claimed"><CheckCircle2 size={13} /> {t('mission.claimed')}</span>
                       ) : (
+                        /* aria-disabled y rechazo en el manejador, nunca el
+                           atributo `disabled`: una misión a medias es
+                           exactamente el botón que hay que poder enfocar para
+                           que el lector cuente cuánto falta. */
                         <button
+                          type="button"
                           className="mission-claim-btn"
-                          disabled={!m.completed || claiming === m.id}
-                          onClick={() => claimMission(m.id)}
+                          aria-disabled={(!m.completed || claiming === m.id) ? 'true' : undefined}
+                          onClick={() => { if (m.completed && claiming !== m.id) claimMission(m.id); }}
                         >
-                          <Gift size={12} /> {m.reward}
+                          <Gift size={12} aria-hidden="true" /> {m.reward}
                         </button>
                       )}
                     </div>
@@ -174,12 +221,20 @@ export default function ProfileModal({ name, onClose }) {
                 const isUnlocked = stats.wins >= title.reqWins;
                 const isSelected = equippedTitle === title.id;
                 return (
+                  /* Un título bloqueado seguía siendo `disabled`, así que se
+                     salía del orden de tabulación y su `title` —el único sitio
+                     donde ponía cuántas victorias faltan— no se anunciaba
+                     nunca. Con aria-disabled se puede enfocar y el motivo entra
+                     en el nombre accesible, que es donde se lee. */
                   <button
                     key={title.id}
-                    disabled={!isUnlocked}
-                    onClick={() => handleSelectTitle(title.id)}
+                    type="button"
+                    aria-disabled={isUnlocked ? undefined : 'true'}
+                    aria-pressed={isSelected}
+                    onClick={() => { if (isUnlocked) handleSelectTitle(title.id); }}
                     className={`profile-title-btn ${isSelected ? 'selected' : ''} ${!isUnlocked ? 'locked' : ''}`}
                     title={!isUnlocked ? t('profile.titleReq', { n: title.reqWins }) : undefined}
+                    aria-label={isUnlocked ? undefined : `${t(`title.${title.id}`)} · ${t('profile.titleReq', { n: title.reqWins })}`}
                   >
                     <span className="title-icon">{title.icon}</span>
                     <span className="title-text">{t(`title.${title.id}`)}</span>
@@ -277,14 +332,33 @@ export default function ProfileModal({ name, onClose }) {
           )}
 
           {stats.played > 0 && (
-            <button className="profile-reset" onClick={resetStats}>
-              <RotateCcw size={12} /> {t('profile.reset')}
-            </button>
+            borrando ? (
+              <div className="ov-confirmar" role="group" aria-label={t('profile.resetConfirm')}>
+                <span className="ov-confirmar-texto">{t('profile.resetConfirm')}</span>
+                <button type="button" className="btn-premium ov-peligro" onClick={resetStats}>
+                  {t('profile.reset')}
+                </button>
+                <button type="button" className="btn-premium btn-secondary" onClick={() => setBorrando(false)}>
+                  {t('common.cancel')}
+                </button>
+              </div>
+            ) : (
+              <button type="button" className="profile-reset" onClick={() => setBorrando(true)}>
+                <RotateCcw size={12} aria-hidden="true" /> {t('profile.reset')}
+              </button>
+            )
           )}
         </div>
       </div>
-
-      {replayId && <ReplayModal matchId={replayId} onClose={() => setReplayId(null)} />}
     </div>
+
+    {/* LA REPETICIÓN NO CUELGA DEL PERFIL. Estaba dentro de este mismo
+        `.modal-overlay`, así que un clic en SU fondo burbujeaba hasta el
+        `onClick={onClose}` de aquí y cerraba los dos a la vez: se perdía el
+        perfil por querer salir de un vídeo. Sale del overlay en el árbol de
+        React —que es por donde burbujean los eventos sintéticos, portal
+        incluido— y ella misma sale por portal en el DOM. */}
+    {replayId && <ReplayModal matchId={replayId} onClose={() => setReplayId(null)} />}
+    </>
   );
 }

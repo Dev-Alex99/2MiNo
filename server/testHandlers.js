@@ -31,8 +31,14 @@ function arrancarServidor() {
   return new Promise((resolve, reject) => {
     server = spawn(process.execPath, ['server.js'], {
       cwd: __dirname,
-      // Sin DATABASE_URL: modo degradado, que es como corre en CI.
-      env: { ...process.env, PORT: String(PORT), AUTH_SECRET: 'test_secret_fijo' },
+      // Modo degradado, que es como corre en CI y como están escritos los
+      // asertos de identidad de más abajo. DATABASE_URL se borra EXPLÍCITAMENTE
+      // y no por omisión: server.js carga server/.env, así que en la máquina de
+      // quien tenga una configurada esta suite se pondría a hablar con la base
+      // de datos real —cambiando el resultado y, peor, escribiendo en ella—.
+      // La clave tiene que EXISTIR aunque valga vacío: dotenv sólo rellena las
+      // que faltan, así que definirla aquí es lo que le impide sobreescribirla.
+      env: { ...process.env, DATABASE_URL: '', PORT: String(PORT), AUTH_SECRET: 'test_secret_fijo' },
       stdio: ['ignore', 'pipe', 'pipe']
     });
     const alTiempo = setTimeout(() => reject(new Error('el servidor no arrancó a tiempo')), 20000);

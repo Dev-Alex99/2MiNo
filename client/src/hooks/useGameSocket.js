@@ -313,7 +313,13 @@ export default function useGameSocket({ invitedCodeRef }) {
     }
 
     function onReceiveQuickMessage(msg) {
-      const LEGENDARY = { 'srv.pw.mind_swap': 1, 'srv.pw.russian_roulette': 1, 'srv.pw.block_both': 1 };
+      const LEGENDARY = {
+        'srv.pw.mind_swap': 1,
+        'srv.pw.russian_roulette': 1,
+        'srv.pw.block_both': 1,
+        'srv.pw.earthquake': 1,
+        'srv.pw.black_hole': 1
+      };
       if (msg.key && LEGENDARY[msg.key] && !useGameStore.getState().spectating) {
         const casterName = msg.params && msg.params.name;
         const gs = useGameStore.getState().gameState;

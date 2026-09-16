@@ -3,6 +3,7 @@ import GameBoard from '../../components/GameBoard';
 import PlayerHand from '../../components/PlayerHand';
 import CintaTurno from '../../components/CintaTurno';
 import PowerCards from '../../components/PowerCards';
+import PowerCastBanner from '../../components/PowerCastBanner';
 import VideoGrid from '../../components/VideoGrid';
 import { contarJugables } from './jugadas';
 import { fichasDelMazo } from './trazado';
@@ -128,6 +129,8 @@ export default function DominoBoard({ actions, isMyTurn, onOpenBracket }) {
             boardIsEmpty={tableroVacio}
             wildcardActive={comodinActivo}
             drawEnabled={gameState.drawEnabled !== false}
+            goldenTiles={gameState.activeEffects?.goldenTiles?.[playerId]}
+            doubleTurnActive={gameState.activeEffects?.doubleTurnActive}
             onTileClickOverride={
               (pendingTargetType === 'hand_tile_target' || pendingTargetType === 'smuggle_select_tile')
                 ? actions.handleTileClickOverride
@@ -174,6 +177,7 @@ export default function DominoBoard({ actions, isMyTurn, onOpenBracket }) {
       {/* Envuelve tablero y chat para que el botón flotante del chat quede
           anclado a la mesa y no encima de las fichas de la mano. */}
       <div className="board-region" style={{ order: ORDEN_MESA }}>
+        <PowerCastBanner />
         <GameBoard
           board={gameState.board}
           players={gameState.players}

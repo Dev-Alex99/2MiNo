@@ -168,6 +168,55 @@ const PowerCardIcon = ({ id }) => {
           <path d="M12 3a9 9 0 1 0 0 18 6 6 0 1 1 0-12 3 3 0 1 0 0 6" />
         </svg>
       );
+    case 'mirror_end':
+      return (
+        <svg {...props}>
+          <rect x="2" y="4" width="8" height="16" rx="1" />
+          <rect x="14" y="4" width="8" height="16" rx="1" />
+          <path d="M10 9l4 3-4 3" />
+        </svg>
+      );
+    case 'golden_tile':
+      return (
+        <svg {...props}>
+          <rect x="4" y="2" width="16" height="20" rx="3" stroke="#f59e0b" strokeWidth="2.2" />
+          <line x1="4" y1="12" x2="20" y2="12" stroke="#f59e0b" />
+          <circle cx="12" cy="7" r="1.5" fill="#f59e0b" />
+          <circle cx="9" cy="17" r="1.5" fill="#f59e0b" />
+          <circle cx="15" cy="17" r="1.5" fill="#f59e0b" />
+        </svg>
+      );
+    case 'trap_end':
+      return (
+        <svg {...props}>
+          <circle cx="12" cy="12" r="9" strokeDasharray="3 2" />
+          <polygon points="12 4 19 18 5 18" />
+          <circle cx="12" cy="14" r="1.5" />
+        </svg>
+      );
+    case 'earthquake':
+      return (
+        <svg {...props} strokeWidth="2.2">
+          <path d="M2 12h3l2.5-7 4 14 3-10 2.5 5 2-2H22" />
+          <line x1="4" y1="20" x2="20" y2="20" strokeDasharray="2 2" />
+        </svg>
+      );
+    case 'black_hole':
+      return (
+        <svg {...props}>
+          <ellipse cx="12" cy="12" rx="9" ry="4" transform="rotate(-25 12 12)" />
+          <circle cx="12" cy="12" r="3.5" fill="currentColor" />
+          <path d="M7 6a8 8 0 0 1 10 0M17 18a8 8 0 0 1-10 0" />
+        </svg>
+      );
+    case 'quantum_vision':
+      return (
+        <svg {...props}>
+          <ellipse cx="12" cy="12" rx="9" ry="3.5" transform="rotate(30 12 12)" />
+          <ellipse cx="12" cy="12" rx="9" ry="3.5" transform="rotate(-30 12 12)" />
+          <circle cx="12" cy="12" r="2.5" fill="currentColor" />
+        </svg>
+      );
     default:
       return (
         <svg {...props}>
@@ -208,12 +257,12 @@ export default function PowerCards({
       setPendingTargetType('smuggle_select_tile'); 
     } else if (['spy_eye', 'draw_penalty', 'destiny_steal', 'mind_swap', 'magnetic_pull', 'curse'].includes(card.id)) {
       setPendingTargetType('player_target');
-    } else if (['freeze', 'tile_demolition'].includes(card.id)) {
+    } else if (['freeze', 'tile_demolition', 'mirror_end', 'trap_end'].includes(card.id)) {
       setPendingTargetType('end_target');
-    } else if (card.id === 'trade') {
+    } else if (['trade', 'golden_tile'].includes(card.id)) {
       setPendingTargetType('hand_tile_target');
     } else {
-      // Instantáneos (double_shot, reverse, shield, wildcard, boneyard_reset, russian_roulette)
+      // Instantáneos (double_shot, reverse, shield, wildcard, boneyard_reset, russian_roulette, block_both, storm, second_wind, spy_all, earthquake, black_hole, quantum_vision)
       setPendingTargetType(null);
       onUsePower(card.id, null, null);
       setSelectedPower(null);

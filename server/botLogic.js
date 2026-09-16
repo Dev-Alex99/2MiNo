@@ -32,7 +32,7 @@ const { buildObservation, extremosTras, encaja, combinaciones } = require('./bot
 
 const BOT_NAMES = ['Rita', 'Chema', 'Yuri', 'Nando', 'Pilar', 'Bruno', 'Tere', 'Iván'];
 
-const SAFE_BOT_POWERS = ['shield', 'double_shot', 'skip', 'freeze', 'wildcard'];
+const SAFE_BOT_POWERS = ['shield', 'double_shot', 'skip', 'freeze', 'wildcard', 'mirror_end', 'golden_tile', 'trap_end', 'earthquake', 'black_hole', 'quantum_vision'];
 
 // Pesos de 'dificil'. Están en la misma escala que los puntos de una ficha
 // (0-12) para que se puedan leer: 18 de bloqueo es "vale más que soltar la
@@ -677,11 +677,15 @@ function choosePower(game, playerId, random = Math.random) {
   if (diff === 'facil') return null;
   if (!player.powers || player.powers.length === 0) return null;
 
-  // Congelar sin tablero no congela nada: se descarta antes de gastar la tirada.
+  // Congelar y poderes que afectan al tablero requieren que haya tablero.
   const hayTablero = (game.board || []).length > 0;
-  const usable = player.powers.filter(c =>
-    SAFE_BOT_POWERS.includes(c.id) && (c.id !== 'freeze' || hayTablero)
-  );
+  const hayPozo = (game.boneyard || []).length > 0;
+  const usable = player.powers.filter(c => {
+    if (!SAFE_BOT_POWERS.includes(c.id)) return false;
+    if ((c.id === 'freeze' || c.id === 'mirror_end' || c.id === 'trap_end' || c.id === 'earthquake' || c.id === 'black_hole') && !hayTablero) return false;
+    if (c.id === 'quantum_vision' && !hayPozo) return false;
+    return true;
+  });
   if (usable.length === 0) return null;
 
   // Cuanto mejor es el bot, más aprovecha las cartas que tiene.

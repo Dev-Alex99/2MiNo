@@ -306,7 +306,7 @@ export default function GameBoard({
                 className="board-placeholder-circle"
                 style={{ borderStyle: 'dashed', borderColor: '#818cf8', color: '#a5b4fc' }}
               >
-                {selectedPower?.id === 'tile_demolition' ? '💣' : '❄️'} Izq
+                {selectedPower?.id === 'tile_demolition' ? '💣' : (selectedPower?.id === 'mirror_end' ? '🪞' : (selectedPower?.id === 'trap_end' ? '🕸️' : '❄️'))} Izq
               </button>
               <button
                 type="button"
@@ -314,7 +314,7 @@ export default function GameBoard({
                 className="board-placeholder-circle"
                 style={{ borderStyle: 'dashed', borderColor: '#818cf8', color: '#a5b4fc' }}
               >
-                {selectedPower?.id === 'tile_demolition' ? '💣' : '❄️'} Der
+                {selectedPower?.id === 'tile_demolition' ? '💣' : (selectedPower?.id === 'mirror_end' ? '🪞' : (selectedPower?.id === 'trap_end' ? '🕸️' : '❄️'))} Der
               </button>
             </div>
           )}
@@ -394,6 +394,11 @@ export default function GameBoard({
                 {(activeEffects?.frozenEnd === 'left' || activeEffects?.frozenEnd === 'both') && (
                   <div className="board-placeholder-circle frozen" title={t('board.congelado')} />
                 )}
+                {activeEffects?.trapEnd?.side === 'left' && (
+                  <div className="board-placeholder-circle rune-trap animate-pulse-glow" title="Trampa Rúnica Activa">
+                    🕸️
+                  </div>
+                )}
                 {isMyTurn && pendingTargetType === 'end_target' && (
                   <button
                     type="button"
@@ -402,7 +407,7 @@ export default function GameBoard({
                     style={{ borderStyle: 'dashed', borderColor: '#818cf8', color: '#a5b4fc' }}
                     title={selectedPower?.id === 'tile_demolition' ? t('board.demolerIzq') : t('board.congelarIzq')}
                   >
-                    {selectedPower?.id === 'tile_demolition' ? '💣' : '❄️'}
+                    {selectedPower?.id === 'tile_demolition' ? '💣' : (selectedPower?.id === 'mirror_end' ? '🪞' : (selectedPower?.id === 'trap_end' ? '🕸️' : '❄️'))}
                   </button>
                 )}
               </div>
@@ -433,6 +438,11 @@ export default function GameBoard({
                 {(activeEffects?.frozenEnd === 'right' || activeEffects?.frozenEnd === 'both') && (
                   <div className="board-placeholder-circle frozen" title={t('board.congelado')} />
                 )}
+                {activeEffects?.trapEnd?.side === 'right' && (
+                  <div className="board-placeholder-circle rune-trap animate-pulse-glow" title="Trampa Rúnica Activa">
+                    🕸️
+                  </div>
+                )}
                 {isMyTurn && pendingTargetType === 'end_target' && (
                   <button
                     type="button"
@@ -441,7 +451,7 @@ export default function GameBoard({
                     style={{ borderStyle: 'dashed', borderColor: '#818cf8', color: '#a5b4fc' }}
                     title={selectedPower?.id === 'tile_demolition' ? t('board.demolerDer') : t('board.congelarDer')}
                   >
-                    {selectedPower?.id === 'tile_demolition' ? '💣' : '❄️'}
+                    {selectedPower?.id === 'tile_demolition' ? '💣' : (selectedPower?.id === 'mirror_end' ? '🪞' : (selectedPower?.id === 'trap_end' ? '🕸️' : '❄️'))}
                   </button>
                 )}
               </div>

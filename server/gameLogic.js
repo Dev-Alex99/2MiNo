@@ -18,7 +18,10 @@ function freshActiveEffects() {
     skipNextTurn: false,
     wildcardActive: false,
     cursedPlayerId: null,  // Maldición: solo puede jugar en cursedSide su próximo turno
-    cursedSide: null       // 'left' | 'right'
+    cursedSide: null,      // 'left' | 'right'
+    goldenTiles: {},       // { [playerId]: ['tileKey', ...] }
+    trapEnd: null,         // { side: 'left' | 'right', ownerId: string }
+    lastTrapTriggered: null // { victimId, victimName, side, ownerId, drawnCount, deflated }
   };
 }
 
@@ -35,6 +38,7 @@ const POWER_CATALOG = {
   trade: { id: 'trade', name: 'Trueque', desc: 'Cambia una ficha de tu mano por una aleatoria del pozo.', type: 'buff', rarity: 'common', needsBoneyard: true },
   shield: { id: 'shield', name: 'Escudo de Neón', desc: 'Inmune a ataques de oponentes hasta tu próximo turno.', type: 'defense', rarity: 'common' },
   second_wind: { id: 'second_wind', name: 'Segunda Oportunidad', desc: 'Robas del pozo hasta tener jugada (máx 3).', type: 'buff', rarity: 'common', needsBoneyard: true },
+  quantum_vision: { id: 'quantum_vision', name: 'Visión Cuántica', desc: 'Examina el pozo y roba la ficha óptima para tus extremos abiertos.', type: 'buff', rarity: 'common', needsBoneyard: true },
 
   // --- Raros (medios; en normal y caos) ---
   double_shot: { id: 'double_shot', name: 'Doble Tiro', desc: 'Juega 2 fichas en este turno si ambas son válidas.', type: 'buff', rarity: 'rare' },
@@ -48,11 +52,16 @@ const POWER_CATALOG = {
   storm: { id: 'storm', name: 'Tormenta', desc: 'Todos los oponentes roban 1 ficha del pozo.', type: 'attack', rarity: 'rare', needsBoneyard: true },
   spy_all: { id: 'spy_all', name: 'Ojo Total', desc: 'Revela la mano de TODOS los oponentes por 8 segundos.', type: 'attack', rarity: 'rare' },
   curse: { id: 'curse', name: 'Maldición', desc: 'Un oponente solo podrá jugar en un extremo en su próximo turno.', type: 'attack', rarity: 'rare' },
+  mirror_end: { id: 'mirror_end', name: 'Espejo Dimensional', desc: 'Iguala un extremo abierto del tablero al valor del otro extremo.', type: 'buff', rarity: 'rare' },
+  golden_tile: { id: 'golden_tile', name: 'Ficha Dorada', desc: 'Convierte una ficha de tu mano en oro: +20 pts al colocarla y duplica los puntos si ganas la ronda con ella.', type: 'buff', rarity: 'rare' },
+  trap_end: { id: 'trap_end', name: 'Trampa Rúnica', desc: 'Coloca una trampa oculta en un extremo. El próximo rival que juegue allí roba 2 fichas.', type: 'attack', rarity: 'rare', needsBoneyard: true },
 
   // --- Legendarios (cambian la partida; solo en caos) ---
   mind_swap: { id: 'mind_swap', name: 'Intercambio Mental', desc: 'Intercambia tu mano completa de fichas con la de un oponente.', type: 'attack', rarity: 'legendary' },
   russian_roulette: { id: 'russian_roulette', name: 'Ruleta Rusa', desc: 'Todos los jugadores pasan una ficha al azar al jugador de su derecha.', type: 'caos', rarity: 'legendary' },
-  block_both: { id: 'block_both', name: 'Bloqueo Total', desc: 'Congela AMBOS extremos para los oponentes este turno.', type: 'attack', rarity: 'legendary' }
+  block_both: { id: 'block_both', name: 'Bloqueo Total', desc: 'Congela AMBOS extremos para los oponentes este turno.', type: 'attack', rarity: 'legendary' },
+  earthquake: { id: 'earthquake', name: 'Terremoto', desc: 'Invierte todo el tablero de punta a punta y rompe cualquier extremo congelado.', type: 'caos', rarity: 'legendary' },
+  black_hole: { id: 'black_hole', name: 'Agujero Negro', desc: 'Devora y destruye las fichas de ambos extremos del tablero a la vez.', type: 'caos', rarity: 'legendary' }
 };
 
 // Qué rarezas entran según la intensidad elegida.
@@ -340,6 +349,7 @@ class DominoGame extends BaseGame {
     this.lastPlay = null;
     this.passedTurns = 0;
     this.roundNumber = 0;
+    this.roundWonWithGoldenTile = null;
     this.players.forEach(p => {
       p.hand = [];
       p.score = 0;
@@ -361,6 +371,7 @@ class DominoGame extends BaseGame {
     this.gameWinner = null;
     this.roundWinner = null;
     this.roundNumber = 0;
+    this.roundWonWithGoldenTile = null;
     this.assignTeams();
     this.startNewRound();
   }
@@ -378,6 +389,7 @@ class DominoGame extends BaseGame {
     this.roundWinnerTeam = null;
     this.pendingCapicua = false;
     this.lastRoundCapicua = false;
+    this.roundWonWithGoldenTile = null;
     this.playerPassedOn = {};
     this.status = 'playing';
     this.powerUsedThisTurn = false;
@@ -673,8 +685,30 @@ class DominoGame extends BaseGame {
 
     if (this.board.length === 0) {
       // Primera ficha en el tablero
+      const tileKey = `${Math.min(tile[0], tile[1])}-${Math.max(tile[0], tile[1])}`;
+      const playerGoldenList = this.activeEffects.goldenTiles?.[playerId];
+      const isGoldenTile = Array.isArray(playerGoldenList) && playerGoldenList.includes(tileKey);
+      if (isGoldenTile) {
+        if (this.teamsEnabled && player.team !== undefined) {
+          this.teamScores[player.team] += 20;
+          this.checkGameEndTeams();
+        } else {
+          player.score += 20;
+          const gw = this.players.find(p => p.score >= this.maxScore);
+          if (gw) {
+            this.status = 'game_ended';
+            this.gameWinner = gw.id;
+          }
+        }
+        this.activeEffects.goldenTiles[playerId] = playerGoldenList.filter(k => k !== tileKey);
+        this.addMoveLog(player.name, 'power', `¡${player.name} jugó su Ficha Dorada (+20 pts)!`);
+      }
+
       this.board.push(tile);
       player.hand.splice(tileIndex, 1);
+      if (isGoldenTile && player.hand.length === 0) {
+        this.roundWonWithGoldenTile = playerId;
+      }
       this.lastPlay = { playerId, tile, side: 'left' };
       this.lastPlacedTile = tile;
       this.lastPlacedBy = playerId;
@@ -756,8 +790,65 @@ class DominoGame extends BaseGame {
       }
     }
 
+    // Ficha Dorada
+    const tileKey = `${Math.min(tile[0], tile[1])}-${Math.max(tile[0], tile[1])}`;
+    const playerGoldenList = this.activeEffects.goldenTiles?.[playerId];
+    const isGoldenTile = Array.isArray(playerGoldenList) && playerGoldenList.includes(tileKey);
+    if (isGoldenTile) {
+      if (this.teamsEnabled && player.team !== undefined) {
+        this.teamScores[player.team] += 20;
+        this.checkGameEndTeams();
+      } else {
+        player.score += 20;
+        const gw = this.players.find(p => p.score >= this.maxScore);
+        if (gw) {
+          this.status = 'game_ended';
+          this.gameWinner = gw.id;
+        }
+      }
+      this.activeEffects.goldenTiles[playerId] = playerGoldenList.filter(k => k !== tileKey);
+      this.addMoveLog(player.name, 'power', `¡${player.name} jugó su Ficha Dorada (+20 pts)!`);
+    }
+
+    // Trampa Rúnica
+    if (this.activeEffects.trapEnd && this.activeEffects.trapEnd.side === side) {
+      const trap = this.activeEffects.trapEnd;
+      if (trap.ownerId !== playerId) {
+        this.activeEffects.trapEnd = null; // Trampa consumida
+        if (player.shieldActive) {
+          player.shieldActive = false;
+          this.activeEffects.lastTrapTriggered = {
+            victimId: player.id,
+            victimName: player.name,
+            side,
+            ownerId: trap.ownerId,
+            deflated: true
+          };
+          this.addMoveLog(player.name, 'power', `¡El Escudo protegió a ${player.name} de la Trampa Rúnica!`);
+        } else {
+          let drawnCount = 0;
+          while (drawnCount < 2 && this.boneyard.length > 0) {
+            player.hand.push(this.boneyard.pop());
+            drawnCount++;
+          }
+          this.activeEffects.lastTrapTriggered = {
+            victimId: player.id,
+            victimName: player.name,
+            side,
+            ownerId: trap.ownerId,
+            drawnCount,
+            deflated: false
+          };
+          this.addMoveLog(player.name, 'power', `¡${player.name} cayó en la Trampa Rúnica y robó ${drawnCount} ficha(s)!`);
+        }
+      }
+    }
+
     // Remover ficha de la mano del jugador
     player.hand.splice(tileIndex, 1);
+    if (isGoldenTile && player.hand.length === 0) {
+      this.roundWonWithGoldenTile = playerId;
+    }
     this.lastPlay = { playerId, tile: playedTile, side };
     this.lastPlacedTile = playedTile;
     this.lastPlacedBy = playerId;
@@ -962,6 +1053,9 @@ class DominoGame extends BaseGame {
       this.lastRoundCapicua = true;
       pointsToAdd *= 2;
     }
+    if (!isBlocked && this.roundWonWithGoldenTile === winnerId) {
+      pointsToAdd *= 2;
+    }
     this.teamScores[winningTeam] += pointsToAdd;
     this.roundWinnerTeam = winningTeam;
     this.checkGameEndTeams();
@@ -993,6 +1087,9 @@ class DominoGame extends BaseGame {
       });
       if (this.pendingCapicua) {
         this.lastRoundCapicua = true;
+        roundPoints *= 2;
+      }
+      if (this.roundWonWithGoldenTile === winnerId) {
         roundPoints *= 2;
       }
       winner.score += roundPoints;
@@ -1181,6 +1278,12 @@ class DominoGame extends BaseGame {
         const tempHand = player.hand;
         player.hand = targetPlayer.hand;
         targetPlayer.hand = tempHand;
+        if (this.activeEffects.goldenTiles) {
+          const p1Gold = this.activeEffects.goldenTiles[player.id];
+          const p2Gold = this.activeEffects.goldenTiles[targetPlayer.id];
+          this.activeEffects.goldenTiles[player.id] = p2Gold || [];
+          this.activeEffects.goldenTiles[targetPlayer.id] = p1Gold || [];
+        }
         break;
       }
 
@@ -1295,6 +1398,127 @@ class DominoGame extends BaseGame {
         this.activeEffects.cursedSide = this.rng() < 0.5 ? 'left' : 'right';
         break;
 
+      case 'mirror_end': {
+        if (targetId !== 'left' && targetId !== 'right') {
+          return { success: false, error: 'srv.err.selectEndToMirror' };
+        }
+        if (this.board.length === 0) {
+          return { success: false, error: 'srv.err.boardEmpty' };
+        }
+        const leftVal = this.getLeftEnd();
+        const rightVal = this.getRightEnd();
+        if (targetId === 'left') {
+          this.board[0][0] = rightVal;
+        } else {
+          this.board[this.board.length - 1][1] = leftVal;
+        }
+        this.addMoveLog(player.name, 'power', `Espejo Dimensional: Extremo ${targetId === 'left' ? 'izquierdo' : 'derecho'} igualado a ${targetId === 'left' ? rightVal : leftVal}`);
+        break;
+      }
+
+      case 'golden_tile': {
+        if (tileIndex === undefined || tileIndex === null) {
+          return { success: false, error: 'srv.err.selectTileToGold' };
+        }
+        const targetTile = player.hand[tileIndex];
+        if (!targetTile) {
+          return { success: false, error: 'srv.err.tileNotInHand' };
+        }
+        const key = `${Math.min(targetTile[0], targetTile[1])}-${Math.max(targetTile[0], targetTile[1])}`;
+        if (!this.activeEffects.goldenTiles) this.activeEffects.goldenTiles = {};
+        if (!this.activeEffects.goldenTiles[playerId]) this.activeEffects.goldenTiles[playerId] = [];
+        if (!this.activeEffects.goldenTiles[playerId].includes(key)) {
+          this.activeEffects.goldenTiles[playerId].push(key);
+        }
+        this.addMoveLog(player.name, 'power', `¡${player.name} bendijo una ficha convirtiéndola en Ficha Dorada!`);
+        break;
+      }
+
+      case 'trap_end': {
+        if (targetId !== 'left' && targetId !== 'right') {
+          return { success: false, error: 'srv.err.selectEndToTrap' };
+        }
+        if (this.board.length === 0) {
+          return { success: false, error: 'srv.err.boardEmpty' };
+        }
+        this.activeEffects.trapEnd = { side: targetId, ownerId: playerId };
+        this.addMoveLog(player.name, 'power', `Trampa Rúnica colocada en el extremo ${targetId === 'left' ? 'izquierdo' : 'derecho'}`);
+        break;
+      }
+
+      case 'earthquake': {
+        if (this.board.length === 0) {
+          return { success: false, error: 'srv.err.boardEmpty' };
+        }
+        if (this.board.length === 1) {
+          this.board[0] = [this.board[0][1], this.board[0][0]];
+        } else {
+          this.board.reverse();
+          this.board = this.board.map(tile => [tile[1], tile[0]]);
+        }
+        this.activeEffects.frozenEnd = null;
+        this.activeEffects.frozenEndOwnerId = null;
+        if (this.activeEffects.trapEnd) {
+          this.activeEffects.trapEnd.side = this.activeEffects.trapEnd.side === 'left' ? 'right' : 'left';
+        }
+        this.addMoveLog(player.name, 'power', '¡Terremoto sacudió e invirtió todo el tablero!');
+        break;
+      }
+
+      case 'black_hole': {
+        if (this.board.length === 0) {
+          return { success: false, error: 'srv.err.boardEmpty' };
+        }
+        if (this.board.length === 1) {
+          this.board.pop();
+        } else {
+          this.board.shift();
+          this.board.pop();
+        }
+        this.passedTurns = 0;
+        this.addMoveLog(player.name, 'power', '¡Agujero Negro devoró ambos extremos del tablero!');
+        break;
+      }
+
+      case 'quantum_vision': {
+        if (this.boneyard.length === 0) {
+          return { success: false, error: 'srv.err.boneyardEmpty' };
+        }
+        const left = this.board.length > 0 ? this.getLeftEnd() : null;
+        const right = this.board.length > 0 ? this.getRightEnd() : null;
+        const { leftBlocked, rightBlocked } = this.endsBlockedFor(playerId);
+
+        let bestIdx = -1;
+        let bestScore = -Infinity;
+
+        const candidatesCount = Math.min(this.boneyard.length, 6);
+        for (let i = this.boneyard.length - 1; i >= this.boneyard.length - candidatesCount; i--) {
+          const t = this.boneyard[i];
+          const matchesLeft = left !== null && (t[0] === left || t[1] === left) && !leftBlocked;
+          const matchesRight = right !== null && (t[0] === right || t[1] === right) && !rightBlocked;
+          const playable = this.board.length === 0 || matchesLeft || matchesRight;
+
+          let score = 0;
+          if (playable) {
+            score = 100 + (t[0] + t[1]);
+            if (t[0] === t[1]) score += 20;
+          } else {
+            score = -(t[0] + t[1]);
+          }
+
+          if (score > bestScore) {
+            bestScore = score;
+            bestIdx = i;
+          }
+        }
+
+        if (bestIdx === -1) bestIdx = this.boneyard.length - 1;
+        const [chosenTile] = this.boneyard.splice(bestIdx, 1);
+        player.hand.push(chosenTile);
+        this.addMoveLog(player.name, 'power', `¡${player.name} usó Visión Cuántica y obtuvo una ficha clave!`);
+        break;
+      }
+
       default:
         return { success: false, error: 'srv.err.powerNotRecognized' };
     }
@@ -1310,10 +1534,10 @@ class DominoGame extends BaseGame {
       case 'mind_swap': // las manos se intercambian: los fallos quedarían en el jugador equivocado
         this.olvidarPases([playerId, targetPlayer && targetPlayer.id]);
         break;
-      case 'trade': case 'boneyard_reset': case 'second_wind':
+      case 'trade': case 'boneyard_reset': case 'second_wind': case 'quantum_vision':
         this.olvidarPases([playerId]);
         break;
-      case 'storm': case 'russian_roulette': // reparten a varios a la vez
+      case 'storm': case 'russian_roulette': case 'mirror_end': case 'earthquake': case 'black_hole':
         this.olvidarPases(this.players.map(p => p.id));
         break;
       default:
@@ -1331,7 +1555,8 @@ class DominoGame extends BaseGame {
     const MUTATES_HANDS = new Set([
       'smuggle', 'mind_swap', 'tile_demolition', 'boneyard_reset',
       'trade', 'destiny_steal', 'russian_roulette', 'storm',
-      'second_wind', 'magnetic_pull', 'draw_penalty'
+      'second_wind', 'magnetic_pull', 'draw_penalty',
+      'black_hole', 'quantum_vision', 'earthquake', 'mirror_end'
     ]);
     if (MUTATES_HANDS.has(cardId) && this.status === 'playing') {
       this.checkRoundEnd();
@@ -1505,13 +1730,23 @@ class DominoGame extends BaseGame {
 
     const powerId = choosePower(this, botId);
     if (powerId) {
-      // Congelar Extremo EXIGE un extremo, y hasta ahora se invocaba con null:
-      // usePowerCard lo rechazaba siempre, la carta se quedaba pegada en la
-      // mano del bot para siempre y una de cada cinco tiradas de poder se
-      // perdía en silencio. Qué extremo congelar es una decisión táctica (el
-      // que el rival SÍ podía jugar), así que la toma el cerebro.
-      const targetId = powerId === 'freeze' ? chooseFreezeEnd(this, botId) : null;
-      const used = this.usePowerCard(botId, powerId, targetId, null);
+      let targetId = null;
+      let targetTileIndex = null;
+      if (powerId === 'freeze' || powerId === 'mirror_end' || powerId === 'trap_end') {
+        targetId = chooseFreezeEnd(this, botId) || 'left';
+      } else if (powerId === 'golden_tile') {
+        const botPlayer = this.players.find(p => p.id === botId);
+        if (botPlayer && botPlayer.hand.length > 0) {
+          let bestIdx = 0;
+          let maxVal = -1;
+          botPlayer.hand.forEach((t, idx) => {
+            const val = t[0] + t[1];
+            if (val > maxVal) { maxVal = val; bestIdx = idx; }
+          });
+          targetTileIndex = bestIdx;
+        }
+      }
+      const used = this.usePowerCard(botId, powerId, targetId, targetTileIndex);
       if (used.success) result.usedPower = true;
     }
 

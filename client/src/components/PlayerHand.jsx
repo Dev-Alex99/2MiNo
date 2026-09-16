@@ -65,7 +65,9 @@ export default function PlayerHand({
   boardIsEmpty,
   onTileClickOverride,
   wildcardActive = false,
-  drawEnabled = true
+  drawEnabled = true,
+  goldenTiles = [],
+  doubleTurnActive = false
 }) {
   const { t } = useT();
   const [orden, setOrden] = useState(leerOrden);
@@ -278,7 +280,7 @@ export default function PlayerHand({
       </div>
 
       <div
-        className="hand-tiles-row"
+        className={`hand-tiles-row ${doubleTurnActive ? 'has-double-turn' : ''} ${wildcardActive ? 'has-wildcard-active' : ''}`}
         role="group"
         aria-label={t('uno.yourHand')}
         onFocus={() => { focoDentro.current = true; }}
@@ -290,6 +292,8 @@ export default function PlayerHand({
           const lados = ladosJugables(ficha.tile, ctx);
           const esJugable = lados.left || lados.right;
           const esElegida = selectedTileIndex === ficha.indice;
+          const tileKey = `${Math.min(ficha.tile[0], ficha.tile[1])}-${Math.max(ficha.tile[0], ficha.tile[1])}`;
+          const isGolden = Array.isArray(goldenTiles) && goldenTiles.includes(tileKey);
           // Fuera de mi turno, y mientras un poder pide elegir ficha, todas las
           // fichas son neutras: no hay jugada legal que señalar.
           const senala = isMyTurn && !onTileClickOverride;
@@ -300,16 +304,21 @@ export default function PlayerHand({
           return (
             <div
               key={claveFicha(ficha.tile)}
-              className="hand-tile-wrapper"
+              className={`hand-tile-wrapper ${isGolden ? 'is-golden-tile' : ''}`}
               style={{ position: 'relative', zIndex: esElegida ? 15 : undefined }}
             >
+              {isGolden && (
+                <div className="golden-tile-badge" title="Ficha Dorada (+20 pts)">
+                  👑
+                </div>
+              )}
               <DominoTile
                 tile={ficha.tile}
-                className={`hand-tile mano-ficha ${estado}`}
+                className={`hand-tile mano-ficha ${estado} ${isGolden ? 'golden-shimmer' : ''}`}
                 interactivo
                 innerRef={(el) => { refsFicha.current[i] = el; }}
                 tabIndex={i === foco ? 0 : -1}
-                ariaLabel={etiquetaFicha(ficha.tile, lados)}
+                ariaLabel={etiquetaFicha(ficha.tile, lados) + (isGolden ? ' (Ficha Dorada)' : '')}
                 ariaDisabled={senala && !esJugable}
                 ariaPosinset={i + 1}
                 ariaSetsize={total}

@@ -79,6 +79,42 @@ export function playGameSound(type) {
         playPowerSynth(ctx, now);
         break;
 
+      case 'power_freeze':
+        playFreezeSynth(ctx, now);
+        break;
+
+      case 'power_explosion':
+        playExplosionSynth(ctx, now);
+        break;
+
+      case 'power_shield':
+        playShieldSynth(ctx, now);
+        break;
+
+      case 'power_shield_deflect':
+        playShieldDeflectSynth(ctx, now);
+        break;
+
+      case 'power_golden':
+        playGoldenSynth(ctx, now);
+        break;
+
+      case 'power_earthquake':
+        playEarthquakeSynth(ctx, now);
+        break;
+
+      case 'power_trap':
+        playTrapSynth(ctx, now);
+        break;
+
+      case 'power_trap_trigger':
+        playTrapTriggerSynth(ctx, now);
+        break;
+
+      case 'power_quantum':
+        playQuantumSynth(ctx, now);
+        break;
+
       case 'epic':
         // Golpe cinematográfico: impacto grave + barrido ascendente + acorde brillante.
         playEpicSting(ctx, now);
@@ -460,6 +496,209 @@ function playPowerSynth(ctx, time) {
   osc1.stop(time + 0.65);
   osc2.start(time);
   osc2.stop(time + 0.65);
+}
+
+function playFreezeSynth(ctx, time) {
+  const osc = ctx.createOscillator();
+  const oscSub = ctx.createOscillator();
+  const gain = ctx.createGain();
+  const filter = ctx.createBiquadFilter();
+
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(2800, time);
+  osc.frequency.exponentialRampToValueAtTime(700, time + 0.45);
+
+  oscSub.type = 'sine';
+  oscSub.frequency.setValueAtTime(1400, time);
+  oscSub.frequency.exponentialRampToValueAtTime(350, time + 0.45);
+
+  filter.type = 'highpass';
+  filter.frequency.setValueAtTime(500, time);
+
+  gain.gain.setValueAtTime(0.18, time);
+  gain.gain.exponentialRampToValueAtTime(0.001, time + 0.5);
+
+  osc.connect(filter);
+  oscSub.connect(filter);
+  filter.connect(gain);
+  gain.connect(ctx.destination);
+
+  osc.start(time);
+  oscSub.start(time);
+  osc.stop(time + 0.52);
+  oscSub.stop(time + 0.52);
+}
+
+function playExplosionSynth(ctx, time) {
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(120, time);
+  osc.frequency.exponentialRampToValueAtTime(30, time + 0.6);
+
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.setValueAtTime(600, time);
+  filter.frequency.exponentialRampToValueAtTime(80, time + 0.6);
+
+  gain.gain.setValueAtTime(0.25, time);
+  gain.gain.exponentialRampToValueAtTime(0.001, time + 0.65);
+
+  osc.connect(filter);
+  filter.connect(gain);
+  gain.connect(ctx.destination);
+
+  osc.start(time);
+  osc.stop(time + 0.68);
+}
+
+function playShieldSynth(ctx, time) {
+  const freqs = [523.25, 659.25, 1046.5];
+  freqs.forEach((f, i) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(f, time + i * 0.04);
+    gain.gain.setValueAtTime(0.09, time + i * 0.04);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.6);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(time + i * 0.04);
+    osc.stop(time + 0.65);
+  });
+}
+
+function playShieldDeflectSynth(ctx, time) {
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(1600, time);
+  osc.frequency.exponentialRampToValueAtTime(2800, time + 0.06);
+  osc.frequency.exponentialRampToValueAtTime(900, time + 0.35);
+
+  gain.gain.setValueAtTime(0.2, time);
+  gain.gain.exponentialRampToValueAtTime(0.001, time + 0.38);
+
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(time);
+  osc.stop(time + 0.4);
+}
+
+function playGoldenSynth(ctx, time) {
+  const notes = [1046.50, 1318.51, 1567.98, 2093.00];
+  notes.forEach((freq, idx) => {
+    const t = time + idx * 0.06;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, t);
+
+    const oscHarm = ctx.createOscillator();
+    oscHarm.type = 'triangle';
+    oscHarm.frequency.setValueAtTime(freq * 2, t);
+
+    gain.gain.setValueAtTime(0.12, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
+
+    osc.connect(gain);
+    oscHarm.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(t);
+    oscHarm.start(t);
+    osc.stop(t + 0.65);
+    oscHarm.stop(t + 0.65);
+  });
+}
+
+function playEarthquakeSynth(ctx, time) {
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  const filter = ctx.createBiquadFilter();
+
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(65, time);
+  osc.frequency.linearRampToValueAtTime(40, time + 0.3);
+  osc.frequency.linearRampToValueAtTime(75, time + 0.5);
+  osc.frequency.exponentialRampToValueAtTime(25, time + 0.9);
+
+  filter.type = 'lowpass';
+  filter.frequency.setValueAtTime(300, time);
+  filter.frequency.exponentialRampToValueAtTime(90, time + 0.9);
+
+  gain.gain.setValueAtTime(0.28, time);
+  gain.gain.exponentialRampToValueAtTime(0.001, time + 0.95);
+
+  osc.connect(filter);
+  filter.connect(gain);
+  gain.connect(ctx.destination);
+
+  osc.start(time);
+  osc.stop(time + 1.0);
+}
+
+function playTrapSynth(ctx, time) {
+  const osc1 = ctx.createOscillator();
+  const osc2 = ctx.createOscillator();
+  const gain = ctx.createGain();
+
+  osc1.type = 'sine';
+  osc1.frequency.setValueAtTime(440, time);
+  osc1.frequency.exponentialRampToValueAtTime(220, time + 0.4);
+
+  osc2.type = 'sawtooth';
+  osc2.frequency.setValueAtTime(455, time);
+  osc2.frequency.exponentialRampToValueAtTime(228, time + 0.4);
+
+  gain.gain.setValueAtTime(0.12, time);
+  gain.gain.exponentialRampToValueAtTime(0.001, time + 0.45);
+
+  osc1.connect(gain);
+  osc2.connect(gain);
+  gain.connect(ctx.destination);
+
+  osc1.start(time);
+  osc2.start(time);
+  osc1.stop(time + 0.48);
+  osc2.stop(time + 0.48);
+}
+
+function playTrapTriggerSynth(ctx, time) {
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(900, time);
+  osc.frequency.exponentialRampToValueAtTime(120, time + 0.25);
+
+  gain.gain.setValueAtTime(0.24, time);
+  gain.gain.exponentialRampToValueAtTime(0.001, time + 0.28);
+
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+
+  osc.start(time);
+  osc.stop(time + 0.3);
+}
+
+function playQuantumSynth(ctx, time) {
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(400, time);
+  osc.frequency.exponentialRampToValueAtTime(1400, time + 0.25);
+  osc.frequency.exponentialRampToValueAtTime(800, time + 0.5);
+
+  gain.gain.setValueAtTime(0.15, time);
+  gain.gain.exponentialRampToValueAtTime(0.001, time + 0.55);
+
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+
+  osc.start(time);
+  osc.stop(time + 0.58);
 }
 
 function playCapicuaFanfare(ctx, time) {

@@ -389,9 +389,154 @@ function runPowerV2Tests() {
   console.log("=== PRUEBAS V2 COMPLETADAS CON ÉXITO ===");
 }
 
+function runPowerV3Tests() {
+  console.log("\n=== PRUEBAS V3: NUEVOS PODERES DE EXPANSIÓN ===");
+
+  function freshGame(opts = {}) {
+    const g = new DominoGame('ROOM_V3', 100, opts);
+    g.addPlayer('p1', 'Ana', 's1');
+    g.addPlayer('p2', 'Beto', 's2');
+    g.toggleReady('s1');
+    g.toggleReady('s2');
+    g.startNewGame();
+    return g;
+  }
+
+  // 1. Espejo Dimensional (mirror_end)
+  {
+    const g = freshGame();
+    g.currentPlayerIndex = 0;
+    const [p1] = g.players;
+    g.board = [[1, 2], [2, 5]]; // left = 1, right = 5
+    p1.powers = [{ id: 'mirror_end' }];
+
+    const res = g.usePowerCard(p1.id, 'mirror_end', 'left');
+    assert(res.success === true, 'V3: Espejo Dimensional usado con éxito');
+    assert(g.getLeftEnd() === 5 && g.getRightEnd() === 5, 'V3: Extremo izquierdo igualado al derecho (5)');
+  }
+
+  // 2. Ficha Dorada (golden_tile)
+  {
+    const g = freshGame();
+    g.currentPlayerIndex = 0;
+    const [p1, p2] = g.players;
+    p1.score = 0;
+    p1.hand = [[5, 5], [1, 2]];
+    p2.hand = [[3, 3]];
+    g.board = [[1, 5]];
+    p1.powers = [{ id: 'golden_tile' }];
+
+    // Bendecir [5, 5] (index 0)
+    const res = g.usePowerCard(p1.id, 'golden_tile', null, 0);
+    assert(res.success === true, 'V3: Ficha Dorada bendecida con éxito');
+    assert(g.activeEffects.goldenTiles[p1.id].includes('5-5'), 'V3: Clave 5-5 guardada en goldenTiles');
+
+    // Jugar la ficha dorada
+    const playRes = g.playTile(p1.id, 0, 'right');
+    assert(playRes.success === true, 'V3: Ficha dorada jugada en tablero');
+    assert(p1.score === 20, 'V3: Otorga +20 pts inmediatamente al jugarla');
+    assert(!g.activeEffects.goldenTiles[p1.id].includes('5-5'), 'V3: Ficha dorada consumida tras jugarse');
+  }
+
+  // 3. Trampa Rúnica (trap_end) y protección con Escudo
+  {
+    const g = freshGame();
+    g.boneyard = [[0, 1], [0, 2], [0, 3], [0, 4]];
+    g.currentPlayerIndex = 0;
+    const [p1, p2] = g.players;
+    g.board = [[2, 2], [2, 3]]; // left = 2, right = 3
+    p1.powers = [{ id: 'trap_end' }];
+
+    // p1 coloca trampa en 'right'
+    const trapRes = g.usePowerCard(p1.id, 'trap_end', 'right');
+    assert(trapRes.success === true, 'V3: Trampa colocada en extremo derecho');
+    assert(g.activeEffects.trapEnd.side === 'right' && g.activeEffects.trapEnd.ownerId === p1.id,
+      'V3: Estado de trampa registrado en activeEffects');
+
+    // p1 pasa el turno
+    g.nextTurn();
+    assert(g.players[g.currentPlayerIndex].id === p2.id, 'V3: Turno de Beto (p2)');
+
+    // Beto juega en 'right' y cae en la trampa
+    p2.hand = [[3, 6]];
+    const handBefore = p2.hand.length;
+    const playRes = g.playTile(p2.id, 0, 'right');
+    assert(playRes.success === true, 'V3: Beto jugó en extremo con trampa');
+    assert(g.activeEffects.trapEnd === null, 'V3: Trampa consumida al detonar');
+    assert(p2.hand.length === handBefore - 1 + 2, 'V3: Beto jugó 1 y robó 2 del pozo por la trampa');
+
+    // Ahora probar que el Escudo protege de la trampa
+    p2.powers = [{ id: 'trap_end' }];
+    g.board = [[2, 2], [2, 3]];
+    g.currentPlayerIndex = 1;
+    g.usePowerCard(p2.id, 'trap_end', 'left');
+    g.nextTurn(); // turno de p1
+
+    p1.powers = [{ id: 'shield' }];
+    p1.hand = [[2, 4]];
+    g.usePowerCard(p1.id, 'shield');
+    const p1HandBefore = p1.hand.length;
+    g.playTile(p1.id, 0, 'left');
+    assert(p1.hand.length === p1HandBefore - 1, 'V3: Escudo protegió a p1 sin robar fichas de la trampa');
+  }
+
+  // 4. Terremoto (earthquake)
+  {
+    const g = freshGame();
+    g.currentPlayerIndex = 0;
+    const [p1] = g.players;
+    g.board = [[1, 2], [2, 3], [3, 4]]; // left = 1, right = 4
+    g.activeEffects.frozenEnd = 'left';
+    g.activeEffects.frozenEndOwnerId = 'p2';
+    p1.powers = [{ id: 'earthquake' }];
+
+    const res = g.usePowerCard(p1.id, 'earthquake');
+    assert(res.success === true, 'V3: Terremoto ejecutado con éxito');
+    assert(g.getLeftEnd() === 4 && g.getRightEnd() === 1, 'V3: Tablero invertido (left 4, right 1)');
+    assert(g.board[0][0] === 4 && g.board[0][1] === 3, 'V3: Primer ficha invertida a [4, 3]');
+    assert(g.board[2][0] === 2 && g.board[2][1] === 1, 'V3: Última ficha invertida a [2, 1]');
+    assert(g.activeEffects.frozenEnd === null, 'V3: Terremoto destruyó el extremo congelado');
+  }
+
+  // 5. Agujero Negro (black_hole)
+  {
+    const g = freshGame();
+    g.currentPlayerIndex = 0;
+    const [p1] = g.players;
+    g.board = [[1, 2], [2, 3], [3, 4], [4, 5]];
+    p1.powers = [{ id: 'black_hole' }];
+
+    const res = g.usePowerCard(p1.id, 'black_hole');
+    assert(res.success === true, 'V3: Agujero Negro ejecutado con éxito');
+    assert(g.board.length === 2, 'V3: Tablero redujo 2 fichas');
+    assert(g.getLeftEnd() === 2 && g.getRightEnd() === 4, 'V3: Nuevos extremos abiertos son 2 y 4');
+  }
+
+  // 6. Visión Cuántica (quantum_vision)
+  {
+    const g = freshGame();
+    g.currentPlayerIndex = 0;
+    const [p1] = g.players;
+    g.board = [[2, 4]]; // left = 2, right = 4
+    // Poner fichas en el pozo, una que calce [4, 6] y otra que no [0, 1]
+    g.boneyard = [[0, 1], [4, 6]];
+    p1.hand = [[1, 1]];
+    p1.powers = [{ id: 'quantum_vision' }];
+
+    const res = g.usePowerCard(p1.id, 'quantum_vision');
+    assert(res.success === true, 'V3: Visión Cuántica ejecutada con éxito');
+    assert(p1.hand.length === 2, 'V3: El jugador recibió la ficha del pozo');
+    assert(p1.hand.some(t => (t[0] === 4 && t[1] === 6) || (t[0] === 6 && t[1] === 4)),
+      'V3: Obtuvo la ficha que encaja en el tablero [4, 6]');
+  }
+
+  console.log("=== PRUEBAS V3 COMPLETADAS CON ÉXITO ===");
+}
+
 try {
   runPowerTests();
   runPowerV2Tests();
+  runPowerV3Tests();
 } catch (error) {
   console.error("❌ ERROR EN LAS PRUEBAS:", error.stack);
   process.exit(1);

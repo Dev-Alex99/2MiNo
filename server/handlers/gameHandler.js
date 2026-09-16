@@ -29,6 +29,7 @@ const {
 } = require('../schemas');
 
 const seatAliases = require('../seatAliases');
+const { POWER_CATALOG } = require('../gameLogic');
 
 // ¿El socket es dueño de ese playerId en la sala? Evita que otro socket
 // manipule el turno/poderes/chat de un jugador ajeno.
@@ -107,6 +108,9 @@ function registerGameHandlers(io, socket) {
 
     const result = game.playTile(playerId, tileIndex, side);
     if (result.success) {
+      if (game.activeEffects && game.activeEffects.lastTrapTriggered) {
+        io.to(roomId).emit('play_sound', { type: 'power_trap_trigger' });
+      }
       const isDouble = game.lastPlay && game.lastPlay.tile && game.lastPlay.tile[0] === game.lastPlay.tile[1];
       io.to(roomId).emit('play_sound', { type: isDouble ? 'double_place' : 'place', tile: game.lastPlay.tile });
       advanceRoom(io, roomId);
@@ -171,7 +175,40 @@ function registerGameHandlers(io, socket) {
 
     const result = game.usePowerCard(playerId, cardId, targetId, tileIndex);
     if (result.success) {
-      io.to(roomId).emit('play_sound', { type: 'power' });
+      let soundType = 'power';
+      if (result.shielded) {
+        soundType = 'power_shield_deflect';
+      } else {
+        switch (cardId) {
+          case 'freeze':
+          case 'block_both':
+            soundType = 'power_freeze';
+            break;
+          case 'tile_demolition':
+          case 'black_hole':
+            soundType = 'power_explosion';
+            break;
+          case 'earthquake':
+            soundType = 'power_earthquake';
+            break;
+          case 'shield':
+            soundType = 'power_shield';
+            break;
+          case 'golden_tile':
+            soundType = 'power_golden';
+            break;
+          case 'trap_end':
+            soundType = 'power_trap';
+            break;
+          case 'quantum_vision':
+            soundType = 'power_quantum';
+            break;
+          default:
+            soundType = 'power';
+            break;
+        }
+      }
+      io.to(roomId).emit('play_sound', { type: soundType });
 
       const targetPlayer = targetId ? game.players.find(p => p.id === targetId) : null;
       const targetName = targetPlayer ? targetPlayer.name : '@opponent';
@@ -204,9 +241,28 @@ function registerGameHandlers(io, socket) {
           case 'second_wind': msgKey = 'srv.pw.second_wind'; break;
           case 'spy_all': msgKey = 'srv.pw.spy_all'; break;
           case 'curse': msgKey = 'srv.pw.curse'; msgParams.target = targetName; break;
+          case 'mirror_end': msgKey = targetId === 'left' ? 'srv.pw.mirrorLeft' : 'srv.pw.mirrorRight'; break;
+          case 'golden_tile': msgKey = 'srv.pw.golden_tile'; break;
+          case 'trap_end': msgKey = targetId === 'left' ? 'srv.pw.trapLeft' : 'srv.pw.trapRight'; break;
+          case 'earthquake': msgKey = 'srv.pw.earthquake'; break;
+          case 'black_hole': msgKey = 'srv.pw.black_hole'; break;
+          case 'quantum_vision': msgKey = 'srv.pw.quantum_vision'; break;
           default: msgKey = 'srv.pw.default';
         }
       }
+
+      const powerDef = POWER_CATALOG[cardId] || { name: cardId, type: 'buff', rarity: 'common' };
+      io.to(roomId).emit('power_cast_event', {
+        playerId: seatAliases.aliasDe(roomId, player.id),
+        playerName: player.name,
+        cardId,
+        cardName: powerDef.name,
+        type: powerDef.type,
+        rarity: powerDef.rarity,
+        targetId: targetPlayer ? seatAliases.aliasDe(roomId, targetPlayer.id) : targetId,
+        targetName: targetPlayer ? targetPlayer.name : (targetId ? (targetId === 'left' ? 'Extremo Izquierdo' : 'Extremo Derecho') : null),
+        shielded: !!result.shielded
+      });
 
       io.to(roomId).emit('receive_quick_message', {
         playerName: 'SISTEMA',

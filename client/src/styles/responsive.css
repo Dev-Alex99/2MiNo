@@ -67,7 +67,27 @@
    Con el scroll de #root ya se alcanza todo, pero la acción principal (Crear
    sala / Listo) no debería quedar fuera de pantalla de salida. Compactamos para
    que quepa, dejando el scroll como red de seguridad. */
-@media (max-width: 1024px) {
+@media (max-width: 1023px) {
+  .lobby-topbar {
+    justify-content: flex-start;
+    padding: 6px 12px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+  }
+  .lobby-topbar::-webkit-scrollbar {
+    display: none;
+  }
+  .lobby-topbar-inner {
+    width: max-content;
+    min-width: 100%;
+    justify-content: flex-start;
+    gap: 6px;
+  }
+  .lobby-brand-badge {
+    display: none;
+  }
   .lobby-header {
     margin-bottom: 16px;
   }
@@ -80,6 +100,9 @@
   .lobby-card,
   .waiting-room-card {
     padding: 20px;
+  }
+  .lobby-card {
+    max-width: 480px;
   }
   .lobby-form {
     gap: 14px;
@@ -203,6 +226,215 @@
     padding: 14px;
   }
 }
+
+/* Tablet: sala de espera adaptada a 2 columnas (768px a 1023px) */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .waiting-room-card {
+    max-width: 720px;
+  }
+
+  .waiting-room-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      "info action"
+      "players players"
+      "chat chat";
+    gap: 16px;
+  }
+
+  .waiting-module-info {
+    grid-area: info;
+  }
+
+  .waiting-module-action {
+    grid-area: action;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    border-radius: 20px;
+    padding: 16px;
+  }
+
+  .waiting-module-action .waiting-footer {
+    margin-top: 0;
+    width: 100%;
+  }
+
+  .waiting-module-players {
+    grid-area: players;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    border-radius: 20px;
+    padding: 16px;
+  }
+
+  .waiting-module-chat {
+    grid-area: chat;
+  }
+}
+
+/* Desktop: sala de espera modular en 3 columnas independientes (>= 1024px)
+   Aprovecha el ancho de pantalla para eliminar el scroll vertical por completo:
+   Col 1: Sala y Código + Botón Listo al pie
+   Col 2: Lista de Jugadores + Añadir Bot
+   Col 3: Chat de la sala en tiempo real */
+@media (min-width: 1024px) {
+  .waiting-room-screen {
+    padding: 24px;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .waiting-room-card {
+    max-width: 1180px;
+    padding: 28px 32px;
+    gap: 18px;
+  }
+
+  .waiting-room-header-row {
+    margin-bottom: 2px;
+  }
+
+  .waiting-room-grid {
+    display: grid;
+    grid-template-columns: 310px 1fr 360px;
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+      "info players chat"
+      "action players chat";
+    gap: 20px;
+    align-items: stretch;
+  }
+
+  .waiting-module-info {
+    grid-area: info;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .waiting-module-action {
+    grid-area: action;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    border-radius: 20px;
+    padding: 16px;
+    margin-top: auto;
+  }
+
+  .waiting-module-action .waiting-footer {
+    margin-top: 0;
+    width: 100%;
+  }
+
+  .waiting-module-players {
+    grid-area: players;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    border-radius: 20px;
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .waiting-module-players .waiting-players-section {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+
+  .waiting-module-chat {
+    grid-area: chat;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .waiting-module-chat .room-chat-box {
+    margin-top: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    border-radius: 20px;
+  }
+
+  .waiting-module-chat .room-chat-feed {
+    flex: 1;
+    min-height: 200px;
+    max-height: 310px;
+  }
+
+  /* Lobby modular en 2 columnas: izquierda acciones/creación, derecha comunidad/en vivo */
+  .lobby-screen {
+    padding: 0 24px 28px 24px;
+  }
+
+  .lobby-header {
+    margin-top: 10px;
+    margin-bottom: 20px;
+  }
+
+  .lobby-title {
+    font-size: 2.6rem;
+  }
+
+  .lobby-subtitle {
+    font-size: 0.9rem;
+    margin-top: 4px;
+  }
+
+  .lobby-card {
+    max-width: 1140px;
+    padding: 28px 32px;
+    margin-top: 0;
+    margin-bottom: 16px;
+  }
+
+  .lobby-grid {
+    display: grid;
+    grid-template-columns: minmax(380px, 430px) 1fr;
+    gap: 28px;
+    align-items: start;
+  }
+
+  .lobby-col-action {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    border-radius: 20px;
+    padding: 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .lobby-col-community {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    border-radius: 20px;
+    padding: 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    min-height: 100%;
+  }
+
+  .lobby-roomlist-scroll .room-list {
+    max-height: 250px;
+  }
+
+  .lobby-livegames-scroll .room-list {
+    max-height: 230px;
+  }
+}
+
 
 
 

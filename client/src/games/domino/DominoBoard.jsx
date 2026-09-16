@@ -2,7 +2,6 @@ import React from 'react';
 import GameBoard from '../../components/GameBoard';
 import PlayerHand from '../../components/PlayerHand';
 import CintaTurno from '../../components/CintaTurno';
-import Chat from '../../components/Chat';
 import PowerCards from '../../components/PowerCards';
 import VideoGrid from '../../components/VideoGrid';
 import { contarJugables } from './jugadas';
@@ -195,8 +194,6 @@ export default function DominoBoard({ actions, isMyTurn, onOpenBracket }) {
           activeEffects={gameState.activeEffects}
           selectedPower={selectedPower}
         />
-
-        <Chat roomId={roomId} playerId={playerId} />
 
         <VideoGrid players={gameState.players} playerId={playerId} selfOnly />
       </div>

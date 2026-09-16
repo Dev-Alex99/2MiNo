@@ -39,7 +39,7 @@ class UnoGame extends BaseGame {
 
     // Puntos a los que se acaba la partida. El Uno clásico juega a 500; aquí se
     // baja por defecto para que una partida no eternice la mesa.
-    this.maxScore = [200, 300, 500].includes(options.maxScore) ? options.maxScore : 200;
+    this.maxScore = [100, 200, 300, 500].includes(options.maxScore) ? options.maxScore : 200;
 
     this.deck = [];
     this.discard = [];        // el último elemento es la carta visible
@@ -256,7 +256,9 @@ class UnoGame extends BaseGame {
     let penalizado = false;
     if (jugador.hand.length === 1) {
       jugador.declaredUno = uno === true;
-      if (!jugador.declaredUno) {
+      if (jugador.declaredUno) {
+        this.lastAction = { ...this.lastAction, cantoUno: true };
+      } else {
         for (let i = 0; i < 2; i++) {
           const c = this.robarDelMazo();
           if (c) jugador.hand.push(c);

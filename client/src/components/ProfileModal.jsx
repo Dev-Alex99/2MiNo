@@ -1,9 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { X, Trophy, Flame, RotateCcw, Award, ShieldCheck, Coins, Zap, History, Play, Target, Gift, CheckCircle2 } from 'lucide-react';
+import {
+  X, Trophy, Flame, RotateCcw, Award, ShieldCheck, Coins, Zap,
+  History, Play, Target, Gift, CheckCircle2, Edit3, Check, Key,
+  Dices, Eye, EyeOff, AlertCircle, Sparkles
+} from 'lucide-react';
 import { socket } from '../socket';
 import { useT } from '../i18n/LanguageContext';
 import { loadStats, ACHIEVEMENTS, winRate, getRank, getDivision, TITLES, getEquippedTitle, setEquippedTitle } from '../stats';
-import { useGameStore } from '../store/useGameStore';
+import { useGameStore, exportAccountKey, importAccountKey } from '../store/useGameStore';
+import { AVATAR_OPTIONS, FUN_NICKNAMES } from './ProfileSetupModal';
 import ReplayModal from './ReplayModal';
 import useModalA11y from '../hooks/useModalA11y';
 import { useSocialStore, iniciarSocial, useCapacidades, hayPersistencia } from '../social/useSocialStore';
@@ -28,6 +33,22 @@ export default function ProfileModal({ name, onClose }) {
   const [claiming, setClaiming] = useState(null);
   const [borrando, setBorrando] = useState(false);
   const pid = useGameStore((s) => s.cuentaId);
+  const avatar = useGameStore((s) => s.avatar) || '🎲';
+  const setName = useGameStore((s) => s.setName);
+  const setAvatar = useGameStore((s) => s.setAvatar);
+
+  // Estados de edición de perfil
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState(name || '');
+  const [editAvatar, setEditAvatar] = useState(avatar);
+  const [savedFeedback, setSavedFeedback] = useState(false);
+
+  // Estados de clave de cuenta
+  const [copiedKey, setCopiedKey] = useState(false);
+  const [showFullKey, setShowFullKey] = useState(false);
+  const [showRestoreBox, setShowRestoreBox] = useState(false);
+  const [restoreKeyInput, setRestoreKeyInput] = useState('');
+  const [restoreStatus, setRestoreStatus] = useState({ error: '', success: '' });
 
   // El perfil del servidor viene del store social: es quien escucha
   // `profile_data` de forma permanente y quien tiene el vigilante de 6 s. Antes
@@ -96,6 +117,56 @@ export default function ProfileModal({ name, onClose }) {
   const elo = currentElo != null ? currentElo : '—';
   const monedas = currentCoins != null ? currentCoins : '—';
 
+  const handleSaveProfile = () => {
+    const clean = editName.trim() || name || 'Jugador';
+    setName(clean);
+    setAvatar(editAvatar);
+    if (socket && socket.connected) {
+      socket.emit('update_profile', { username: clean, avatar: editAvatar });
+    }
+    setSavedFeedback(true);
+    setTimeout(() => {
+      setSavedFeedback(false);
+      setEditing(false);
+    }, 700);
+  };
+
+  const handleRandomizeEdit = () => {
+    const rnd = FUN_NICKNAMES[Math.floor(Math.random() * FUN_NICKNAMES.length)];
+    setEditName(rnd);
+  };
+
+  const handleCopyKey = async () => {
+    const key = exportAccountKey();
+    if (!key) return;
+    try {
+      await navigator.clipboard.writeText(key);
+      setCopiedKey(true);
+      setTimeout(() => setCopiedKey(false), 2000);
+    } catch {
+      // Fallback
+    }
+  };
+
+  const handleRestoreAccount = () => {
+    if (!restoreKeyInput.trim()) return;
+    const res = importAccountKey(restoreKeyInput);
+    if (res.success) {
+      setRestoreStatus({ error: '', success: t('profile.restoreSuccess') });
+      if (socket && socket.connected) {
+        socket.emit('verify_session', { accountId: res.data.pid, token: res.data.token, username: res.data.name });
+        socket.emit('update_profile', { username: res.data.name, avatar: res.data.avatar });
+      }
+      recargar();
+      setTimeout(() => {
+        setShowRestoreBox(false);
+        setRestoreStatus({ error: '', success: '' });
+      }, 1000);
+    } else {
+      setRestoreStatus({ error: t('profile.restoreError'), success: '' });
+    }
+  };
+
   return (
     <>
     <div className="modal-overlay animate-fade-in" onClick={onClose}>
@@ -106,13 +177,26 @@ export default function ProfileModal({ name, onClose }) {
 
         {/* Cabecera: avatar + nombre + rango + ELO + monedas */}
         <div className="profile-head">
-          <div className="profile-avatar">{initials}</div>
+          <div className="profile-avatar">{avatar && avatar !== '?' ? avatar : initials}</div>
           <div style={{ flex: 1 }}>
             <div className="profile-name-row" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <span className="profile-name" {...propsTitulo}>{name || t('common.you')}</span>
               <span className="profile-rank-badge" style={{ borderColor: rank.color, color: rank.color }}>
                 {t(`rank.${rank.id}`)}
               </span>
+              <button
+                type="button"
+                className="btn-premium btn-secondary profile-edit-toggle-btn"
+                onClick={() => {
+                  setEditing(!editing);
+                  setEditName(name || '');
+                  setEditAvatar(avatar);
+                }}
+                aria-label={t('profile.edit')}
+              >
+                <Edit3 size={13} aria-hidden="true" />
+                <span>{editing ? t('common.cancel') : t('profile.edit')}</span>
+              </button>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '4px', fontSize: '0.8rem', color: '#9ca3af' }}>
@@ -142,6 +226,58 @@ export default function ProfileModal({ name, onClose }) {
             )}
           </div>
         </div>
+
+        {/* Editor de Perfil Desplegable */}
+        {editing && (
+          <div className="profile-edit-box glass-panel animate-scale-up">
+            <div className="profile-edit-section">
+              <label className="profile-edit-label">{t('profile.editAvatar')}</label>
+              <div className="profile-avatar-grid">
+                {AVATAR_OPTIONS.map((em) => (
+                  <button
+                    key={em}
+                    type="button"
+                    className={`profile-avatar-choice ${editAvatar === em ? 'active' : ''}`}
+                    onClick={() => setEditAvatar(em)}
+                  >
+                    {em}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="profile-edit-section">
+              <label className="profile-edit-label" htmlFor="profile-edit-name-input">{t('profile.editName')}</label>
+              <div className="profile-edit-input-row">
+                <input
+                  id="profile-edit-name-input"
+                  type="text"
+                  className="input-premium profile-name-input"
+                  maxLength={16}
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value.substring(0, 16))}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleSaveProfile(); }}
+                />
+                <button
+                  type="button"
+                  className="btn-premium btn-secondary"
+                  onClick={handleRandomizeEdit}
+                  title={t('profile.randomName')}
+                >
+                  <Dices size={15} />
+                </button>
+                <button
+                  type="button"
+                  className="btn-premium btn-primary"
+                  onClick={handleSaveProfile}
+                >
+                  <Check size={15} />
+                  {savedFeedback ? t('profile.saved') : t('profile.save')}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* LA MISMA FRANJA QUE LA TIENDA, EL RANKING Y LA AGENDA, leída del
             MISMO dato (`capacidades.persistencia`). Un servidor sin base de
@@ -330,6 +466,96 @@ export default function ProfileModal({ name, onClose }) {
               </div>
             </div>
           )}
+
+          {/* Clave de Cuenta y Transferencia */}
+          <div className="profile-account-section">
+            <div className="profile-section-label">
+              <Key size={14} />
+              {t('profile.accountKey')}
+            </div>
+            <p className="profile-account-desc">
+              {t('profile.accountKeyDesc')}
+            </p>
+            <div className="profile-key-row">
+              <div className="profile-key-box" title={showFullKey ? exportAccountKey() : undefined}>
+                <span className="profile-key-prefix">2MINO-</span>
+                <span className="profile-key-text">
+                  {showFullKey ? (exportAccountKey().slice(6) || '••••••••') : '••••••••••••••••••••••••'}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="btn-premium btn-secondary profile-key-toggle-btn"
+                onClick={() => setShowFullKey(!showFullKey)}
+                title={showFullKey ? t('profile.hideKey') : t('profile.showKey')}
+                aria-label={showFullKey ? t('profile.hideKey') : t('profile.showKey')}
+              >
+                {showFullKey ? <EyeOff size={14} /> : <Eye size={14} />}
+              </button>
+              <button
+                type="button"
+                className={`btn-premium ${copiedKey ? 'btn-primary' : 'btn-secondary'} profile-copy-btn`}
+                onClick={handleCopyKey}
+              >
+                {copiedKey ? <Check size={14} /> : <Key size={14} />}
+                <span>{copiedKey ? t('profile.copiedKey') : t('profile.copyKey')}</span>
+              </button>
+            </div>
+
+            {/* Subsección: restaurar cuenta en este dispositivo */}
+            <div className="profile-restore-sub">
+              {!showRestoreBox ? (
+                <button
+                  type="button"
+                  className="profile-restore-toggle"
+                  onClick={() => setShowRestoreBox(true)}
+                >
+                  <ShieldCheck size={13} />
+                  {t('profile.restoreAccount')}
+                </button>
+              ) : (
+                <div className="profile-restore-panel animate-scale-up">
+                  <span className="profile-restore-note">{t('profile.restoreAccountDesc')}</span>
+                  <div className="profile-restore-input-row">
+                    <input
+                      type="text"
+                      className="input-premium profile-restore-input"
+                      placeholder={t('profile.pasteKeyPlaceholder')}
+                      value={restoreKeyInput}
+                      onChange={(e) => setRestoreKeyInput(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="btn-premium btn-primary"
+                      onClick={handleRestoreAccount}
+                    >
+                      <Check size={14} /> {t('profile.restoreBtn')}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-premium btn-secondary"
+                      onClick={() => {
+                        setShowRestoreBox(false);
+                        setRestoreStatus({ error: '', success: '' });
+                      }}
+                    >
+                      {t('common.cancel')}
+                    </button>
+                  </div>
+                  {restoreStatus.error && (
+                    <div className="setup-restore-msg error" role="alert">
+                      <AlertCircle size={13} /> {restoreStatus.error}
+                    </div>
+                  )}
+                  {restoreStatus.success && (
+                    <div className="setup-restore-msg success" role="status">
+                      <Check size={13} /> {restoreStatus.success}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
 
           {stats.played > 0 && (
             borrando ? (

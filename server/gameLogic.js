@@ -172,6 +172,8 @@ class DominoGame extends BaseGame {
     this.passedTurns = 0; // Contador de turnos seguidos pasados para detectar bloqueo
     this.roundNumber = 0;
     this.startingPlayerId = null; // Quien inicia la ronda
+    this.pendingCapicua = false;
+    this.lastRoundCapicua = false;
     this.playerPassedOn = {};
     this.moveLog = []; // Bitácora de jugadas
 
@@ -374,6 +376,8 @@ class DominoGame extends BaseGame {
     // El ganador de equipo de la ronda anterior debe limpiarse aquí; si no, se
     // difunde durante toda la ronda nueva.
     this.roundWinnerTeam = null;
+    this.pendingCapicua = false;
+    this.lastRoundCapicua = false;
     this.playerPassedOn = {};
     this.status = 'playing';
     this.powerUsedThisTurn = false;
@@ -740,6 +744,18 @@ class DominoGame extends BaseGame {
       return { success: false, error: 'srv.err.invalidMove' };
     }
 
+    // Capicúa: victoria con ficha no doble que calzaba en ambos extremos distintos
+    if (player.hand.length === 1 && this.board.length > 0) {
+      const isDouble = tile[0] === tile[1];
+      if (!isDouble && left !== null && right !== null && left !== right) {
+        const matchesLeft = tile[0] === left || tile[1] === left;
+        const matchesRight = tile[0] === right || tile[1] === right;
+        if (matchesLeft && matchesRight) {
+          this.pendingCapicua = true;
+        }
+      }
+    }
+
     // Remover ficha de la mano del jugador
     player.hand.splice(tileIndex, 1);
     this.lastPlay = { playerId, tile: playedTile, side };
@@ -941,7 +957,12 @@ class DominoGame extends BaseGame {
     }
 
     const losingTeam = winningTeam === 0 ? 1 : 0;
-    this.teamScores[winningTeam] += this.teamHandSum(losingTeam);
+    let pointsToAdd = this.teamHandSum(losingTeam);
+    if (!isBlocked && this.pendingCapicua) {
+      this.lastRoundCapicua = true;
+      pointsToAdd *= 2;
+    }
+    this.teamScores[winningTeam] += pointsToAdd;
     this.roundWinnerTeam = winningTeam;
     this.checkGameEndTeams();
   }
@@ -970,6 +991,10 @@ class DominoGame extends BaseGame {
           roundPoints += this.getHandSum(p.hand);
         }
       });
+      if (this.pendingCapicua) {
+        this.lastRoundCapicua = true;
+        roundPoints *= 2;
+      }
       winner.score += roundPoints;
       this.roundWinner = winner.id;
       this.startingPlayerId = winner.id; // Empieza la siguiente
@@ -1348,6 +1373,7 @@ class DominoGame extends BaseGame {
       currentPlayerId: this.players[this.currentPlayerIndex] ? this.players[this.currentPlayerIndex].id : null,
       roundWinner: this.roundWinner,
       gameWinner: this.gameWinner,
+      isCapicua: !!this.lastRoundCapicua,
       lastPlay: this.lastPlay,
       lastPlacedTile: this.lastPlacedTile,
       lastPlacedBy: this.lastPlacedBy,

@@ -386,13 +386,13 @@ export default function GameBoard({
                     type="button"
                     onClick={() => onPlay && onPlay(selectedTileIndex, 'left')}
                     className="board-placeholder-circle animate-pulse-glow"
-                    title="Jugar extremo izquierdo"
+                    title={t('board.left')} aria-label={t('board.left')}
                   >
                     ←
                   </button>
                 )}
                 {(activeEffects?.frozenEnd === 'left' || activeEffects?.frozenEnd === 'both') && (
-                  <div className="board-placeholder-circle frozen" title="Extremo Congelado" />
+                  <div className="board-placeholder-circle frozen" title={t('board.congelado')} />
                 )}
                 {isMyTurn && pendingTargetType === 'end_target' && (
                   <button
@@ -400,7 +400,7 @@ export default function GameBoard({
                     onClick={() => onSelectEndTarget && onSelectEndTarget('left')}
                     className="board-placeholder-circle"
                     style={{ borderStyle: 'dashed', borderColor: '#818cf8', color: '#a5b4fc' }}
-                    title={selectedPower?.id === 'tile_demolition' ? 'Eliminar Ficha Izquierda' : 'Congelar Extremo Izquierdo'}
+                    title={selectedPower?.id === 'tile_demolition' ? t('board.demolerIzq') : t('board.congelarIzq')}
                   >
                     {selectedPower?.id === 'tile_demolition' ? '💣' : '❄️'}
                   </button>
@@ -425,13 +425,13 @@ export default function GameBoard({
                     type="button"
                     onClick={() => onPlay && onPlay(selectedTileIndex, 'right')}
                     className="board-placeholder-circle animate-pulse-glow"
-                    title="Jugar extremo derecho"
+                    title={t('board.right')} aria-label={t('board.right')}
                   >
                     →
                   </button>
                 )}
                 {(activeEffects?.frozenEnd === 'right' || activeEffects?.frozenEnd === 'both') && (
-                  <div className="board-placeholder-circle frozen" title="Extremo Congelado" />
+                  <div className="board-placeholder-circle frozen" title={t('board.congelado')} />
                 )}
                 {isMyTurn && pendingTargetType === 'end_target' && (
                   <button
@@ -439,7 +439,7 @@ export default function GameBoard({
                     onClick={() => onSelectEndTarget && onSelectEndTarget('right')}
                     className="board-placeholder-circle"
                     style={{ borderStyle: 'dashed', borderColor: '#818cf8', color: '#a5b4fc' }}
-                    title={selectedPower?.id === 'tile_demolition' ? 'Eliminar Ficha Derecha' : 'Congelar Extremo Derecho'}
+                    title={selectedPower?.id === 'tile_demolition' ? t('board.demolerDer') : t('board.congelarDer')}
                   >
                     {selectedPower?.id === 'tile_demolition' ? '💣' : '❄️'}
                   </button>

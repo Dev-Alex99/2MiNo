@@ -400,6 +400,36 @@ async function getUserProfile(userId) {
   }
 }
 
+async function updateUserProfile(userId, { username, avatar } = {}) {
+  if (!userId) return false;
+  if (!pool) return true;
+  try {
+    const updates = [];
+    const values = [userId];
+    let idx = 2;
+
+    if (username && isRealName(username)) {
+      updates.push(`username = $${idx++}`);
+      values.push(username.trim().slice(0, 16));
+    }
+    if (avatar !== undefined && typeof avatar === 'string') {
+      updates.push(`avatar = $${idx++}`);
+      values.push(avatar.trim().slice(0, 32));
+    }
+
+    if (updates.length === 0) return true;
+
+    await pool.query(
+      `UPDATE users SET ${updates.join(', ')} WHERE id = $1`,
+      values
+    );
+    return true;
+  } catch (e) {
+    console.warn('[BD Error updateUserProfile]', e.message);
+    return false;
+  }
+}
+
 // ─── Amigos ───
 function genFriendCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sin caracteres ambiguos (0/O, 1/I)
@@ -803,5 +833,6 @@ module.exports = {
   getFriendRequests,
   sonAmigos,
   removeFriend,
-  equipItem
+  equipItem,
+  updateUserProfile
 };

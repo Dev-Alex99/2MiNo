@@ -38,7 +38,8 @@ const {
   removeFriend,
   sonAmigos,
   isEnabled,
-  equipItem
+  equipItem,
+  updateUserProfile
 } = require('../db');
 const tournamentManager = require('../tournamentManager');
 const matchmaking = require('../matchmaking');
@@ -248,6 +249,40 @@ function registerRoomHandlers(io, socket) {
     socket.emit('profile_data', profile);
   });
 
+  socket.on('update_profile', async ({ username, avatar } = {}) => {
+    const pid = await authId();
+    if (!pid) return;
+    const cleanName = (username || '').trim().slice(0, 16);
+    const cleanAvatar = (avatar || '').trim().slice(0, 32);
+
+    if (cleanName) {
+      presence.recordarNombre(pid, cleanName);
+    }
+    if (cleanAvatar) {
+      presence.recordarAvatar(pid, cleanAvatar);
+    }
+    await updateUserProfile(pid, { username: cleanName, avatar: cleanAvatar });
+    const profile = await getUserProfile(pid);
+    if (profile) {
+      profile.daily = await getDailyState(pid);
+    }
+    socket.emit('profile_data', profile);
+
+    // Actualizar nombre y avatar en cualquier sala en curso donde esté el jugador
+    for (const [, r] of rooms) {
+      const pl = r.players && r.players.find(p => p.id === pid);
+      if (pl) {
+        if (cleanName) pl.name = cleanName;
+        if (cleanAvatar) pl.avatar = cleanAvatar;
+        broadcastGameState(io, r.roomId);
+      }
+    }
+
+    try {
+      require('../friendService').notifyFriendsOfPresence(io, pid);
+    } catch (e) { /* noop */ }
+  });
+
   socket.on('claim_mission', async ({ missionId } = {}) => {
     const pid = await authId();
     if (!pid || !missionId) return;
@@ -382,9 +417,11 @@ function registerRoomHandlers(io, socket) {
     getOrCreateUser(actualPlayerId, name);
     // Y si aun así no entró, no se le dice que sí (cinturón y tirantes: el
     // aforo lo decide el juego, no este handler).
-    if (!game.addPlayer(actualPlayerId, name, socket.id)) {
+    const addedPlayer = game.addPlayer(actualPlayerId, name, socket.id);
+    if (!addedPlayer) {
       return socket.emit('error_msg', { key: 'srv.err.roomFull' });
     }
+    if (addedPlayer) addedPlayer.avatar = presence.avatarDe(actualPlayerId);
     socket.join(roomId);
 
     apuntarActividad(playerId, roomId, name);

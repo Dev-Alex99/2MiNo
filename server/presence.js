@@ -70,6 +70,8 @@ function playerOf(socketId) {
 
 // ─── Nombres ───
 
+const avatares = new Map();         // playerId -> avatar
+
 function recordarNombre(playerId, nombre) {
   if (!playerId) return;
   const limpio = String(nombre || '').trim().slice(0, 20);
@@ -78,6 +80,16 @@ function recordarNombre(playerId, nombre) {
 
 function nombreDe(playerId) {
   return nombres.get(playerId) || 'Jugador';
+}
+
+function recordarAvatar(playerId, avatar) {
+  if (!playerId) return;
+  const limpio = String(avatar || '').trim().slice(0, 32);
+  if (limpio) avatares.set(playerId, limpio);
+}
+
+function avatarDe(playerId) {
+  return avatares.get(playerId) || '🎲';
 }
 
 // ─── Actividad y disponibilidad ───
@@ -127,6 +139,7 @@ function _reset() {
   actividades.clear();
   disponibilidades.clear();
   nombres.clear();
+  avatares.clear();
 }
 
 module.exports = {
@@ -138,6 +151,8 @@ module.exports = {
   playerOf,
   recordarNombre,
   nombreDe,
+  recordarAvatar,
+  avatarDe,
   setActividad,
   setDisponibilidad,
   disponibilidadDe,

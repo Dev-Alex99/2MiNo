@@ -118,6 +118,15 @@ function alRecibirPerfil(data) {
     perfil: data,
     miCodigo: data.friend_code || useSocialStore.getState().miCodigo
   });
+
+  // Reconciliar nombre y avatar con useGameStore si vienen de la BD
+  const state = useGameStore.getState();
+  if (data.username && data.username !== 'Jugador' && !state.name) {
+    state.setName(data.username);
+  }
+  if (data.avatar && data.avatar.trim()) {
+    state.setAvatar(data.avatar);
+  }
 }
 
 function alRecibirPresencia(p) {

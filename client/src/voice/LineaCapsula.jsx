@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { create } from 'zustand';
-import { ChevronUp, Mic, MicOff, Phone, PhoneOff } from 'lucide-react';
+import { ChevronUp, Mic, MicOff, Phone, PhoneOff, Volume2, Settings, Headphones } from 'lucide-react';
 import { useT } from '../i18n/LanguageContext';
 import { useLineaStore, acciones } from './useLineaStore';
 import { CLAVE_DE_CIERRE, CON_MICRO } from './maquina';
@@ -223,6 +223,8 @@ export function useResumenDeLinea() {
   return { estado, motivo, texto, segundos, otros };
 }
 
+const SEGMENTOS = [0, 1, 2, 3, 4, 5, 6];
+
 /* ─────────────────────────────────────────────────────────── la cápsula */
 
 export default function LineaCapsula({ variante = 'libre' }) {
@@ -230,6 +232,9 @@ export default function LineaCapsula({ variante = 'libre' }) {
   const resumen = useResumenDeLinea();
   const pares = useLineaStore((s) => s.pares);
   const muted = useLineaStore((s) => s.muted);
+  const isDeafened = useLineaStore((s) => s.isDeafened);
+  const nivel = useLineaStore((s) => s.nivel);
+  const nivelPalabra = useLineaStore((s) => s.nivelPalabra);
   const timbrando = useLineaStore((s) => s.timbrando);
   const vozDeMesa = useLineaStore((s) => s.vozDeMesa);
   const abrirHoja = useHoja((s) => s.abrir);
@@ -243,6 +248,141 @@ export default function LineaCapsula({ variante = 'libre' }) {
   // Timbres en espera: con la línea ocupada el timbre no roba la pantalla, se
   // apunta. Y con la regla del reloj, esta insignia es TODA la señal visible.
   const enEspera = (timbrando || []).length;
+
+  /* ─── Variante sala: tarjeta integrada para la sala de espera ─── */
+  if (variante === 'sala') {
+    const n = vozDeMesa && vozDeMesa.n ? vozDeMesa.n : 0;
+
+    if (!hayLinea) {
+      return (
+        <div className="linea-sala-card" role="region" aria-label={t('voice.callTitle')}>
+          <div className="linea-sala-top">
+            <div className="linea-sala-ident">
+              <Volume2 size={16} className="linea-sala-icono" aria-hidden="true" />
+              <span className="linea-sala-titulo">{t('voice.callTitle')}</span>
+            </div>
+            <span className="linea-sala-badge linea-sala-badge-off">
+              {t('voice.available', 'Disponible')}
+            </span>
+          </div>
+
+          <p className="linea-sala-desc">
+            {n > 0
+              ? t('voice.nudgeSome', { n })
+              : t('voice.nudge', 'Habla con los jugadores de la mesa en tiempo real')}
+          </p>
+
+          <div className="linea-sala-actions">
+            <button
+              type="button"
+              className="btn-premium btn-primary linea-sala-btn-join"
+              onClick={acciones.entrarAMesa}
+              title={n > 0 ? t('linea.entrarVozN', { n }) : t('linea.entrarVoz')}
+              aria-label={n > 0 ? t('linea.entrarVozN', { n }) : t('linea.entrarVoz')}
+            >
+              <Mic size={16} aria-hidden="true" />
+              <span>{n > 0 ? t('linea.entrarVozN', { n }) : t('linea.entrarVoz')}</span>
+              {n > 0 && <span className="linea-sala-badge-count">{n}</span>}
+            </button>
+            <button
+              type="button"
+              className="linea-sala-btn-settings"
+              onClick={abrirHoja}
+              title={t('voice.audioSettings')}
+              aria-label={t('voice.audioSettings')}
+            >
+              <Settings size={16} aria-hidden="true" />
+              {enEspera > 0 && <span className="linea-chip-insignia" aria-hidden="true">{enEspera}</span>}
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="linea-sala-card linea-sala-activa" role="region" aria-label={t('voice.callTitle')}>
+        <div className="linea-sala-top">
+          <div className="linea-sala-ident">
+            <span className="linea-sala-live-dot" aria-hidden="true" />
+            <span className="linea-sala-titulo">{t('voice.callTitle')}</span>
+          </div>
+          <div className="linea-sala-top-right">
+            <BarrasDeCalidad estado={peor} />
+            <span className="linea-sala-badge linea-sala-badge-live">
+              {t('voice.connectedP2P', 'En llamada')}
+            </span>
+          </div>
+        </div>
+
+        <div className="linea-sala-status-row">
+          <span className="linea-sala-resumen">{resumen.texto}</span>
+          <div
+            className="linea-sala-vumeter"
+            title={t(nivelPalabra)}
+            aria-label={t(nivelPalabra)}
+          >
+            {SEGMENTOS.map((i) => (
+              <span
+                key={i}
+                className={`linea-sala-vu-seg ${i < nivel ? 'activo' : ''}`}
+              />
+            ))}
+          </div>
+        </div>
+
+        <div className="linea-sala-controls-row">
+          {conMicro && (
+            <button
+              type="button"
+              className={`linea-sala-pill ${muted ? 'is-muted' : 'is-active'}`}
+              onClick={acciones.alternarSilencio}
+              title={muted ? t('voice.unmute') : t('voice.mute')}
+              aria-label={muted ? t('voice.unmute') : t('voice.mute')}
+              aria-pressed={muted}
+            >
+              {muted ? <MicOff size={15} aria-hidden="true" /> : <Mic size={15} aria-hidden="true" />}
+              <span>{muted ? t('voice.mutedLabel') : t('common.active', 'Activo')}</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            className={`linea-sala-pill-icon ${isDeafened ? 'is-deafened' : ''}`}
+            onClick={acciones.alternarEnsordecido}
+            title={isDeafened ? t('voice.undeafen') : t('voice.deafen')}
+            aria-label={isDeafened ? t('voice.undeafen') : t('voice.deafen')}
+            aria-pressed={isDeafened}
+          >
+            <Headphones size={15} aria-hidden="true" />
+          </button>
+
+          <button
+            type="button"
+            className="linea-sala-pill-icon"
+            onClick={abrirHoja}
+            title={t('voice.audioSettings')}
+            aria-label={t('voice.audioSettings')}
+          >
+            <Settings size={15} aria-hidden="true" />
+            {enEspera > 0 && <span className="linea-chip-insignia" aria-hidden="true">{enEspera}</span>}
+          </button>
+
+          {(conMicro || estado === 'pidiendoMicro') && (
+            <button
+              type="button"
+              className="linea-sala-pill-hangup"
+              onClick={estado === 'saliente' || estado === 'pidiendoMicro' ? acciones.cancelar : acciones.colgar}
+              title={estado === 'saliente' || estado === 'pidiendoMicro' ? t('linea.cancelar') : t('voice.leave')}
+              aria-label={estado === 'saliente' || estado === 'pidiendoMicro' ? t('linea.cancelar') : t('voice.leave')}
+            >
+              <PhoneOff size={15} aria-hidden="true" />
+              <span>{t('voice.leave', 'Salir')}</span>
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   /* ─── Variante anclada: el chip de la barra de la partida ─── */
   if (variante === 'anclada') {

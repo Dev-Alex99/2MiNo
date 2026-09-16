@@ -125,6 +125,15 @@ export default function useGameSocket({ invitedCodeRef }) {
       if (data.equipped_tile_skin) applySkin(data.equipped_tile_skin);
       if (data.equipped_board_theme) applyTable(data.equipped_board_theme);
 
+      // Sincronizar nombre y avatar si existen en la BD del servidor
+      const state = useGameStore.getState();
+      if (data.username && data.username !== 'Jugador' && !state.name) {
+        state.setName(data.username);
+      }
+      if (data.avatar && data.avatar.trim()) {
+        state.setAvatar(data.avatar);
+      }
+
       // Recompensa por racha de login (solo el primer login del día).
       if (data.daily && data.daily.loginReward) {
         const nid = `login_${Date.now()}`;
@@ -207,6 +216,7 @@ export default function useGameSocket({ invitedCodeRef }) {
       sessionStorage.setItem('domino_player_id', newPlayerId);
       setError('');
       setSalaFantasma('');
+      useGameStore.getState().clearRoomMessages();
     }
 
     function onRoomJoined({ roomId: newRoomId, playerId: newPlayerId }) {
@@ -218,6 +228,7 @@ export default function useGameSocket({ invitedCodeRef }) {
       setInvitedCode('');
       // Estar dentro de una sala deja sin sentido la banda de la anterior.
       setSalaFantasma('');
+      useGameStore.getState().clearRoomMessages();
     }
 
     function onGameState(state) {
@@ -230,6 +241,8 @@ export default function useGameSocket({ invitedCodeRef }) {
         if (currentStatus === 'round_ended') {
           if (state.roundWinner === 'tie') {
             playGameSound('pass');
+          } else if (state.isCapicua) {
+            playGameSound('capicua');
           } else {
             playGameSound('win_round');
           }
@@ -334,6 +347,16 @@ export default function useGameSocket({ invitedCodeRef }) {
       setTimeout(() => {
         setQuickNotifications(prev => prev.filter(n => n.id !== id));
       }, msg.type === 'emoji' ? 2500 : 3500);
+
+      useGameStore.getState().addRoomMessage({
+        id,
+        playerId: msg.playerId,
+        playerName: msg.playerName,
+        text: msg.text,
+        msgKey: msg.key,
+        type: msg.type,
+        timestamp: Date.now()
+      });
     }
 
     function onErrorMsg(payload) {

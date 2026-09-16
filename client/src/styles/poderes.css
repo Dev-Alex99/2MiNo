@@ -460,7 +460,7 @@
   border: 4px solid var(--epic);
   background: #0a0f1d;
   box-shadow: 0 0 42px color-mix(in srgb, var(--epic) 60%, transparent), 0 12px 40px rgba(0, 0, 0, 0.6);
-  animation: epic-pop 0.5s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+  animation: epic-pop 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 .epic-video { width: 100%; height: 100%; object-fit: cover; }
 .epic-avatar {
@@ -483,7 +483,7 @@
   max-width: 92vw;
   overflow-wrap: anywhere;
   text-shadow: 0 0 24px color-mix(in srgb, var(--epic) 55%, transparent), 0 4px 18px rgba(0, 0, 0, 0.7);
-  animation: epic-slam 0.5s cubic-bezier(0.2, 1.3, 0.3, 1) both;
+  animation: epic-slam 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 .epic-sub {
   font-size: 1.05rem;

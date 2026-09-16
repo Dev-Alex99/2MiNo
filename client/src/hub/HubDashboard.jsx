@@ -3,6 +3,7 @@ import { ShoppingBag, Trophy, Users, Play, LogIn } from 'lucide-react';
 import { socket } from '../socket';
 import { useHubStore } from './stores/useHubStore';
 import { useGameStore, getOrCreatePersistentPlayerId } from '../store/useGameStore';
+import { useSocialStore } from '../social/useSocialStore';
 import { useT } from '../i18n/LanguageContext';
 import LanguageSwitcher from '../components/LanguageSwitcher';
 import CarrilDeGente, { useAgenda } from './CarrilDeGente';
@@ -30,8 +31,9 @@ export default function HubDashboard({ onOpenProfile, onOpenStore, onOpenFriends
   const { t } = useT();
   const setSelectedGameId = useHubStore((estado) => estado.setSelectedGameId);
   const {
-    name, setName, cuentaId, roomId, isConnected, lobbyStats, invitedCode, capacidades
+    name, setName, avatar, cuentaId, roomId, isConnected, lobbyStats, invitedCode, capacidades
   } = useGameStore();
+  const dbProfile = useSocialStore((s) => s.perfil);
   const { hayAgenda, personas, solicitudes } = useAgenda();
   const [nombreInvitado, setNombreInvitado] = useState(name);
 
@@ -68,17 +70,17 @@ export default function HubDashboard({ onOpenProfile, onOpenStore, onOpenFriends
               borderColor: colorDeJugador(cuentaId)
             }}
           >
-            {(name || '?').charAt(0).toUpperCase()}
+            {avatar && avatar !== '?' ? avatar : (name || '?').charAt(0).toUpperCase()}
           </span>
-          {/* Falta la segunda línea de «ELO · monedas» que pide el spec, y es un
-              hueco con dueño, no un olvido: el dato viaja en `profile_data`, que
-              ya tiene su único listener en `useGameSocket` —donde se usa sólo
-              para aplicar las skins y se descarta— y `useGameSocket.test.jsx`
-              afirma que ese evento tiene EXACTAMENTE un listener. Registrar aquí
-              el segundo pone en rojo un test de otro paquete. En cuanto alguien
-              guarde el perfil en un store, son tres líneas de JSX. */}
           <span className="vest-yo-texto">
             <span className="vest-yo-nombre">{name || t('hub.perfil')}</span>
+            {dbProfile && (dbProfile.elo != null || dbProfile.coins != null) && (
+              <span className="vest-yo-cifras">
+                {dbProfile.elo != null && <span>{dbProfile.elo} ELO</span>}
+                {dbProfile.elo != null && dbProfile.coins != null && <span>·</span>}
+                {dbProfile.coins != null && <span>{dbProfile.coins} 🪙</span>}
+              </span>
+            )}
           </span>
         </button>
 

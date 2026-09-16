@@ -94,6 +94,18 @@ export function playGameSound(type) {
         playRingBurst(ctx, now);
         break;
 
+      case 'capicua':
+        playCapicuaFanfare(ctx, now);
+        break;
+
+      case 'uno_call':
+        playUnoCall(ctx, now);
+        break;
+
+      case 'uno_penalty':
+        playUnoPenalty(ctx, now);
+        break;
+
       default:
         break;
     }
@@ -449,3 +461,102 @@ function playPowerSynth(ctx, time) {
   osc2.start(time);
   osc2.stop(time + 0.65);
 }
+
+function playCapicuaFanfare(ctx, time) {
+  // Arpegio doble ascendente + acorde triunfal con campana
+  const arpegio1 = [523.25, 659.25, 783.99, 1046.50]; // Do5, Mi5, Sol5, Do6
+  arpegio1.forEach((freq, idx) => {
+    const t = time + idx * 0.08;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(freq, t);
+    gain.gain.setValueAtTime(0.14, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.36);
+  });
+
+  // Acorde final brillante
+  const acorde = [523.25, 659.25, 783.99, 1046.50, 1318.51];
+  const tFinal = time + 0.36;
+  acorde.forEach((freq) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(freq, tFinal);
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(2800, tFinal);
+    filter.frequency.exponentialRampToValueAtTime(600, tFinal + 1.2);
+
+    gain.gain.setValueAtTime(0.12, tFinal);
+    gain.gain.exponentialRampToValueAtTime(0.001, tFinal + 1.2);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(tFinal);
+    osc.stop(tFinal + 1.25);
+  });
+}
+
+function playUnoCall(ctx, time) {
+  // Toque vibrante de dos tonos ascendentes y brillantes (Fa5 -> Do6)
+  const notas = [
+    { freq: 698.46, dur: 0.12, offset: 0 },
+    { freq: 1046.50, dur: 0.38, offset: 0.11 }
+  ];
+
+  notas.forEach(({ freq, dur, offset }) => {
+    const t = time + offset;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(freq, t);
+
+    // Armónico para darle carácter
+    const osc2 = ctx.createOscillator();
+    osc2.type = 'triangle';
+    osc2.frequency.setValueAtTime(freq * 1.5, t);
+
+    gain.gain.setValueAtTime(0.16, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + dur);
+
+    osc.connect(gain);
+    osc2.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(t);
+    osc.stop(t + dur + 0.02);
+    osc2.start(t);
+    osc2.stop(t + dur + 0.02);
+  });
+}
+
+function playUnoPenalty(ctx, time) {
+  // Tono disonante/descendente indicando penalización (340 Hz -> 170 Hz)
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  const filter = ctx.createBiquadFilter();
+
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(340, time);
+  osc.frequency.exponentialRampToValueAtTime(160, time + 0.45);
+
+  filter.type = 'lowpass';
+  filter.frequency.setValueAtTime(600, time);
+
+  gain.gain.setValueAtTime(0.15, time);
+  gain.gain.exponentialRampToValueAtTime(0.001, time + 0.48);
+
+  osc.connect(filter);
+  filter.connect(gain);
+  gain.connect(ctx.destination);
+
+  osc.start(time);
+  osc.stop(time + 0.5);
+}
+

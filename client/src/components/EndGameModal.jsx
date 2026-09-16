@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Trophy, RefreshCw, ChevronRight, Award, Eye } from 'lucide-react';
+import { Trophy, RefreshCw, ChevronRight, Award, Eye, Sparkles } from 'lucide-react';
 import { socket } from '../socket';
 import { useT } from '../i18n/LanguageContext';
 import useModalA11y from '../hooks/useModalA11y';
@@ -208,6 +208,13 @@ export default function EndGameModal({ gameState, playerId, tournamentMatch = fa
             {roundWinner !== 'tie' && (
               <div className="modal-desc-box">
                 {t('end.roundDesc')}
+              </div>
+            )}
+
+            {gameState.isCapicua && (
+              <div className="capicua-badge animate-scale-up" role="status">
+                <Sparkles size={16} aria-hidden="true" />
+                <span>{t('end.capicuaBadge')}</span>
               </div>
             )}
           </>

@@ -109,57 +109,70 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
           (sus SVG no llevan aria-hidden), así que sin ellos la barra entera se
           queda muda. */}
       <div className="lobby-topbar" role="navigation" aria-label={t('lobby.subtitle')}>
-        <button
-          type="button"
-          className="lobby-profile-btn lobby-btn-hub"
-          onClick={returnToHub}
-          aria-label={t('hub.volver')}
-        >
-          <Home size={16} aria-hidden="true" />
-          <span className="lobby-btn-label">{t('hub.volver')}</span>
-        </button>
+        <div className="lobby-topbar-inner">
+          <div className="lobby-topbar-left">
+            <button
+              type="button"
+              className="lobby-profile-btn lobby-btn-hub"
+              onClick={returnToHub}
+              aria-label={t('hub.volver')}
+            >
+              <Home size={16} aria-hidden="true" />
+              <span className="lobby-btn-label">{t('hub.volver')}</span>
+            </button>
+            <div className="lobby-brand-badge" aria-hidden="true">
+              <span className="lobby-brand-logo">2MiNo</span>
+              <span className="lobby-brand-sep">·</span>
+              <span className="lobby-brand-game">{juego.nombre}</span>
+            </div>
+          </div>
 
-        <button
-          type="button"
-          className="lobby-profile-btn store-btn-highlight"
-          onClick={onOpenStore}
-          aria-label={t('lobby.store')}
-        >
-          <ShoppingBag size={16} aria-hidden="true" />
-          <span className="lobby-btn-label">{t('lobby.store')}</span>
-        </button>
+          <div className="lobby-topbar-nav">
+            <button
+              type="button"
+              className="lobby-profile-btn store-btn-highlight"
+              onClick={onOpenStore}
+              aria-label={t('lobby.store')}
+            >
+              <ShoppingBag size={16} aria-hidden="true" />
+              <span className="lobby-btn-label">{t('lobby.store')}</span>
+            </button>
 
-        {/* Torneos y clasificatoria sólo se ofrecen si el juego los soporta:
-            en el servidor ambos hacen `new DominoGame`, así que desde otro
-            juego te metían en una partida de dominó. */}
-        {onOpenTournament && juego.torneos && (
-          <button type="button" className="lobby-profile-btn tournament-btn-highlight" onClick={onOpenTournament} aria-label={t('lobby.tournament')}>
-            <Swords size={16} aria-hidden="true" />
-            <span className="lobby-btn-label">{t('lobby.tournament')}</span>
-          </button>
-        )}
+            {/* Torneos y clasificatoria sólo se ofrecen si el juego los soporta:
+                en el servidor ambos hacen `new DominoGame`, así que desde otro
+                juego te metían en una partida de dominó. */}
+            {onOpenTournament && juego.torneos && (
+              <button type="button" className="lobby-profile-btn tournament-btn-highlight" onClick={onOpenTournament} aria-label={t('lobby.tournament')}>
+                <Swords size={16} aria-hidden="true" />
+                <span className="lobby-btn-label">{t('lobby.tournament')}</span>
+              </button>
+            )}
 
-        {onOpenLeaderboard && (
-          <button type="button" className="lobby-profile-btn" onClick={onOpenLeaderboard} aria-label={t('lobby.ranking')}>
-            <Trophy size={16} aria-hidden="true" />
-            <span className="lobby-btn-label">{t('lobby.ranking')}</span>
-          </button>
-        )}
+            {onOpenLeaderboard && (
+              <button type="button" className="lobby-profile-btn" onClick={onOpenLeaderboard} aria-label={t('lobby.ranking')}>
+                <Trophy size={16} aria-hidden="true" />
+                <span className="lobby-btn-label">{t('lobby.ranking')}</span>
+              </button>
+            )}
 
-        {onOpenFriends && (
-          <button type="button" className="lobby-profile-btn" onClick={onOpenFriends} aria-label={t('friend.title')}>
-            <Users size={16} aria-hidden="true" />
-            <span className="lobby-btn-label">{t('friend.title')}</span>
-          </button>
-        )}
+            {onOpenFriends && (
+              <button type="button" className="lobby-profile-btn" onClick={onOpenFriends} aria-label={t('friend.title')}>
+                <Users size={16} aria-hidden="true" />
+                <span className="lobby-btn-label">{t('friend.title')}</span>
+              </button>
+            )}
+          </div>
 
-        {onOpenProfile && (
-          <button type="button" className="lobby-profile-btn" onClick={onOpenProfile} aria-label={t('profile.button')}>
-            <Medal size={16} aria-hidden="true" />
-            <span className="lobby-btn-label">{t('profile.button')}</span>
-          </button>
-        )}
-        <LanguageSwitcher />
+          <div className="lobby-topbar-right">
+            {onOpenProfile && (
+              <button type="button" className="lobby-profile-btn" onClick={onOpenProfile} aria-label={t('profile.button')}>
+                <Medal size={16} aria-hidden="true" />
+                <span className="lobby-btn-label">{t('profile.button')}</span>
+              </button>
+            )}
+            <LanguageSwitcher />
+          </div>
+        </div>
       </div>
 
       {/* Título animado flotante */}
@@ -190,350 +203,361 @@ export default function Lobby({ name, setName, onCreateRoom, onJoinRoom, onQuick
             {t('lobby.invited', { code: invitedCode })}
           </div>
         )}
-        <form onSubmit={(e) => e.preventDefault()} className="lobby-form">
-
-          {/* Campo de Nombre */}
-          <div className="lobby-form-field">
-            <label className="lobby-form-label">
-              <User size={14} />
-              {t('lobby.name')}
-            </label>
-            <input
-              type="text"
-              placeholder={t('lobby.namePlaceholder')}
-              value={name}
-              onChange={(e) => setName(e.target.value.substring(0, 16))}
-              className="input-premium"
-              maxLength={16}
-            />
-          </div>
-
-          {error && (
-            <div className="lobby-error">
-              {error}
-            </div>
-          )}
-
-          {/* Partida rápida: te sienta en una sala abierta o te abre una. */}
-          <button
-            type="button"
-            onClick={handleQuick}
-            className="btn-premium btn-primary quick-play-btn"
-          >
-            <Bolt size={18} fill="currentColor" />
-            {t('lobby.playNow')}
-          </button>
-
-          {/* Emparejamiento clasificatorio por ELO (sólo juegos que lo soportan) */}
-          {onFindRanked && juego.clasificatoria && (
-            <button
-              type="button"
-              onClick={() => { if (!name.trim()) { setError(t('lobby.nameRequired')); return; } onFindRanked(); }}
-              className="btn-premium ranked-find-btn"
-            >
-              <Trophy size={16} />
-              {t('mm.find')}
-            </button>
-          )}
-
-          {/* Salas públicas abiertas, en vivo */}
-          <div className="lobby-form-field">
-            <label className="lobby-form-label">
-              <Globe size={14} />
-              {t('lobby.openRooms')}
-            </label>
-            <RoomList
-              rooms={publicRooms}
-              loading={roomsLoading}
-              sinConexion={!isConnected}
-              onJoin={handleJoinFromList}
-              onCrear={handleCreate}
-            />
-          </div>
-
-          {/* Partidas en curso que se pueden ver.
-              Se monta SIEMPRE: con `liveGames.length > 0 &&` delante, el estado
-              vacío que LiveGames se molesta en pintar era inalcanzable por
-              construcción, y la sección desaparecía entera sin explicar por qué. */}
-          {onSpectate && (
+        <form onSubmit={(e) => e.preventDefault()} className="lobby-form lobby-grid">
+          {/* Columna 1: Acciones directas de juego, código y creación de sala */}
+          <div className="lobby-col lobby-col-action">
+            {/* Campo de Nombre */}
             <div className="lobby-form-field">
               <label className="lobby-form-label">
-                <Eye size={14} />
-                {t('live.title')}
+                <User size={14} />
+                {t('lobby.name')}
               </label>
-              <LiveGames games={liveGames} sinConexion={!isConnected} onWatch={onSpectate} onJugar={handleQuick} />
-            </div>
-          )}
-
-          <div className="separator"></div>
-
-          {/* Opciones de la sala a crear (plegadas por defecto) */}
-          {/* Las opciones de sala son del DOMINÓ (variante, parejas, poderes,
-              blitz). Otros juegos del hub no tienen nada que configurar, y
-              ofrecérselas era engañoso: se mandaban al servidor y se ignoraban. */}
-          {juego.opcionesDeSala && (
-          <div className="lobby-form-field">
-            <button
-              type="button"
-              onClick={() => setShowOptions((v) => !v)}
-              aria-expanded={showOptions}
-              className={`options-summary ${showOptions ? 'open' : ''}`}
-            >
-              <span className="options-summary-main">
-                <span className="options-summary-title">
-                  <Settings2 size={14} />
-                  {t('opt.title')}
-                </span>
-                <span className="options-summary-value">{optionsSummary}</span>
-              </span>
-              <ChevronDown size={16} className="options-chevron" />
-            </button>
-
-            {showOptions && (
-              <div className="options-panel">
-
-            {/* Variante del dominó */}
-            <div className="segmented" role="group" aria-label={t('opt.variant')}>
-              {[6, 9].map((pip) => (
-                <button
-                  key={pip}
-                  type="button"
-                  onClick={() => setMaxPip(pip)}
-                  aria-pressed={maxPip === pip}
-                  className={`segmented-btn ${maxPip === pip ? 'active' : ''}`}
-                >
-                  <span className="segmented-title">
-                    <Layers size={13} />
-                    {VARIANT_INFO[pip].label}
-                  </span>
-                  <span className="segmented-sub">{VARIANT_INFO[pip].desc}</span>
-                </button>
-              ))}
+              <input
+                type="text"
+                placeholder={t('lobby.namePlaceholder')}
+                value={name}
+                onChange={(e) => setName(e.target.value.substring(0, 16))}
+                className="input-premium"
+                maxLength={16}
+              />
             </div>
 
-            {/* Límite de puntos */}
-            <div className="segmented" role="group" aria-label={t('opt.score')}>
-              {[null, 100, 200, 300].map((pts) => (
-                <button
-                  key={pts ?? 'auto'}
-                  type="button"
-                  onClick={() => setMaxScore(pts)}
-                  aria-pressed={maxScore === pts}
-                  className={`segmented-btn compact ${maxScore === pts ? 'active' : ''}`}
-                >
-                  <span className="segmented-title">
-                    {pts === null ? <Medal size={13} /> : null}
-                    {pts === null ? t('opt.scoreAuto') : pts}
-                  </span>
-                  <span className="segmented-sub">
-                    {pts === null ? `${maxPip === 9 ? 200 : 100} ${t('common.points')}` : t('common.points')}
-                  </span>
-                </button>
-              ))}
-            </div>
-
-            {/* Antes había aquí un interruptor "Clasificatoria". Se retiró: una
-                sala creada a mano ya no puede afectar al ELO (permitía montar
-                partidas clasificatorias a medida y farmear con dos pestañas).
-                La vía clasificatoria es el botón de emparejamiento de arriba,
-                que empareja por ELO contra un rival de nivel similar. */}
-
-            {/* Cartas de poder on/off */}
-            <button
-              type="button"
-              onClick={() => setPowersEnabled((v) => !v)}
-              aria-pressed={powersEnabled}
-              className={`option-toggle ${powersEnabled ? 'on' : ''}`}
-            >
-              <span className="option-toggle-text">
-                <span className="option-toggle-title">
-                  <Zap size={14} />
-                  {t('opt.powers')}
-                </span>
-                <span className="option-toggle-desc">
-                  {powersEnabled ? t('opt.powersOn') : t('opt.powersOff')}
-                </span>
-              </span>
-              <span className="switch" aria-hidden="true">
-                <span className="switch-knob" />
-              </span>
-            </button>
-
-            {/* Modo Relámpago Blitz */}
-            <button
-              type="button"
-              onClick={() => setIsBlitzMode((v) => !v)}
-              aria-pressed={isBlitzMode}
-              className={`option-toggle ${isBlitzMode ? 'on' : ''}`}
-            >
-              <span className="option-toggle-text">
-                <span className="option-toggle-title">
-                  <Zap size={14} style={{ color: '#f59e0b' }} />
-                  {t('opt.blitz')}
-                </span>
-                <span className="option-toggle-desc">
-                  {isBlitzMode ? t('opt.blitzOn') : t('opt.blitzOff')}
-                </span>
-              </span>
-              <span className="switch" aria-hidden="true">
-                <span className="switch-knob" />
-              </span>
-            </button>
-
-            {/* Ajustes de poderes: solo si están activados */}
-            {powersEnabled && (
-              <>
-                <div className="segmented" role="group" aria-label={t('opt.intensity')}>
-                  {['light', 'normal', 'chaos'].map((lvl) => (
-                    <button
-                      key={lvl}
-                      type="button"
-                      onClick={() => setPowerIntensity(lvl)}
-                      aria-pressed={powerIntensity === lvl}
-                      className={`segmented-btn ${powerIntensity === lvl ? 'active' : ''}`}
-                    >
-                      <span className="segmented-title">
-                        <Zap size={12} />
-                        {t(`opt.int_${lvl}`)}
-                      </span>
-                      <span className="segmented-sub">{t(`opt.int_${lvl}_desc`)}</span>
-                    </button>
-                  ))}
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setOnePowerPerTurn((v) => !v)}
-                  aria-pressed={onePowerPerTurn}
-                  className={`option-toggle ${onePowerPerTurn ? 'on' : ''}`}
-                >
-                  <span className="option-toggle-text">
-                    <span className="option-toggle-title">
-                      <Zap size={14} />
-                      {t('opt.onePower')}
-                    </span>
-                    <span className="option-toggle-desc">
-                      {onePowerPerTurn ? t('opt.onePowerOn') : t('opt.onePowerOff')}
-                    </span>
-                  </span>
-                  <span className="switch" aria-hidden="true">
-                    <span className="switch-knob" />
-                  </span>
-                </button>
-              </>
-            )}
-
-            {/* Parejas 2v2 */}
-            <button
-              type="button"
-              onClick={() => setTeamsEnabled((v) => !v)}
-              aria-pressed={teamsEnabled}
-              className={`option-toggle teams ${teamsEnabled ? 'on' : ''}`}
-            >
-              <span className="option-toggle-text">
-                <span className="option-toggle-title">
-                  <Users size={14} />
-                  {t('opt.teams')}
-                </span>
-                <span className="option-toggle-desc">
-                  {teamsEnabled ? t('opt.teamsOn') : t('opt.teamsOff')}
-                </span>
-              </span>
-              <span className="switch" aria-hidden="true">
-                <span className="switch-knob" />
-              </span>
-            </button>
-
-            {/* Robar del pozo */}
-            <button
-              type="button"
-              onClick={() => setDrawEnabled((v) => !v)}
-              aria-pressed={drawEnabled}
-              className={`option-toggle draw ${drawEnabled ? 'on' : ''}`}
-            >
-              <span className="option-toggle-text">
-                <span className="option-toggle-title">
-                  <Download size={14} />
-                  {t('opt.draw')}
-                </span>
-                <span className="option-toggle-desc">
-                  {drawEnabled ? t('opt.drawOn') : t('opt.drawOff')}
-                </span>
-              </span>
-              <span className="switch" aria-hidden="true">
-                <span className="switch-knob" />
-              </span>
-            </button>
-
-            {/* Pública o privada */}
-            <button
-              type="button"
-              onClick={() => setIsPublic((v) => !v)}
-              aria-pressed={isPublic}
-              className={`option-toggle ${isPublic ? 'on' : ''}`}
-            >
-              <span className="option-toggle-text">
-                <span className="option-toggle-title">
-                  {isPublic ? <Globe size={14} /> : <Lock size={14} />}
-                  {isPublic ? t('opt.public') : t('opt.private')}
-                </span>
-                <span className="option-toggle-desc">
-                  {isPublic ? t('opt.publicDesc') : t('opt.privateDesc')}
-                </span>
-              </span>
-              <span className="switch" aria-hidden="true">
-                <span className="switch-knob" />
-              </span>
-            </button>
+            {error && (
+              <div className="lobby-error">
+                {error}
               </div>
             )}
-          </div>
-          )}
 
-          {/* Sección de acciones */}
-          <div className="lobby-form-field">
+            {/* Acciones principales: Partida rápida y Clasificatoria */}
+            <div className="lobby-action-buttons">
+              <button
+                type="button"
+                onClick={handleQuick}
+                className="btn-premium btn-primary quick-play-btn"
+              >
+                <Bolt size={18} fill="currentColor" />
+                {t('lobby.playNow')}
+              </button>
+
+              {/* Emparejamiento clasificatorio por ELO (sólo juegos que lo soportan) */}
+              {onFindRanked && juego.clasificatoria && (
+                <button
+                  type="button"
+                  onClick={() => { if (!name.trim()) { setError(t('lobby.nameRequired')); return; } onFindRanked(); }}
+                  className="btn-premium ranked-find-btn"
+                >
+                  <Trophy size={16} />
+                  {t('mm.find')}
+                </button>
+              )}
+            </div>
+
+            {/* Unirse a Sala con Código */}
+            <div className="lobby-join-box">
+              <div className="lobby-join-group">
+                <input
+                  type="text"
+                  placeholder={t('lobby.codePlaceholder')}
+                  value={roomCode}
+                  onChange={(e) => setRoomCode(e.target.value.toUpperCase().substring(0, 4))}
+                  className="input-premium lobby-code-input"
+                  maxLength={4}
+                />
+                <button
+                  onClick={handleJoin}
+                  type="button"
+                  className="btn-premium btn-secondary lobby-join-submit"
+                  aria-label={t('lobby.or')}
+                >
+                  <ArrowRight size={18} />
+                </button>
+              </div>
+            </div>
+
+            <div className="lobby-divider">
+              <span className="separator"></span>
+              <span className="lobby-divider-text">{t('lobby.or')}</span>
+              <span className="separator"></span>
+            </div>
+
+            {/* Opciones de la sala a crear (plegadas por defecto) */}
+            {/* Las opciones de sala son del DOMINÓ (variante, parejas, poderes,
+                blitz). Otros juegos del hub no tienen nada que configurar, y
+                ofrecérselas era engañoso: se mandaban al servidor y se ignoraban. */}
+            {juego.opcionesDeSala && (
+              <div className="lobby-form-field lobby-options-wrapper">
+                <button
+                  type="button"
+                  onClick={() => setShowOptions((v) => !v)}
+                  aria-expanded={showOptions}
+                  className={`options-summary ${showOptions ? 'open' : ''}`}
+                >
+                  <span className="options-summary-main">
+                    <span className="options-summary-title">
+                      <Settings2 size={14} />
+                      {t('opt.title')}
+                    </span>
+                    <span className="options-summary-value">{optionsSummary}</span>
+                  </span>
+                  <ChevronDown size={16} className="options-chevron" />
+                </button>
+
+                {showOptions && (
+                  <div className="options-panel">
+                    {/* Variante del dominó */}
+                    <div className="segmented" role="group" aria-label={t('opt.variant')}>
+                      {[6, 9].map((pip) => (
+                        <button
+                          key={pip}
+                          type="button"
+                          onClick={() => setMaxPip(pip)}
+                          aria-pressed={maxPip === pip}
+                          className={`segmented-btn ${maxPip === pip ? 'active' : ''}`}
+                        >
+                          <span className="segmented-title">
+                            <Layers size={13} />
+                            {VARIANT_INFO[pip].label}
+                          </span>
+                          <span className="segmented-sub">{VARIANT_INFO[pip].desc}</span>
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Límite de puntos */}
+                    <div className="segmented" role="group" aria-label={t('opt.score')}>
+                      {[null, 50, 100, 150, 200].map((pts) => (
+                        <button
+                          key={pts ?? 'auto'}
+                          type="button"
+                          onClick={() => setMaxScore(pts)}
+                          aria-pressed={maxScore === pts}
+                          className={`segmented-btn compact ${maxScore === pts ? 'active' : ''}`}
+                          title={pts === 50 ? t('opt.score50') : undefined}
+                        >
+                          <span className="segmented-title">
+                            {pts === null ? <Medal size={13} /> : null}
+                            {pts === null ? t('opt.scoreAuto') : pts}
+                          </span>
+                          <span className="segmented-sub">
+                            {pts === null ? `${maxPip === 9 ? 200 : 100} ${t('common.points')}` : t('common.points')}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Cartas de poder on/off */}
+                    <button
+                      type="button"
+                      onClick={() => setPowersEnabled((v) => !v)}
+                      aria-pressed={powersEnabled}
+                      className={`option-toggle ${powersEnabled ? 'on' : ''}`}
+                    >
+                      <span className="option-toggle-text">
+                        <span className="option-toggle-title">
+                          <Zap size={14} />
+                          {t('opt.powers')}
+                        </span>
+                        <span className="option-toggle-desc">
+                          {powersEnabled ? t('opt.powersOn') : t('opt.powersOff')}
+                        </span>
+                      </span>
+                      <span className="switch" aria-hidden="true">
+                        <span className="switch-knob" />
+                      </span>
+                    </button>
+
+                    {/* Modo Relámpago Blitz */}
+                    <button
+                      type="button"
+                      onClick={() => setIsBlitzMode((v) => !v)}
+                      aria-pressed={isBlitzMode}
+                      className={`option-toggle ${isBlitzMode ? 'on' : ''}`}
+                    >
+                      <span className="option-toggle-text">
+                        <span className="option-toggle-title">
+                          <Zap size={14} style={{ color: '#f59e0b' }} />
+                          {t('opt.blitz')}
+                        </span>
+                        <span className="option-toggle-desc">
+                          {isBlitzMode ? t('opt.blitzOn') : t('opt.blitzOff')}
+                        </span>
+                      </span>
+                      <span className="switch" aria-hidden="true">
+                        <span className="switch-knob" />
+                      </span>
+                    </button>
+
+                    {/* Ajustes de poderes: solo si están activados */}
+                    {powersEnabled && (
+                      <>
+                        <div className="segmented" role="group" aria-label={t('opt.intensity')}>
+                          {['light', 'normal', 'chaos'].map((lvl) => (
+                            <button
+                              key={lvl}
+                              type="button"
+                              onClick={() => setPowerIntensity(lvl)}
+                              aria-pressed={powerIntensity === lvl}
+                              className={`segmented-btn ${powerIntensity === lvl ? 'active' : ''}`}
+                            >
+                              <span className="segmented-title">
+                                <Zap size={12} />
+                                {t(`opt.int_${lvl}`)}
+                              </span>
+                              <span className="segmented-sub">{t(`opt.int_${lvl}_desc`)}</span>
+                            </button>
+                          ))}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => setOnePowerPerTurn((v) => !v)}
+                          aria-pressed={onePowerPerTurn}
+                          className={`option-toggle ${onePowerPerTurn ? 'on' : ''}`}
+                        >
+                          <span className="option-toggle-text">
+                            <span className="option-toggle-title">
+                              <Zap size={14} />
+                              {t('opt.onePower')}
+                            </span>
+                            <span className="option-toggle-desc">
+                              {onePowerPerTurn ? t('opt.onePowerOn') : t('opt.onePowerOff')}
+                            </span>
+                          </span>
+                          <span className="switch" aria-hidden="true">
+                            <span className="switch-knob" />
+                          </span>
+                        </button>
+                      </>
+                    )}
+
+                    {/* Parejas 2v2 */}
+                    <button
+                      type="button"
+                      onClick={() => setTeamsEnabled((v) => !v)}
+                      aria-pressed={teamsEnabled}
+                      className={`option-toggle teams ${teamsEnabled ? 'on' : ''}`}
+                    >
+                      <span className="option-toggle-text">
+                        <span className="option-toggle-title">
+                          <Users size={14} />
+                          {t('opt.teams')}
+                        </span>
+                        <span className="option-toggle-desc">
+                          {teamsEnabled ? t('opt.teamsOn') : t('opt.teamsOff')}
+                        </span>
+                      </span>
+                      <span className="switch" aria-hidden="true">
+                        <span className="switch-knob" />
+                      </span>
+                    </button>
+
+                    {/* Robar del pozo */}
+                    <button
+                      type="button"
+                      onClick={() => setDrawEnabled((v) => !v)}
+                      aria-pressed={drawEnabled}
+                      className={`option-toggle draw ${drawEnabled ? 'on' : ''}`}
+                    >
+                      <span className="option-toggle-text">
+                        <span className="option-toggle-title">
+                          <Download size={14} />
+                          {t('opt.draw')}
+                        </span>
+                        <span className="option-toggle-desc">
+                          {drawEnabled ? t('opt.drawOn') : t('opt.drawOff')}
+                        </span>
+                      </span>
+                      <span className="switch" aria-hidden="true">
+                        <span className="switch-knob" />
+                      </span>
+                    </button>
+
+                    {/* Pública o privada */}
+                    <button
+                      type="button"
+                      onClick={() => setIsPublic((v) => !v)}
+                      aria-pressed={isPublic}
+                      className={`option-toggle ${isPublic ? 'on' : ''}`}
+                    >
+                      <span className="option-toggle-text">
+                        <span className="option-toggle-title">
+                          {isPublic ? <Globe size={14} /> : <Lock size={14} />}
+                          {isPublic ? t('opt.public') : t('opt.private')}
+                        </span>
+                        <span className="option-toggle-desc">
+                          {isPublic ? t('opt.publicDesc') : t('opt.privateDesc')}
+                        </span>
+                      </span>
+                      <span className="switch" aria-hidden="true">
+                        <span className="switch-knob" />
+                      </span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Crear Sala */}
             <button
               onClick={handleCreate}
               type="button"
-              className="btn-premium btn-primary"
+              className="btn-premium btn-primary lobby-create-btn"
             >
               <Plus size={18} />
               {t('lobby.createRoom')}
             </button>
+          </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', margin: '4px 0' }}>
-              <span className="separator" style={{ flexGrow: 1 }}></span>
-              <span className="lobby-form-label" style={{ margin: 0 }}>{t('lobby.or')}</span>
-              <span className="separator" style={{ flexGrow: 1 }}></span>
+          {/* Columna 2: Comunidad en vivo (Salas abiertas y Partidas en curso) */}
+          <div className="lobby-col lobby-col-community">
+            {/* Salas públicas abiertas, en vivo */}
+            <div className="lobby-form-field lobby-community-section">
+              <div className="lobby-community-header">
+                <label className="lobby-form-label">
+                  <Globe size={14} />
+                  {t('lobby.openRooms')}
+                </label>
+                {publicRooms && publicRooms.length > 0 && (
+                  <span className="lobby-count-pill">{publicRooms.length}</span>
+                )}
+              </div>
+              <div className="lobby-roomlist-scroll">
+                <RoomList
+                  rooms={publicRooms}
+                  loading={roomsLoading}
+                  sinConexion={!isConnected}
+                  onJoin={handleJoinFromList}
+                  onCrear={handleCreate}
+                />
+              </div>
             </div>
 
-            {/* Unirse a Sala */}
-            <div className="lobby-join-group">
-              <input
-                type="text"
-                placeholder={t('lobby.codePlaceholder')}
-                value={roomCode}
-                onChange={(e) => setRoomCode(e.target.value.toUpperCase().substring(0, 4))}
-                className="input-premium"
-                style={{ textAlign: 'center', letterSpacing: '0.15em', fontFamily: 'monospace', fontSize: '1.1rem' }}
-                maxLength={4}
-              />
-              <button
-                onClick={handleJoin}
-                type="button"
-                className="btn-premium btn-secondary"
-                style={{ padding: '0 20px' }}
-              >
-                <ArrowRight size={18} />
-              </button>
-            </div>
+            {/* Partidas en curso que se pueden ver.
+                Se monta SIEMPRE: con `liveGames.length > 0 &&` delante, el estado
+                vacío que LiveGames se molesta en pintar era inalcanzable por
+                construcción, y la sección desaparecía entera sin explicar por qué. */}
+            {onSpectate && (
+              <div className="lobby-form-field lobby-community-section">
+                <div className="lobby-community-header">
+                  <label className="lobby-form-label">
+                    <Eye size={14} />
+                    {t('live.title')}
+                  </label>
+                  {liveGames && liveGames.length > 0 && (
+                    <span className="lobby-count-pill">{liveGames.length}</span>
+                  )}
+                </div>
+                <div className="lobby-livegames-scroll">
+                  <LiveGames games={liveGames} sinConexion={!isConnected} onWatch={onSpectate} onJugar={handleQuick} />
+                </div>
+              </div>
+            )}
           </div>
         </form>
       </div>
 
       {/* Footer minimalista */}
-      <div className="waiting-footer-desc" style={{ position: 'absolute', bottom: '16px' }}>
+      <div className="waiting-footer-desc lobby-footer-note">
         {t('lobby.footer', {
           variant: VARIANT_INFO[maxPip].label,
           mode: `${teamsEnabled ? t('mode.teams') : t('mode.individual')} · ${powersEnabled ? t('mode.withPowers') : t('mode.classic')}${!drawEnabled ? ' · ' + t('rooms.noDraw') : ''}`

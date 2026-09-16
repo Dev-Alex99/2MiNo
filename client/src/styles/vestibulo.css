@@ -117,11 +117,15 @@
   white-space: nowrap;
 }
 
-/* Aquí falta `.vest-yo-cifras` (ELO · monedas bajo el nombre). No se declara
-   una regla sin consumidor: el dato viaja en `profile_data` y hoy el hub no
-   puede escucharlo sin registrar un segundo listener de ese evento, que es lo
-   que `useGameSocket.test.jsx` prohíbe. Cuando el perfil viva en un store,
-   vuelven la línea y su regla. */
+.vest-yo-cifras {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--tx-2);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  line-height: 1.2;
+}
 
 /* No se encoge: el que cede ancho es el control de perfil, que lleva el nombre
    y sabe recortarlo con puntos suspensivos. Si el raíl se encogiera, los tres

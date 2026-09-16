@@ -16,6 +16,7 @@ const idDeCuenta = getOrCreatePersistentPlayerId();
 export const useGameStore = create((set) => ({
   // Usuario y Conexión
   name: localStorage.getItem('domino_username') || '',
+  avatar: localStorage.getItem('domino_avatar') || '🎲',
 
   // ─── LAS DOS IDENTIDADES ───
   // Son dos cosas distintas y por eso son dos campos distintos. Guardarlas en
@@ -68,6 +69,7 @@ export const useGameStore = create((set) => ({
   error: '',
   selectedTileIndex: null,
   quickNotifications: [],
+  roomMessages: [],
   publicRooms: [],
   roomsLoading: true,
   lobbyStats: null,
@@ -80,6 +82,7 @@ export const useGameStore = create((set) => ({
 
   // Modales y Vistas
   showProfile: false,
+  showProfileSetup: false,
 
   spectating: null,
   liveGames: [],
@@ -87,7 +90,18 @@ export const useGameStore = create((set) => ({
   invitedCode: '',
 
   // Acciones / Modificadores
-  setName: (name) => set({ name }),
+  setName: (name) => {
+    try {
+      if (name) localStorage.setItem('domino_username', name);
+    } catch (e) {}
+    set({ name });
+  },
+  setAvatar: (avatar) => {
+    try {
+      if (avatar) localStorage.setItem('domino_avatar', avatar);
+    } catch (e) {}
+    set({ avatar });
+  },
   setCuentaId: (cuentaId) => set({ cuentaId }),
   setPlayerId: (playerId) => set({ playerId }),
   setCapacidades: (capacidades) => set({ capacidades }),
@@ -109,15 +123,89 @@ export const useGameStore = create((set) => ({
   setPendingTargetType: (pendingTargetType) => set({ pendingTargetType }),
   setSmuggleTileIdx: (smuggleTileIdx) => set({ smuggleTileIdx }),
   setShowProfile: (showProfile) => set({ showProfile }),
+  setShowProfileSetup: (showProfileSetup) => set({ showProfileSetup }),
 
   setSpectating: (spectating) => set({ spectating }),
   setLiveGames: (liveGames) => set({ liveGames }),
   setEpicMoment: (epicMoment) => set({ epicMoment }),
   setInvitedCode: (invitedCode) => set({ invitedCode }),
 
+  addRoomMessage: (msg) => set((s) => ({ roomMessages: [...s.roomMessages.slice(-49), msg] })),
+  clearRoomMessages: () => set({ roomMessages: [] }),
   resetPowerState: () => set({
     selectedPower: null,
     pendingTargetType: null,
     smuggleTileIdx: null
   })
 }));
+
+function utf8ToBase64(str) {
+  try {
+    return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (_, p1) => {
+      return String.fromCharCode(parseInt(p1, 16));
+    }));
+  } catch {
+    return btoa(str);
+  }
+}
+
+function base64ToUtf8(b64) {
+  try {
+    const bin = atob(b64);
+    const esc = Array.prototype.map.call(bin, (c) => {
+      return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+    }).join('');
+    return decodeURIComponent(esc);
+  } catch {
+    return atob(b64);
+  }
+}
+
+// Exporta la clave de cuenta como string seguro para transferir o guardar
+export function exportAccountKey() {
+  const pid = localStorage.getItem('domino_persistent_player_id') || useGameStore.getState().cuentaId;
+  const token = localStorage.getItem('domino_session_token') || '';
+  const name = localStorage.getItem('domino_username') || useGameStore.getState().name || '';
+  const avatar = localStorage.getItem('domino_avatar') || useGameStore.getState().avatar || '🎲';
+
+  if (!pid) return '';
+  const payload = JSON.stringify({ pid, token, name, avatar, t: Date.now() });
+  try {
+    return '2MINO-' + utf8ToBase64(payload).replace(/=/g, '');
+  } catch (e) {
+    return '';
+  }
+}
+
+// Importa una clave de cuenta y restaura las credenciales locales
+export function importAccountKey(key) {
+  if (!key || typeof key !== 'string') return { success: false, error: 'invalid_key' };
+  const clean = key.trim();
+  const raw = clean.startsWith('2MINO-') ? clean.slice(6) : clean;
+  try {
+    const pad = raw.length % 4;
+    const padded = pad ? raw + '='.repeat(4 - pad) : raw;
+    const jsonStr = base64ToUtf8(padded);
+    const data = JSON.parse(jsonStr);
+    if (!data.pid || !data.pid.startsWith('p_')) {
+      return { success: false, error: 'invalid_format' };
+    }
+    // Guardar en localStorage
+    localStorage.setItem('domino_persistent_player_id', data.pid);
+    if (data.token) localStorage.setItem('domino_session_token', data.token);
+    if (data.name) localStorage.setItem('domino_username', data.name);
+    if (data.avatar) localStorage.setItem('domino_avatar', data.avatar);
+
+    // Actualizar useGameStore
+    useGameStore.setState({
+      cuentaId: data.pid,
+      playerId: data.pid,
+      name: data.name || useGameStore.getState().name,
+      avatar: data.avatar || useGameStore.getState().avatar
+    });
+
+    return { success: true, data };
+  } catch (e) {
+    return { success: false, error: 'corrupt_key' };
+  }
+}

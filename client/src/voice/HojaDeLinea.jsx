@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ChevronDown, Headphones, Mic, MicOff, PhoneOff, Users, Video, VideoOff, Volume2, X
+  Check, ChevronDown, Copy, Headphones, Mic, MicOff, PhoneCall, PhoneOff, Users, Video, VideoOff, Volume2, X
 } from 'lucide-react';
 import useModalA11y from '../hooks/useModalA11y';
 import { useT } from '../i18n/LanguageContext';
@@ -58,25 +58,25 @@ function FilaDeAparato({ icono, titulo, aparatos, valor, alCambiar, cambiando, p
   return (
     <label className="linea-aparato">
       <span className="linea-aparato-etiqueta">
-        {icono}
-        {titulo}
+        <span className="linea-aparato-icono-caja">{icono}</span>
+        <span className="linea-aparato-titulo">{titulo}</span>
       </span>
-      <select
-        className="linea-aparato-select"
-        value={valor || ''}
-        // PROHIBIDO el atributo `disabled` (CONTRATO §10): saca al control del
-        // orden de tabulación justo cuando hay algo que explicar. Se anuncia y
-        // se rechaza en el manejador.
-        aria-disabled={cambiando}
-        onChange={(e) => { if (!cambiando) alCambiar(e.target.value); }}
-      >
-        {!valor && <option value="">{porDefecto}</option>}
-        {aparatos.map((d, i) => (
-          <option key={d.deviceId || i} value={d.deviceId}>
-            {d.label || `${titulo} ${i + 1}`}
-          </option>
-        ))}
-      </select>
+      <div className="linea-aparato-select-wrapper">
+        <select
+          className="linea-aparato-select"
+          value={valor || ''}
+          aria-disabled={cambiando}
+          onChange={(e) => { if (!cambiando) alCambiar(e.target.value); }}
+        >
+          {!valor && <option value="">{porDefecto}</option>}
+          {aparatos.map((d, i) => (
+            <option key={d.deviceId || i} value={d.deviceId}>
+              {d.label || `${titulo} ${i + 1}`}
+            </option>
+          ))}
+        </select>
+        <ChevronDown size={14} className="linea-aparato-flecha" aria-hidden="true" />
+      </div>
     </label>
   );
 }
@@ -122,6 +122,20 @@ export default function HojaDeLinea() {
 
   const [fxVisto, setFxVisto] = useState(leerFxVisto);
   const [verDesconectados, setVerDesconectados] = useState(false);
+  const [copiadoCodigo, setCopiadoCodigo] = useState(false);
+
+  const copiarMiCodigo = () => {
+    if (!miCodigo) return;
+    try {
+      if (navigator?.clipboard?.writeText) {
+        navigator.clipboard.writeText(miCodigo);
+      }
+      setCopiadoCodigo(true);
+      setTimeout(() => setCopiadoCodigo(false), 2000);
+    } catch {
+      // fallback
+    }
+  };
 
   const { propsPanel, propsTitulo } = useModalA11y(cerrarHoja);
 
@@ -207,12 +221,15 @@ export default function HojaDeLinea() {
         <span className="linea-hoja-asa" aria-hidden="true" />
 
         <div className="linea-hoja-cabecera">
-          <h2 className="linea-hoja-titulo" {...propsTitulo}>
-            {resumen.texto || t('linea.entrarVoz')}
-          </h2>
+          <div className="linea-hoja-cabecera-info">
+            <span className={`linea-hoja-dot ${hayLinea ? 'en-linea' : ''}`} aria-hidden="true" />
+            <h2 className="linea-hoja-titulo" {...propsTitulo}>
+              {resumen.texto || t('linea.entrarVoz')}
+            </h2>
+          </div>
           <button
             type="button"
-            className="linea-btn-icono"
+            className="linea-btn-icono linea-btn-cerrar"
             onClick={cerrarHoja}
             aria-label={t('common.close')}
           >
@@ -231,7 +248,7 @@ export default function HojaDeLinea() {
           <div className="linea-tu-fila">
             <button
               type="button"
-              className={`linea-btn-icono linea-btn-micro ${muted ? 'activo' : ''}`}
+              className={`linea-btn-icono linea-btn-micro linea-tu-btn ${muted ? 'activo linea-btn-silenciado' : 'linea-btn-vivo'}`}
               onClick={acciones.alternarSilencio}
               aria-pressed={muted}
               aria-label={muted ? t('voice.unmute') : t('voice.mute')}
@@ -242,39 +259,63 @@ export default function HojaDeLinea() {
               aria-description={t(nivelPalabra)}
               title={t('linea.atajoSilenciar')}
             >
-              {muted ? <MicOff size={20} aria-hidden="true" /> : <Mic size={20} aria-hidden="true" />}
+              <span className="linea-tu-btn-icon">
+                {muted ? <MicOff size={18} aria-hidden="true" /> : <Mic size={18} aria-hidden="true" />}
+              </span>
+              <span className="linea-tu-btn-texto">
+                <span className="linea-tu-btn-label">{t('linea.microfono')}</span>
+                <span className="linea-tu-btn-sub">{muted ? t('linea.silenciado') : t('linea.activo')}</span>
+              </span>
             </button>
-
-            <span className="linea-nivel" aria-hidden="true">
-              {SEGMENTOS.map((i) => (
-                <i key={i} className={i < nivel ? 'viva' : ''} />
-              ))}
-            </span>
 
             <button
               type="button"
-              className={`linea-btn-icono ${isDeafened ? 'activo' : ''}`}
+              className={`linea-btn-icono linea-tu-btn ${isDeafened ? 'activo linea-btn-ensordecido' : 'linea-btn-vivo'}`}
               onClick={acciones.alternarEnsordecido}
               aria-pressed={isDeafened}
               aria-label={isDeafened ? t('voice.undeafen') : t('voice.deafen')}
             >
-              <Headphones size={20} aria-hidden="true" />
+              <span className="linea-tu-btn-icon">
+                <Headphones size={18} aria-hidden="true" />
+              </span>
+              <span className="linea-tu-btn-texto">
+                <span className="linea-tu-btn-label">{t('linea.auriculares')}</span>
+                <span className="linea-tu-btn-sub">{isDeafened ? t('linea.ensordecido') : t('linea.activo')}</span>
+              </span>
             </button>
 
             <button
               type="button"
-              className={`linea-btn-icono ${camOn ? 'activo' : ''}`}
+              className={`linea-btn-icono linea-tu-btn ${camOn ? 'activo linea-btn-cam-on' : 'linea-btn-cam-off'}`}
               onClick={() => { if (!camBusy) acciones.alternarCamara(); }}
               aria-disabled={camBusy}
               aria-pressed={camOn}
               aria-label={camOn ? t('voice.camOff') : t('voice.camOn')}
             >
-              {camOn ? <Video size={20} aria-hidden="true" /> : <VideoOff size={20} aria-hidden="true" />}
+              <span className="linea-tu-btn-icon">
+                {camOn ? <Video size={18} aria-hidden="true" /> : <VideoOff size={18} aria-hidden="true" />}
+              </span>
+              <span className="linea-tu-btn-texto">
+                <span className="linea-tu-btn-label">{t('linea.camara')}</span>
+                <span className="linea-tu-btn-sub">{camOn ? t('linea.activo') : t('linea.apagada')}</span>
+              </span>
             </button>
           </div>
 
+          <div className="linea-vu-barra">
+            <div className="linea-vu-meta">
+              <span className="linea-vu-titulo">{t('linea.pruebaMicro')}</span>
+              <span className="linea-vu-palabra">{t(nivelPalabra)}</span>
+            </div>
+            <span className="linea-nivel" aria-hidden="true">
+              {SEGMENTOS.map((i) => (
+                <i key={i} className={i < nivel ? 'viva' : ''} />
+              ))}
+            </span>
+          </div>
+
           <FilaDeAparato
-            icono={<Mic size={12} aria-hidden="true" />}
+            icono={<Mic size={14} aria-hidden="true" />}
             titulo={t('dev.mic')}
             aparatos={dispositivos.mics}
             valor={seleccionados.mic}
@@ -283,7 +324,7 @@ export default function HojaDeLinea() {
             porDefecto={t('dev.default')}
           />
           <FilaDeAparato
-            icono={<Video size={12} aria-hidden="true" />}
+            icono={<Video size={14} aria-hidden="true" />}
             titulo={t('dev.cam')}
             aparatos={dispositivos.cams}
             valor={seleccionados.cam}
@@ -293,7 +334,7 @@ export default function HojaDeLinea() {
           />
           {acciones.canPickSpeaker && (
             <FilaDeAparato
-              icono={<Volume2 size={12} aria-hidden="true" />}
+              icono={<Volume2 size={14} aria-hidden="true" />}
               titulo={t('dev.speaker')}
               aparatos={dispositivos.speakers}
               valor={seleccionados.speaker}
@@ -303,10 +344,6 @@ export default function HojaDeLinea() {
             />
           )}
 
-          {/* Las dos notas del selector viejo, que seguían traducidas en los
-              tres idiomas y se quedaban huérfanas al absorber `DeviceSelector`.
-              La de la cámara importa más de lo que parece: sin ella, un aparato
-              listado y apagado se lee como un aparato roto. */}
           {dispositivos.cams.length > 0 && !camOn && (
             <span className="linea-pista">{t('dev.camHint')}</span>
           )}
@@ -315,11 +352,6 @@ export default function HojaDeLinea() {
             <span className="linea-pista">{t('dev.onlyOne')}</span>
           )}
 
-          {/* El fallo de micrófono ABORTA la llamada y aquí trae su salida. El
-              modo «solo escucha» existe ÚNICAMENTE detrás de este botón: como
-              consecuencia silenciosa de un fallo sería la versión educada del
-              bug de siempre —el teléfono del otro suena, contesta, y descubre
-              que no puedes hablarle—. */}
           {micError && (
             <div className="linea-error" role="group" aria-label={t(micError.clave)}>
               <span className="linea-error-texto">{t(micError.clave)}</span>
@@ -347,11 +379,29 @@ export default function HojaDeLinea() {
         <section className="linea-bloque linea-bloque-llamada" aria-label={t('voice.callTitle')}>
           <h3 className="linea-bloque-titulo">{t('voice.callTitle')}</h3>
 
-          {otros.length === 0 && (
-            <p className="linea-vacio">
-              {hayLinea ? t('voice.nobody') : t('linea.colgada')}
-            </p>
-          )}
+          {!hayLinea ? (
+            <div className="linea-estado-vacio-card">
+              <div className="linea-estado-vacio-top">
+                <span className="linea-estado-vacio-dot" aria-hidden="true" />
+                <strong className="linea-estado-vacio-titulo">{t('linea.sinLlamadaActiva')}</strong>
+              </div>
+              <p className="linea-vacio">
+                {enUnaSala ? t('linea.mesaDisponibleDesc') : t('linea.sinLlamadaDesc')}
+              </p>
+              {enUnaSala && (
+                <button
+                  type="button"
+                  className="linea-btn linea-btn-primario linea-btn-full"
+                  onClick={acciones.entrarAMesa}
+                >
+                  <Mic size={16} aria-hidden="true" />
+                  {vozDeMesa.n > 0 ? t('linea.entrarVozN', { n: vozDeMesa.n }) : t('linea.entrarVoz')}
+                </button>
+              )}
+            </div>
+          ) : otros.length === 0 ? (
+            <p className="linea-vacio">{t('voice.nobody')}</p>
+          ) : null}
 
           {otros.map((m) => (
             <div
@@ -377,9 +427,6 @@ export default function HojaDeLinea() {
             </div>
           ))}
 
-          {/* Sin ruta: el fallo ESPERADO cuando no hay retransmisión, con sus
-              tres salidas. El `pc` no se ha cerrado y sigue intentándolo por
-              detrás: si conecta tarde, esta tarjeta se va sola. */}
           {estado === 'sinRuta' && (
             <div className="linea-sinruta">
               <strong>{t('linea.sinRutaTitulo')}</strong>
@@ -399,10 +446,6 @@ export default function HojaDeLinea() {
             </div>
           )}
 
-          {/* PERSISTENTE Y SIN TEMPORIZADOR. Una decisión con caducidad de ocho
-              segundos sobre a quién dejas de oír no es una elección, es una
-              trampa. No hay tercera opción porque no hacer nada ES el
-              comportamiento por defecto. */}
           {hayLinea && !esMesa && enUnaSala && (
             <div className="linea-mesa-fila">
               <span className="linea-mesa-texto">
@@ -421,23 +464,15 @@ export default function HojaDeLinea() {
             </div>
           )}
 
-          <div className="linea-llamada-acciones">
-            {!hayLinea && enUnaSala && (
-              <button type="button" className="linea-btn linea-btn-primario" onClick={acciones.entrarAMesa}>
-                {vozDeMesa.n > 0 ? t('linea.entrarVozN', { n: vozDeMesa.n }) : t('linea.entrarVoz')}
-              </button>
-            )}
-            {conMicro && (
-              <button type="button" className="linea-btn linea-btn-colgar" onClick={acciones.colgar}>
+          {conMicro && (
+            <div className="linea-llamada-acciones">
+              <button type="button" className="linea-btn linea-btn-colgar linea-btn-full" onClick={acciones.colgar}>
                 <PhoneOff size={16} aria-hidden="true" />
                 {t('linea.colgar')}
               </button>
-            )}
-          </div>
+            </div>
+          )}
 
-          {/* La crónica de la línea. Dentro de la partida la drena GameView en
-              su `role="log"` (CONTRATO §7: cero regiones vivas nuevas); aquí se
-              puede releer y descartar una a una. */}
           {avisos.length > 0 && (
             <ul className="linea-cronica">
               {avisos.map((a) => (
@@ -479,20 +514,17 @@ export default function HojaDeLinea() {
                     </span>
                     <span className="linea-fila-nombre">{p.name}</span>
                     {(vozDeMesa.alias || []).includes(p.id) && (
-                      <Mic size={14} className="linea-fila-micro" aria-label={t('linea.entrarVoz')} />
+                      <span className="linea-tag-en-voz">
+                        <Mic size={13} aria-hidden="true" />
+                        <span>{t('linea.activo')}</span>
+                      </span>
                     )}
                   </li>
                 ))}
               </ul>
-              {/* NO HAY BOTÓN DE «LLAMAR A ESTA PERSONA» AQUÍ, y no es un olvido:
-                  dentro de una sala `player.id` es el ALIAS de asiento (`s_xxxx`),
-                  no el id de cuenta que necesita `call_friend`. El puente
-                  alias→cuenta vive sólo en el servidor y a propósito (hubo
-                  cosecha real de identidades espectando partidas públicas). A la
-                  mesa se la llama entera, que además es lo que no timbra a
-                  nadie. */}
               {!hayLinea && (
-                <button type="button" className="linea-btn" onClick={acciones.entrarAMesa}>
+                <button type="button" className="linea-btn linea-btn-full" onClick={acciones.entrarAMesa}>
+                  <Mic size={16} aria-hidden="true" />
                   {t('linea.llamarMesa')}
                 </button>
               )}
@@ -517,10 +549,11 @@ export default function HojaDeLinea() {
                 <span className="linea-fila-nombre">{persona.username}</span>
                 <button
                   type="button"
-                  className="linea-btn linea-btn-mini"
+                  className="linea-btn linea-btn-mini linea-btn-amigo"
                   aria-disabled={persona.estado === 'no_molestar'}
                   onClick={() => { if (persona.estado !== 'no_molestar') llamarA(persona); }}
                 >
+                  <PhoneCall size={13} aria-hidden="true" />
                   {persona.estado === 'no_molestar'
                     ? t('hub.noMolestaA', { name: persona.username })
                     : (hayLinea
@@ -555,26 +588,30 @@ export default function HojaDeLinea() {
             </>
           )}
 
-          {/* El código sólo se enseña si de verdad lo tenemos. La versión
-              anterior pintaba «·····» eterno y su botón de copiar anunciaba
-              «¡Copiado!» habiendo copiado la cadena vacía. */}
           {miCodigo && (
-            <p className="linea-codigo">
-              {t('hub.compartirCodigo')}: <b>{miCodigo}</b>
-            </p>
+            <div className="linea-codigo-card">
+              <div className="linea-codigo-info">
+                <span className="linea-codigo-etiqueta">{t('linea.tuCodigoAmigo')}</span>
+                <span className="linea-codigo-valor">{miCodigo}</span>
+              </div>
+              <button
+                type="button"
+                className={`linea-btn linea-btn-mini linea-btn-copiar ${copiadoCodigo ? 'copiado' : ''}`}
+                onClick={copiarMiCodigo}
+                aria-label={`${t('friend.copyCode')}: ${miCodigo}`}
+              >
+                {copiadoCodigo ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
+                <span>{copiadoCodigo ? t('tourney.copied') : t('friend.copyCode')}</span>
+              </button>
+            </div>
           )}
         </section>
 
         {/* ──────────────────────────────── PIE ───────────────────────────── */}
         <footer className="linea-pie">
-          {/* LA LÍNEA DE LA VERDAD, PERMANENTE Y NO SÓLO EN EL FALLO. Quien lee
-              esto ANTES de llamar interpreta un fallo de NAT como una limitación
-              conocida; quien no lo lee interpreta el mismo fallo como un
-              producto roto. Mismo hecho, dos productos. Ramifica por `turnMode`
-              (cadena) y NUNCA por `turnConfigured`: el servidor pone
-              turnMode='free-fallback' con tres URLs de openrelay reales
-              mientras el booleano sigue en false. */}
-          <span className="linea-verdad">{t(CLAVE_DE_RELEVO[relevo] || 'linea.relevoNinguno')}</span>
+          <div className="linea-verdad-fila">
+            <span className="linea-verdad">{t(CLAVE_DE_RELEVO[relevo] || 'linea.relevoNinguno')}</span>
+          </div>
 
           {!fxVisto && (
             <span className="linea-fx">

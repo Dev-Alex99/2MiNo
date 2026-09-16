@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { socket } from '../../socket';
-import { LogOut, Timer, RotateCcw, Bot as BotIcon, Layers, RefreshCw } from 'lucide-react';
+import { LogOut, Timer, RotateCcw, Bot as BotIcon, Layers, RefreshCw, Sparkles, AlertCircle } from 'lucide-react';
 import { playGameSound } from '../../audio';
 import { useT } from '../../i18n/LanguageContext';
 
@@ -42,8 +42,10 @@ function Carta({ carta, color, jugable, seleccionable, onClick, etiquetaAria }) 
  */
 export default function UnoBoard({ gameState, playerId, onLeave }) {
   const { t } = useT();
-  const [eligiendoColor, setEligiendoColor] = useState(null); // índice de la carta pendiente de color
+  const [eligiendoColor, setEligiendoColor] = useState(null); // { index, uno } o null
   const [cantarUno, setCantarUno] = useState(false);
+  const [confirmandoUno, setConfirmandoUno] = useState(null); // { index, carta }
+  const [notificacionAccion, setNotificacionAccion] = useState(null); // { tipo, mensaje }
   const restante = useSegundosRestantes(gameState);
 
   const estadoPrevio = useRef(null);
@@ -57,6 +59,36 @@ export default function UnoBoard({ gameState, playerId, onLeave }) {
     }
     estadoPrevio.current = status;
   }, [status, ganadorRonda, playerId]);
+
+  // Escuchar lastAction para avisos de cantos y penalizaciones
+  const accionPreviaRef = useRef(null);
+  useEffect(() => {
+    if (!gameState || !gameState.lastAction) return;
+    const act = gameState.lastAction;
+    if (act !== accionPreviaRef.current) {
+      accionPreviaRef.current = act;
+      const jugador = (gameState.players || []).find(p => p.id === act.playerId);
+      const nombre = jugador ? (jugador.id === playerId ? t('uno.you') : jugador.name) : '';
+
+      if (act.penalizadoPorNoCantar) {
+        playGameSound('uno_penalty');
+        setNotificacionAccion({
+          tipo: 'penalizacion',
+          mensaje: t('uno.penalizedToast', { name: nombre })
+        });
+        const timer = setTimeout(() => setNotificacionAccion(null), 3500);
+        return () => clearTimeout(timer);
+      } else if (act.cantoUno) {
+        playGameSound('uno_call');
+        setNotificacionAccion({
+          tipo: 'canto',
+          mensaje: t('uno.shoutedToast', { name: nombre })
+        });
+        const timer = setTimeout(() => setNotificacionAccion(null), 3000);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [gameState?.lastAction, gameState?.players, playerId, t]);
 
   if (!gameState) return null;
 
@@ -85,21 +117,39 @@ export default function UnoBoard({ gameState, playerId, onLeave }) {
     socket.emit('game_action', { actionType, payload });
   };
 
-  const jugar = (index) => {
-    if (!esMiTurno || !playableIndices.includes(index)) return;
+  const ejecutarJugada = (index, cantar) => {
     const carta = mano[index];
     if (carta && !carta.color) {
-      setEligiendoColor(index); // comodín: primero hay que elegir color
+      setEligiendoColor({ index, uno: cantar });
+      setConfirmandoUno(null);
       return;
     }
     playGameSound('place');
-    enviar('play', { index, uno: cantarUno });
+    if (cantar) playGameSound('uno_call');
+    enviar('play', { index, uno: cantar });
     setCantarUno(false);
+    setConfirmandoUno(null);
+  };
+
+  const jugar = (index) => {
+    if (!esMiTurno || !playableIndices.includes(index)) return;
+    const carta = mano[index];
+
+    // Si le quedan 2 cartas y no tiene armado cantarUno, preguntamos para protegerlo de la penalización
+    if (mano.length === 2 && !cantarUno) {
+      setConfirmandoUno({ index, carta });
+      return;
+    }
+
+    ejecutarJugada(index, cantarUno);
   };
 
   const confirmarColor = (color) => {
     playGameSound('place');
-    enviar('play', { index: eligiendoColor, color, uno: cantarUno });
+    const index = typeof eligiendoColor === 'object' && eligiendoColor !== null ? eligiendoColor.index : eligiendoColor;
+    const uno = typeof eligiendoColor === 'object' && eligiendoColor !== null ? eligiendoColor.uno : cantarUno;
+    if (uno) playGameSound('uno_call');
+    enviar('play', { index, color, uno });
     setEligiendoColor(null);
     setCantarUno(false);
   };
@@ -241,7 +291,14 @@ export default function UnoBoard({ gameState, playerId, onLeave }) {
             )}
             {puedeCantar && (
               <button
-                onClick={() => setCantarUno(v => !v)}
+                type="button"
+                onClick={() => {
+                  setCantarUno(v => {
+                    const next = !v;
+                    if (next) playGameSound('uno_call');
+                    return next;
+                  });
+                }}
                 aria-pressed={cantarUno}
                 className={`btn-premium uno-btn-cantar ${cantarUno ? 'armado' : ''}`}
                 title={t('uno.declareHint')}
@@ -259,6 +316,49 @@ export default function UnoBoard({ gameState, playerId, onLeave }) {
           </button>
         )}
       </div>
+
+      {/* Diálogo preventivo: cantar UNO al jugar la penúltima */}
+      {confirmandoUno !== null && (
+        <div className="uno-prompt-overlay glass-panel animate-scale-up" role="dialog" aria-label={t('uno.promptTitle')}>
+          <span className="uno-prompt-title">{t('uno.promptTitle')}</span>
+          <div className="uno-prompt-buttons">
+            <button
+              type="button"
+              onClick={() => ejecutarJugada(confirmandoUno.index, true)}
+              className="btn-premium btn-primary uno-prompt-btn-cantar"
+            >
+              <Sparkles size={16} aria-hidden="true" />
+              <span>{t('uno.promptCall')}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => ejecutarJugada(confirmandoUno.index, false)}
+              className="btn-premium btn-secondary uno-prompt-btn-nocantar"
+            >
+              {t('uno.promptPlayOnly')}
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmandoUno(null)}
+              className="uno-color-cancelar"
+            >
+              {t('common.cancel')}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Notificación flotante de cantos y penalizaciones de UNO */}
+      {notificacionAccion && (
+        <div className={`uno-action-toast animate-fade-in ${notificacionAccion.tipo}`} role="status" aria-live="polite">
+          {notificacionAccion.tipo === 'canto' ? (
+            <Sparkles size={16} aria-hidden="true" />
+          ) : (
+            <AlertCircle size={16} aria-hidden="true" />
+          )}
+          <span>{notificacionAccion.mensaje}</span>
+        </div>
+      )}
 
       {/* Elegir color tras poner un comodín */}
       {eligiendoColor !== null && (

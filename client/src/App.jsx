@@ -11,6 +11,7 @@ import TournamentEntry from './components/TournamentEntry';
 import RankedSearch from './components/RankedSearch';
 import FriendsModal from './components/FriendsModal';
 import ProfileModal from './components/ProfileModal';
+import ProfileSetupModal from './components/ProfileSetupModal';
 import LeaderboardModal from './components/LeaderboardModal';
 import SkinStoreModal from './components/SkinStoreModal';
 import GameView from './views/GameView';
@@ -63,6 +64,7 @@ export default function App() {
     publicRooms, roomsLoading, lobbyStats,
     setShowTurnBanner, setRoomsLoading,
     showProfile, setShowProfile,
+    showProfileSetup, setShowProfileSetup,
     spectating, liveGames, epicMoment, setEpicMoment, invitedCode, setInvitedCode,
     salaFantasma, setSalaFantasma, sesionNoVerificada
   } = useGameStore();
@@ -205,6 +207,7 @@ export default function App() {
     <>
       {showFriends && <FriendsModal name={name} onClose={() => setShowFriends(false)} />}
       {showProfile && <ProfileModal name={name} onClose={() => setShowProfile(false)} />}
+      {showProfileSetup && <ProfileSetupModal onClose={() => setShowProfileSetup(false)} />}
     </>
   );
 

@@ -103,7 +103,7 @@ class TokenBucket {
 const HEAVY_EVENTS = new Set([
   'create_room', 'quick_play', 'join_room', 'friend_add', 'friend_respond',
   'friend_remove', 'friend_challenge', 'equip_skin', 'claim_mission',
-  'get_profile', 'get_leaderboard', 'get_match_history', 'get_match_replay',
+  'get_profile', 'update_profile', 'get_leaderboard', 'get_match_history', 'get_match_replay',
   'get_friends', 'join_queue', 'create_tournament', 'join_tournament',
   'call_friend', 'invite_to_pool', 'accept_call', 'decline_call', 'call_cancel',
   'join_table_voice', 'voice_hello', 'set_availability'

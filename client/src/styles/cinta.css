@@ -153,7 +153,7 @@
   overflow: hidden;
   border-radius: 7px 0 0 7px;
   background: transparent;
-  transition: width .2s ease;
+  transition: opacity .2s ease;
 }
 /* En chips inactivos el canto es el color de equipo; en individual, nada. */
 .cinta-chip-equipo-0 .cinta-reloj { background: var(--equipo-0); }

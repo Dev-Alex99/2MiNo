@@ -14,7 +14,7 @@
      arriba (ahora está en flujo) y, cuando el contenido no cabe, no se pierde
      el borde superior dentro del scroll, que es lo que hace `center`. */
   justify-content: flex-start;
-  padding: 16px;
+  padding: 0 0 28px 0;
   position: relative;
   overflow-y: auto;
   overflow-x: hidden;
@@ -55,11 +55,8 @@
 .lobby-title {
   font-size: 3.5rem;
   font-weight: 900;
-  letter-spacing: 0.05em;
-  background: linear-gradient(90deg, #34d399 0%, #2dd4bf 50%, #6366f1 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  filter: drop-shadow(0 4px 6px rgba(0,0,0,0.3));
+  letter-spacing: -0.02em;
+  color: var(--text-main, #f8fafc);
 }
 
 .lobby-subtitle {
@@ -70,9 +67,9 @@
 }
 
 .lobby-card {
-  width: 100%;
-  max-width: 400px;
-  padding: 32px;
+  width: calc(100% - 32px);
+  max-width: 440px;
+  padding: 28px;
   margin-bottom: auto;
   z-index: 10;
 }
@@ -81,6 +78,116 @@
   display: flex;
   flex-direction: column;
   gap: 20px;
+}
+
+.lobby-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.lobby-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.lobby-action-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lobby-join-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lobby-join-group {
+  display: flex;
+  gap: 8px;
+}
+
+.lobby-code-input {
+  text-align: center;
+  letter-spacing: 0.15em;
+  font-family: monospace;
+  font-size: 1.1rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.lobby-join-submit {
+  padding: 0 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+}
+
+.lobby-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 4px 0;
+}
+
+.lobby-divider .separator {
+  flex-grow: 1;
+  height: 1px;
+  background: var(--linea);
+}
+
+.lobby-divider-text {
+  font-size: 0.72rem;
+  color: var(--tx-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.lobby-create-btn {
+  width: 100%;
+}
+
+.lobby-community-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lobby-community-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.lobby-count-pill {
+  font-size: 0.68rem;
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--tx-muted);
+  padding: 2px 8px;
+  border-radius: 9999px;
+}
+
+.lobby-roomlist-scroll,
+.lobby-livegames-scroll {
+  display: flex;
+  flex-direction: column;
+}
+
+.lobby-footer-note {
+  font-size: 0.75rem;
+  color: var(--tx-muted);
+  text-align: center;
+  margin-top: 24px;
+  opacity: 0.8;
+  padding: 0 16px;
 }
 
 .lobby-form-field {
@@ -306,7 +413,7 @@
   border-radius: 50%;
   background: #fff;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
-  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .option-toggle.on .switch-knob {
   transform: translateX(18px);
@@ -332,34 +439,81 @@
   top: 0;
   z-index: var(--z-sobrecapa);
   width: 100%;
-  max-width: 1120px;
-  min-height: 56px;
+  min-height: 58px;
   display: flex;
   align-items: center;
-  /* `flex-start` + un `margin-left: auto` en el primer control, NO
-     `justify-content: flex-end`. Cuando un contenedor con scroll alinea al
-     final, el desbordamiento se va por el borde de INICIO y ahí no hay scroll
-     que lo alcance: es el mismo defecto que este arreglo viene a matar, sólo
-     que causado por otra propiedad. El margen automático se resuelve a 0 en
-     cuanto no sobra espacio, así que con siete controles apretados la banda
-     vuelve a empezar en x = 0 y se desplaza entera. */
-  justify-content: flex-start;
-  gap: 8px;
-  padding: 6px 8px;
+  justify-content: center;
+  padding: 8px 24px;
   margin-bottom: 8px;
-  /* Opaca a propósito: poderes.css desactiva backdrop-filter en (pointer:
-     coarse), así que una barra translúcida deja asomar el texto de detrás. */
-  background: var(--sup-1);
+  background: rgba(8, 12, 22, 0.88);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--linea);
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scroll-snap-type: x proximity;
-  scrollbar-width: none;
 }
-.lobby-topbar::-webkit-scrollbar { display: none; }
-.lobby-topbar > * { flex: 0 0 auto; scroll-snap-align: end; }
-.lobby-topbar > :first-child { margin-left: auto; }
+
+.lobby-topbar-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 1180px;
+  gap: 12px;
+}
+
+.lobby-topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+}
+
+.lobby-brand-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 9999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--tx-1);
+  user-select: none;
+}
+
+.lobby-brand-logo {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+}
+
+.lobby-brand-sep {
+  color: var(--tx-muted);
+  opacity: 0.5;
+}
+
+.lobby-brand-game {
+  color: var(--tx-1);
+  font-weight: 600;
+}
+
+.lobby-topbar-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex: 1 1 auto;
+}
+
+.lobby-topbar-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex: 0 0 auto;
+}
 
 .lobby-profile-btn {
   display: inline-flex;
@@ -914,7 +1068,7 @@
   border-radius: 20px;
   white-space: nowrap;
   pointer-events: none;
-  animation: taunt-bounce-float 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+  animation: taunt-smooth-float 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .seat-taunt-bubble .taunt-text {
@@ -923,9 +1077,8 @@
   color: #ffffff;
 }
 
-@keyframes taunt-bounce-float {
-  0% { opacity: 0; transform: translateX(-50%) translateY(12px) scale(0.6); }
-  70% { transform: translateX(-50%) translateY(-4px) scale(1.08); }
+@keyframes taunt-smooth-float {
+  0% { opacity: 0; transform: translateX(-50%) translateY(8px) scale(0.95); }
   100% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
 }
 
@@ -1200,8 +1353,8 @@
   background: rgba(16, 185, 129, 0.1);
   box-shadow: 0 0 14px rgba(16, 185, 129, 0.18);
 }
-.spec-player.team-0 { border-left: 3px solid #10b981; }
-.spec-player.team-1 { border-left: 3px solid #6366f1; }
+.spec-player.team-0 { border-color: rgba(16, 185, 129, 0.4); }
+.spec-player.team-1 { border-color: rgba(99, 102, 241, 0.4); }
 .spec-avatar {
   position: relative;
   width: 34px;
@@ -1807,5 +1960,25 @@
   color: var(--text-muted);
   text-align: center;
   max-width: 280px;
+}
+
+/* --- REJILLA MODULAR DE SALA DE ESPERA --- */
+.waiting-room-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.waiting-module {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.waiting-module-info {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 

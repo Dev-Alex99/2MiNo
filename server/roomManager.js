@@ -6,6 +6,7 @@ const GameRegistry = require('./core/GameRegistry');
 // depende del nivel del bot, que es cosa de la IA.
 const { pickBotName, ritmoDePensarMs } = require('./botLogic');
 const seatAliases = require('./seatAliases');
+const presence = require('./presence');
 
 // Almacén de salas activas: roomId -> BaseGame (DominoGame, etc.)
 const rooms = new Map();
@@ -435,7 +436,7 @@ function createRoomFor(io, socket, name, playerId, opts = {}) {
   const safeTeams = opts.teamsEnabled === true;
   const safeDraw = opts.drawEnabled !== false;
   const safePublic = opts.isPublic !== false;
-  const safeScore = [100, 150, 200, 300].includes(opts.maxScore) ? opts.maxScore : null;
+  const safeScore = [50, 100, 150, 200, 300].includes(opts.maxScore) ? opts.maxScore : null;
   const safeIntensity = ['light', 'normal', 'chaos'].includes(opts.powerIntensity) ? opts.powerIntensity : 'normal';
   const safeOnePerTurn = opts.onePowerPerTurn === true;
   const safeBlitz = opts.isBlitzMode === true;
@@ -476,7 +477,8 @@ function createRoomFor(io, socket, name, playerId, opts = {}) {
   game.turnDurationMs = TURN_SECONDS * 1000;
 
   const actualPlayerId = playerId || `p_${Math.random().toString(36).substring(2, 9)}`;
-  game.addPlayer(actualPlayerId, name, socket.id);
+  const p = game.addPlayer(actualPlayerId, name, socket.id);
+  if (p) p.avatar = presence.avatarDe(actualPlayerId);
 
   rooms.set(roomId, game);
   socket.join(roomId);
